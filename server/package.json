@@ -6,7 +6,11 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
-    "seed": "node utils/seedData.js"
+    "seed": "node utils/seedData.js",
+    "build:client": "npm run build --prefix ../client",
+    "start:prod": "npm run build:client && node server.js --prod",
+    "test:api": "node scripts/test-api.js",
+    "regenerate-qr": "node scripts/regenerate-all-qr.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

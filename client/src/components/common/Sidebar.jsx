@@ -36,7 +36,7 @@ export default function Sidebar() {
 
         <NavLink to="/admin/orders" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
           <ShoppingCart size={18} />
-          <span>Orders Datatable</span>
+          <span>Orders </span>
         </NavLink>
 
         <NavLink to="/admin/kitchen" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>

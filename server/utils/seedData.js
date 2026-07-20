@@ -10,7 +10,8 @@ const MembershipPlan = require('../models/MembershipPlan');
 
 dotenv.config();
 
-const clientUrl = process.env.CLIENT_URL || 'http://172.24.134.17:5173';
+const { getClientUrl } = require('./clientUrl');
+const clientUrl = getClientUrl();
 
 const { buildMenuQrUrl } = require('../utils/tenantUtils');
 

@@ -2,8 +2,7 @@ import React, { useState, useEffect } from 'react';
 import API from '../../services/api';
 import Sidebar from '../../components/common/Sidebar';
 import Header from '../../components/common/Header';
-import { Plus, Search, QrCode, Download, Printer, ExternalLink, RefreshCw, Edit2, Trash2, Users, MessageSquare } from 'lucide-react';
-import { prepareQrForWhatsApp, getShareQrHint, getWhatsAppLink, isMobileDevice } from '../../utils/shareWhatsApp';
+import { Plus, Search, QrCode, Download, Printer, ExternalLink, RefreshCw, Edit2, Trash2, Users } from 'lucide-react';
 
 export default function TablesPage() {
   const [tables, setTables] = useState([]);
@@ -120,26 +119,6 @@ export default function TablesPage() {
     document.body.removeChild(link);
   };
 
-  const handleShareTableQr = async (table) => {
-    if (isMobileDevice()) return;
-
-    const qrSrc = table.qrCodeImage || table.qrCode;
-    if (!qrSrc) {
-      alert('No QR Code available to share.');
-      return;
-    }
-
-    const result = await prepareQrForWhatsApp({
-      qrDataUrl: qrSrc,
-      filename: `Table-${table.tableNumber}-QR.png`
-    });
-
-    window.open(getWhatsAppLink(), '_blank', 'noopener,noreferrer');
-
-    const hint = getShareQrHint(result);
-    if (hint) alert(hint);
-  };
-
   const printQRCard = (table) => {
     const qrSrc = table.qrCodeImage || table.qrCode;
     const printWindow = window.open('', '_blank');
@@ -244,27 +223,6 @@ export default function TablesPage() {
 
                   {/* Table Actions Toolbar */}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                    {isMobileDevice() ? (
-                      <a
-                        href={getWhatsAppLink()}
-                        className="btn btn-whatsapp-share btn-sm"
-                        style={{ width: '100%', justifyContent: 'center', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '0.35rem' }}
-                        title="WhatsApp kholo"
-                      >
-                        <MessageSquare size={14} /> WhatsApp Kholo
-                      </a>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => handleShareTableQr(table)}
-                        className="btn btn-whatsapp-share btn-sm"
-                        style={{ width: '100%', justifyContent: 'center' }}
-                        title="WhatsApp par QR bhejein"
-                      >
-                        <MessageSquare size={14} /> WhatsApp par QR Bhejein
-                      </button>
-                    )}
-
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
                       <button onClick={() => downloadQR(table)} className="btn btn-secondary btn-sm" title="Download QR PNG">
                         <Download size={14} /> Download
@@ -417,15 +375,6 @@ export default function TablesPage() {
             </div>
 
             <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center', marginTop: '1.25rem', flexWrap: 'wrap' }}>
-              {isMobileDevice() ? (
-                <a href={getWhatsAppLink()} className="btn btn-whatsapp-share" style={{ textDecoration: 'none' }}>
-                  <MessageSquare size={16} /> WhatsApp Kholo
-                </a>
-              ) : (
-                <button type="button" onClick={() => handleShareTableQr(previewTable)} className="btn btn-whatsapp-share">
-                  <MessageSquare size={16} /> WhatsApp par QR Bhejein
-                </button>
-              )}
               <button onClick={() => downloadQR(previewTable)} className="btn btn-primary">
                 <Download size={16} /> Download PNG
               </button>

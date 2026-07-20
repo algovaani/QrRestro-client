@@ -1,34 +1,60 @@
 const express = require('express');
 const http = require('http');
+const fs = require('fs');
 const { Server } = require('socket.io');
 const dotenv = require('dotenv');
 const cors = require('cors');
 const path = require('path');
+const mongoose = require('mongoose');
 const connectDB = require('./config/db');
 const { initSocket } = require('./socket/socketHandler');
+const { getAllowedOrigins } = require('./utils/clientUrl');
 
 dotenv.config();
 
-connectDB();
+if (process.argv.includes('--prod')) {
+  process.env.NODE_ENV = 'production';
+}
 
 const app = express();
 const server = http.createServer(app);
+const isProduction = process.env.NODE_ENV === 'production';
+const allowedOrigins = getAllowedOrigins();
+
+// Ensure uploads folder exists
+const uploadDir = path.join(__dirname, 'uploads');
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { recursive: true });
+}
+
+connectDB();
 
 const io = new Server(server, {
   cors: {
-    origin: true,
+    origin: allowedOrigins.length ? allowedOrigins : true,
     credentials: true
   }
 });
 
 initSocket(io);
 
-app.use(cors());
-app.use(express.json());
+app.use(cors({
+  origin(origin, callback) {
+    if (!origin || !isProduction || allowedOrigins.includes(origin)) {
+      callback(null, true);
+      return;
+    }
+    callback(null, allowedOrigins[0] || true);
+  },
+  credentials: true
+}));
 
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true }));
 
-// Routes
+app.use('/uploads', express.static(uploadDir));
+
+// API Routes
 const authRoutes = require('./routes/authRoutes');
 const userRoutes = require('./routes/userRoutes');
 const tableRoutes = require('./routes/tableRoutes');
@@ -56,12 +82,42 @@ app.use('/api/payment', paymentRoutes);
 app.use('/api/super-admin', superAdminRoutes);
 
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', time: new Date() });
+  const dbStates = ['disconnected', 'connected', 'connecting', 'disconnecting'];
+  res.json({
+    status: 'ok',
+    time: new Date(),
+    env: process.env.NODE_ENV || 'development',
+    db: dbStates[mongoose.connection.readyState] || 'unknown'
+  });
 });
 
-// Error handling middleware
+// Unknown API routes — before SPA fallback
+app.use('/api', (req, res) => {
+  res.status(404).json({ success: false, message: 'API route not found' });
+});
+
+// Production — serve React build (single-server live deploy)
+if (isProduction) {
+  const clientDist = path.join(__dirname, '../client/dist');
+  if (fs.existsSync(clientDist)) {
+    app.use(express.static(clientDist));
+    app.get('*', (req, res, next) => {
+      if (
+        req.path.startsWith('/api') ||
+        req.path.startsWith('/uploads') ||
+        req.path.startsWith('/socket.io')
+      ) {
+        return next();
+      }
+      res.sendFile(path.join(clientDist, 'index.html'));
+    });
+  } else {
+    console.warn('Warning: client/dist not found. Run: cd client && npm run build');
+  }
+}
+
 app.use((err, req, res, next) => {
-  console.error('API Error:', err.stack);
+  console.error('API Error:', err.stack || err.message);
   res.status(err.status || 500).json({
     success: false,
     message: err.message || 'Internal Server Error'
@@ -69,7 +125,11 @@ app.use((err, req, res, next) => {
 });
 
 const PORT = process.env.PORT || 5000;
+const HOST = process.env.HOST || '0.0.0.0';
 
-server.listen(PORT, () => {
-  console.log(`Server running in ${process.env.NODE_ENV || 'development'} mode on port ${PORT}`);
+server.listen(PORT, HOST, () => {
+  console.log(`Server running in ${process.env.NODE_ENV || 'development'} mode on http://${HOST}:${PORT}`);
+  if (isProduction) {
+    console.log(`Live URL (set CLIENT_URL): ${process.env.CLIENT_URL || 'not set'}`);
+  }
 });

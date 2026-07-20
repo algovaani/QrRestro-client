@@ -1,5 +1,5 @@
 const User = require('../models/User');
-const { emitMembershipRenewalRequest, emitMembershipActivated, emitMembershipOfferSent } = require('../socket/socketHandler');
+const { emitMembershipRenewalRequest, emitMembershipActivated, emitMembershipOfferSent, emitAdminStatusChanged } = require('../socket/socketHandler');
 const Setting = require('../models/Setting');
 const Table = require('../models/Table');
 const Category = require('../models/Category');
@@ -191,7 +191,19 @@ exports.toggleAdminStatus = async (req, res, next) => {
     }
 
     admin.isActive = !admin.isActive;
+
+    if (!admin.isActive) {
+      admin.membershipOfferSent = false;
+      admin.membershipOfferPlanName = '';
+      admin.membershipOfferSentAt = null;
+      admin.renewalRequested = false;
+      admin.renewalRequestDate = null;
+      admin.requestedPlanName = '';
+    }
+
     await admin.save();
+
+    emitAdminStatusChanged(admin);
 
     res.json({
       success: true,
@@ -199,7 +211,9 @@ exports.toggleAdminStatus = async (req, res, next) => {
       admin: {
         id: admin._id,
         name: admin.name,
-        isActive: admin.isActive
+        isActive: admin.isActive,
+        membershipOfferSent: admin.membershipOfferSent,
+        renewalRequested: admin.renewalRequested
       }
     });
   } catch (error) {

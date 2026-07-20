@@ -3,7 +3,7 @@ const QRCode = require('qrcode');
 const { getTenantAdminId } = require('../middleware/tenantMiddleware');
 const { buildMenuQrUrl } = require('../utils/tenantUtils');
 
-const clientUrl = process.env.CLIENT_URL || 'http://172.24.134.17:5173';
+const { getClientUrl } = require('../utils/clientUrl');
 
 // @desc Get all tables (filtered strictly by logged-in adminId)
 // @route GET /api/tables
@@ -52,7 +52,7 @@ exports.createTable = async (req, res, next) => {
       return res.status(400).json({ success: false, message: `Table Number ${tableNumber} already exists for your restaurant.` });
     }
 
-    const qrDataUrl = buildMenuQrUrl(clientUrl, adminId, tableNumber);
+    const qrDataUrl = buildMenuQrUrl(getClientUrl(), adminId, tableNumber);
     const qrCodeImage = await QRCode.toDataURL(qrDataUrl, { errorCorrectionLevel: 'H', margin: 2, width: 300 });
 
     const table = await Table.create({
@@ -123,7 +123,7 @@ exports.regenerateQR = async (req, res, next) => {
       return res.status(403).json({ success: false, message: 'Not authorized' });
     }
 
-    const qrDataUrl = buildMenuQrUrl(clientUrl, table.adminId, table.tableNumber);
+    const qrDataUrl = buildMenuQrUrl(getClientUrl(), table.adminId, table.tableNumber);
     const qrCodeImage = await QRCode.toDataURL(qrDataUrl, { errorCorrectionLevel: 'H', margin: 2, width: 300 });
 
     table.qrCodeImage = qrCodeImage;

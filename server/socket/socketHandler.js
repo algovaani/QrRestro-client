@@ -92,6 +92,22 @@ const emitMembershipOfferSent = (admin) => {
   ioInstance.to(getAdminRoom(String(admin._id))).emit('membership_offer_sent', payload);
 };
 
+const emitAdminStatusChanged = (admin) => {
+  if (!ioInstance || !admin?._id) return;
+  const payload = {
+    adminId: String(admin._id),
+    isActive: admin.isActive,
+    membershipOfferSent: Boolean(admin.membershipOfferSent),
+    membershipOfferPlanName: admin.membershipOfferPlanName || '',
+    renewalRequested: Boolean(admin.renewalRequested),
+    requestedPlanName: admin.requestedPlanName || '',
+    message: admin.isActive
+      ? 'Super Admin ne aapka account activate kar diya hai.'
+      : 'Super Admin ne aapka account deactivate kar diya hai.'
+  };
+  ioInstance.to(getAdminRoom(String(admin._id))).emit('admin_status_changed', payload);
+};
+
 module.exports = {
   initSocket,
   emitNewOrder,
@@ -100,5 +116,6 @@ module.exports = {
   emitPaymentSuccess,
   emitMembershipRenewalRequest,
   emitMembershipActivated,
-  emitMembershipOfferSent
+  emitMembershipOfferSent,
+  emitAdminStatusChanged
 };

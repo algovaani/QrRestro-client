@@ -11,6 +11,53 @@ export const AuthProvider = ({ children }) => {
   const [token, setToken] = useState(() => localStorage.getItem('token') || null);
   const [loading, setLoading] = useState(false);
 
+  useEffect(() => {
+    const onDeactivated = () => {
+      setUser((prev) => {
+        if (!prev) return prev;
+        const updated = {
+          ...prev,
+          isActive: false,
+          membershipOfferSent: false,
+          renewalRequested: false
+        };
+        localStorage.setItem('user', JSON.stringify(updated));
+        return updated;
+      });
+    };
+    window.addEventListener('account-deactivated', onDeactivated);
+    return () => window.removeEventListener('account-deactivated', onDeactivated);
+  }, []);
+
+  useEffect(() => {
+    if (!token || !user || user.role === 'SuperAdmin' || user.isActive === false) return;
+
+    API.get('/auth/subscription-status')
+      .then((res) => {
+        if (!res.data.success || !res.data.user) return;
+        const u = res.data.user;
+        setUser((prev) => {
+          if (!prev) return prev;
+          const updated = {
+            ...prev,
+            isActive: u.isActive,
+            planName: u.planName,
+            planStatus: u.planStatus,
+            isExpired: u.isExpired,
+            renewalRequested: u.renewalRequested,
+            requestedPlanName: u.requestedPlanName || '',
+            membershipOfferSent: u.membershipOfferSent,
+            membershipOfferPlanName: u.membershipOfferPlanName || '',
+            subscriptionEndsAt: u.subscriptionEndsAt,
+            trialEndsAt: u.trialEndsAt
+          };
+          localStorage.setItem('user', JSON.stringify(updated));
+          return updated;
+        });
+      })
+      .catch(() => {});
+  }, [token, user?.isActive, user?.role]);
+
   const login = async (email, password) => {
     setLoading(true);
     try {

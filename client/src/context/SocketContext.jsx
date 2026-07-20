@@ -219,12 +219,26 @@ export const SocketProvider = ({ children }) => {
       }, 12000);
     };
 
+    const handleAdminStatusChanged = (data) => {
+      if (user?.role !== 'Admin' || String(user._id) !== String(data.adminId)) return;
+      if (updateUser) {
+        updateUser({
+          isActive: data.isActive,
+          membershipOfferSent: Boolean(data.membershipOfferSent),
+          membershipOfferPlanName: data.membershipOfferPlanName || '',
+          renewalRequested: Boolean(data.renewalRequested),
+          requestedPlanName: data.requestedPlanName || ''
+        });
+      }
+    };
+
     newSocket.on('new_order', handleNewOrder);
     newSocket.on('payment_pending', handlePaymentPending);
     newSocket.on('payment_success', handlePaymentSuccess);
     newSocket.on('membership_activated', handleMembershipActivated);
     newSocket.on('membership_renewal_request', handleMembershipRenewalRequest);
     newSocket.on('membership_offer_sent', handleMembershipOfferSent);
+    newSocket.on('admin_status_changed', handleAdminStatusChanged);
 
     return () => {
       newSocket.off('new_order', handleNewOrder);
@@ -233,6 +247,7 @@ export const SocketProvider = ({ children }) => {
       newSocket.off('membership_activated', handleMembershipActivated);
       newSocket.off('membership_renewal_request', handleMembershipRenewalRequest);
       newSocket.off('membership_offer_sent', handleMembershipOfferSent);
+      newSocket.off('admin_status_changed', handleAdminStatusChanged);
       newSocket.disconnect();
       setSocket(null);
     };
