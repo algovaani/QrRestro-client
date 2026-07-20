@@ -1,0 +1,26 @@
+const express = require('express');
+const router = express.Router();
+const { getPublicMembershipPlans } = require('../controllers/membershipPlanController');
+const {
+  getTableInfo,
+  getPublicMenu,
+  getPublicMenuByAdmin,
+  placeOrder,
+  getOrderStatus,
+  getActiveOrdersForTable,
+  getActiveOrdersForTableByAdmin,
+  submitOrderRating
+} = require('../controllers/publicController');
+
+router.get('/membership-plans', getPublicMembershipPlans);
+router.get('/menu/:adminId/table/:tableNumber', getPublicMenuByAdmin);
+router.get('/table/:adminId/:tableNumber', getPublicMenuByAdmin);
+router.get('/table/:tableNumber', getTableInfo);
+router.get('/menu/:tableNumber', getPublicMenu);
+router.post('/orders', placeOrder);
+router.get('/orders/:orderNumber/status', getOrderStatus);
+router.get('/orders/table/:adminId/:tableNumber/active', getActiveOrdersForTableByAdmin);
+router.get('/orders/table/:tableNumber/active', getActiveOrdersForTable);
+router.post('/orders/:orderNumber/rate', submitOrderRating);
+
+module.exports = router;

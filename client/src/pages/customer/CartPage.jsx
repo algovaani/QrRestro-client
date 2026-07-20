@@ -1,0 +1,383 @@
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
+import { useCart, getCustomerMenuPath, getCustomerCartPath } from '../../context/CartContext';
+import API from '../../services/api';
+import CustomerBottomNav from '../../components/customer/CustomerBottomNav';
+import MyOrdersModal from '../../components/customer/MyOrdersModal';
+import UPIPaymentModal from '../../components/customer/UPIPaymentModal';
+import { useTableSessionOrders, getPayOrderNumber } from '../../hooks/useTableSessionOrders';
+import { ArrowLeft, Trash2, Plus, Minus, CheckCircle, AlertCircle, User, Edit3, QrCode, Banknote } from 'lucide-react';
+
+export default function CartPage() {
+  const navigate = useNavigate();
+  const { adminId: routeAdminId, tableNumber: routeTableNumber } = useParams();
+  const {
+    tableNumber,
+    restaurantAdminId,
+    initTableCart,
+    cartItems,
+    updateQuantity,
+    removeFromCart,
+    clearCart,
+    subtotal,
+    customerName,
+    setCustomerName,
+    customerMobile,
+    setCustomerMobile,
+    customerDetailsComplete,
+    resetCustomerDetails,
+    specialNote,
+    setSpecialNote
+  } = useCart();
+
+  const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState('UPI');
+  const [showMyOrdersModal, setShowMyOrdersModal] = useState(false);
+  const [payOrderNumber, setPayOrderNumber] = useState(null);
+
+  useEffect(() => {
+    if (routeAdminId && routeTableNumber) {
+      initTableCart(routeTableNumber, routeAdminId);
+    }
+  }, [routeAdminId, routeTableNumber]);
+
+  const activeAdminId = restaurantAdminId || routeAdminId || '';
+  const activeTableNumber = tableNumber || routeTableNumber || '';
+  const menuPath = getCustomerMenuPath(activeAdminId, activeTableNumber);
+  const hasTableContext = Boolean(activeTableNumber);
+
+  const { orders, refreshOrders } = useTableSessionOrders(
+    customerDetailsComplete ? activeAdminId : '',
+    activeTableNumber,
+    customerMobile
+  );
+
+  const handlePayClick = () => {
+    const num = getPayOrderNumber(orders);
+    if (num) setPayOrderNumber(num);
+    else alert(`No active order yet for Table ${activeTableNumber}. Please place an order first.`);
+  };
+
+  useEffect(() => {
+    if (activeTableNumber && !customerDetailsComplete && menuPath) {
+      navigate(menuPath);
+    }
+  }, [activeTableNumber, activeAdminId, customerDetailsComplete, menuPath, navigate]);
+
+  // Tax 5% calculation
+  const taxPercentage = 5;
+  const tax = Math.round((subtotal * taxPercentage) / 100);
+  const grandTotal = subtotal + tax;
+
+  const handlePlaceOrder = async (e) => {
+    e.preventDefault();
+    setErrorMsg('');
+
+    if (!activeTableNumber) {
+      setErrorMsg('Table number is missing. Please scan table QR code again.');
+      return;
+    }
+    if (cartItems.length === 0) {
+      setErrorMsg('Your cart is empty. Please add items from menu.');
+      return;
+    }
+
+    // MANDATORY CUSTOMER VALIDATION
+    if (!customerName || !customerName.trim()) {
+      setErrorMsg('Please enter your Full Name before confirming order.');
+      return;
+    }
+    const cleanMobile = customerMobile ? customerMobile.trim() : '';
+    if (!cleanMobile || cleanMobile.length < 10) {
+      setErrorMsg('Please enter a valid 10-digit Mobile Number before confirming order.');
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const payload = {
+        tableNumber: activeTableNumber,
+        adminId: activeAdminId,
+        customerName: customerName.trim(),
+        customerMobile: cleanMobile,
+        items: cartItems.map(item => ({
+          menuItemId: item.menuItemId,
+          itemName: item.itemName,
+          size: item.size,
+          quantity: item.quantity,
+          price: item.price,
+          instructions: item.instructions || ''
+        })),
+        notes: specialNote || '',
+        paymentMethod
+      };
+
+      const res = await API.post('/public/orders', payload);
+      if (res.data.success) {
+        const orderNumber = res.data.order.orderNumber;
+        clearCart();
+        const payQuery = paymentMethod === 'UPI' ? '?pay=upi' : '';
+        navigate(`/order-success/${orderNumber}${payQuery}`);
+      }
+    } catch (err) {
+      setErrorMsg(err.response?.data?.message || 'Failed to place order. Please check customer details.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="customer-mobile-wrap" style={{ background: '#f8fafc' }}>
+      
+      {/* Top Bar */}
+      <div style={{ background: '#ffffff', padding: '1rem', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: '1rem', position: 'sticky', top: 0, zIndex: 80 }}>
+        <button
+          onClick={() => (menuPath ? navigate(menuPath) : navigate(-1))}
+          style={{ padding: '0.4rem', borderRadius: '50%', background: '#f1f5f9' }}
+        >
+          <ArrowLeft size={18} />
+        </button>
+        <div>
+          <h2 style={{ fontSize: '1.1rem', fontWeight: '800', color: 'var(--secondary)' }}>Cart & Checkout</h2>
+          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Table Number: Table {activeTableNumber || 'N/A'}</span>
+        </div>
+      </div>
+
+      <div style={{ padding: '1rem' }}>
+        {errorMsg && (
+          <div style={{ background: '#fee2e2', color: '#991b1b', padding: '0.85rem', borderRadius: '12px', fontSize: '0.85rem', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.6rem', border: '1px solid #fca5a5' }}>
+            <AlertCircle size={20} style={{ flexShrink: 0 }} />
+            <span style={{ fontWeight: '600' }}>{errorMsg}</span>
+          </div>
+        )}
+
+        {/* Cart Items List */}
+        {cartItems.length > 0 ? (
+          <form onSubmit={handlePlaceOrder}>
+            
+            {/* 1. MANDATORY CUSTOMER DETAILS CARD */}
+            <div style={{ background: '#ffffff', borderRadius: '16px', border: '2px solid var(--primary)', padding: '1.15rem', marginBottom: '1rem', boxShadow: '0 4px 12px rgba(255,107,0,0.08)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.85rem' }}>
+                <h3 style={{ fontSize: '1rem', fontWeight: '800', color: 'var(--secondary)', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                  <User size={18} color="var(--primary)" /> Customer Information
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => {
+                    resetCustomerDetails();
+                    navigate(menuPath);
+                  }}
+                  style={{ fontSize: '0.75rem', color: 'var(--primary)', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '0.25rem', background: 'transparent', border: 'none' }}
+                >
+                  <Edit3 size={14} /> Edit
+                </button>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem', fontSize: '0.9rem' }}>
+                <div><strong>Name:</strong> {customerName}</div>
+                <div><strong>Mobile:</strong> {customerMobile}</div>
+              </div>
+
+              <div style={{ marginTop: '0.85rem' }}>
+                <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '700', marginBottom: '0.3rem', color: 'var(--secondary)' }}>
+                  Special Table Note (Optional)
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Bring extra water glasses"
+                  value={specialNote}
+                  onChange={(e) => setSpecialNote(e.target.value)}
+                  style={{ width: '100%', fontSize: '0.85rem' }}
+                />
+              </div>
+            </div>
+
+            {/* 2. ORDER ITEMS CARD */}
+            <div style={{ background: '#ffffff', borderRadius: '16px', border: '1px solid var(--border)', padding: '1rem', marginBottom: '1rem' }}>
+              <h3 style={{ fontSize: '0.95rem', fontWeight: '800', marginBottom: '1rem', color: 'var(--secondary)' }}>
+                Ordered Items ({cartItems.length})
+              </h3>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                {cartItems.map((item) => (
+                  <div key={item.cartKey} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '1px solid #f1f5f9', paddingBottom: '0.85rem' }}>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: '700', fontSize: '0.9rem', color: 'var(--secondary)' }}>
+                        {item.itemName}
+                        <span style={{ fontSize: '0.75rem', color: 'var(--primary)', background: 'var(--primary-light)', padding: '0.1rem 0.4rem', borderRadius: '4px', marginLeft: '0.4rem' }}>
+                          {item.size}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.1rem' }}>
+                        ₹{item.price} per item
+                      </div>
+                      {item.instructions && (
+                        <div style={{ fontSize: '0.75rem', color: 'var(--primary)', fontStyle: 'italic', marginTop: '0.2rem' }}>
+                          Note: "{item.instructions}"
+                        </div>
+                      )}
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.4rem' }}>
+                      <div style={{ fontWeight: '800', fontSize: '0.95rem' }}>
+                        ₹{item.price * item.quantity}
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: '#f1f5f9', padding: '0.2rem 0.5rem', borderRadius: '8px' }}>
+                        <button type="button" onClick={() => updateQuantity(item.cartKey, item.quantity - 1)} style={{ padding: '0.1rem' }}>
+                          <Minus size={14} />
+                        </button>
+                        <span style={{ fontWeight: '700', fontSize: '0.85rem' }}>{item.quantity}</span>
+                        <button type="button" onClick={() => updateQuantity(item.cartKey, item.quantity + 1)} style={{ padding: '0.1rem' }}>
+                          <Plus size={14} />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* 3. PAYMENT OPTION */}
+            <div style={{ background: '#ffffff', borderRadius: '16px', border: '1px solid var(--border)', padding: '1rem', marginBottom: '1rem' }}>
+              <h3 style={{ fontSize: '0.95rem', fontWeight: '800', marginBottom: '0.75rem', color: 'var(--secondary)' }}>
+                Payment Option
+              </h3>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+                <button
+                  type="button"
+                  onClick={() => setPaymentMethod('UPI')}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.75rem',
+                    padding: '0.85rem 1rem',
+                    borderRadius: '14px',
+                    border: `2px solid ${paymentMethod === 'UPI' ? 'var(--primary)' : 'var(--border)'}`,
+                    background: paymentMethod === 'UPI' ? '#fff7ed' : '#fff',
+                    textAlign: 'left',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <QrCode size={22} color="var(--primary)" />
+                  <div>
+                    <div style={{ fontWeight: '800', fontSize: '0.9rem', color: 'var(--secondary)' }}>UPI QR Scan & Pay Online</div>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.15rem' }}>
+                      Order ke baad QR scan karke PhonePe / GPay se pay karein
+                    </div>
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPaymentMethod('Cash')}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.75rem',
+                    padding: '0.85rem 1rem',
+                    borderRadius: '14px',
+                    border: `2px solid ${paymentMethod === 'Cash' ? 'var(--primary)' : 'var(--border)'}`,
+                    background: paymentMethod === 'Cash' ? '#fff7ed' : '#fff',
+                    textAlign: 'left',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <Banknote size={22} color="var(--secondary)" />
+                  <div>
+                    <div style={{ fontWeight: '800', fontSize: '0.9rem', color: 'var(--secondary)' }}>Pay Cash at Counter</div>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.15rem' }}>
+                      Table par cash payment — QR ki zaroorat nahi
+                    </div>
+                  </div>
+                </button>
+              </div>
+            </div>
+
+            {/* 4. BILL SUMMARY */}
+            <div style={{ background: '#ffffff', borderRadius: '16px', border: '1px solid var(--border)', padding: '1rem', marginBottom: '1.25rem' }}>
+              <h3 style={{ fontSize: '0.95rem', fontWeight: '800', marginBottom: '0.75rem', color: 'var(--secondary)' }}>
+                Bill Summary
+              </h3>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span>Item Subtotal</span>
+                  <span>₹{subtotal}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span>GST Tax ({taxPercentage}%)</span>
+                  <span>₹{tax}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '1.1rem', fontWeight: '800', color: 'var(--secondary)', borderTop: '1px solid #f1f5f9', paddingTop: '0.6rem', marginTop: '0.4rem' }}>
+                  <span>Grand Total</span>
+                  <span style={{ color: 'var(--primary)' }}>₹{grandTotal}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* SUBMIT PLACE ORDER BUTTON */}
+            <button
+              type="submit"
+              disabled={loading}
+              className="btn btn-primary pulse-button"
+              style={{ width: '100%', padding: '0.95rem', fontSize: '1rem', borderRadius: '14px' }}
+            >
+              {loading ? 'Placing Order...' : paymentMethod === 'UPI'
+                ? `Place Order & Pay via UPI QR • ₹${grandTotal}`
+                : `Place Order (Cash at Counter) • ₹${grandTotal}`}
+            </button>
+          </form>
+        ) : (
+          <div style={{ textAlign: 'center', padding: '4rem 1rem', background: '#fff', borderRadius: '16px' }}>
+            <div style={{ fontSize: '3rem' }}>🛒</div>
+            <h3 style={{ fontSize: '1.1rem', fontWeight: '700', margin: '0.5rem 0' }}>Your cart is empty</h3>
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '1.5rem' }}>
+              {hasTableContext
+                ? 'Add items from the menu to place an order.'
+                : 'Please scan the QR code on your table to open the digital menu.'}
+            </p>
+            {menuPath ? (
+              <button onClick={() => navigate(menuPath)} className="btn btn-primary">
+                Browse Digital Menu
+              </button>
+            ) : (
+              <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                Scan the table QR code from your phone camera to continue.
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      <CustomerBottomNav
+        activeTab="cart"
+        onMyOrders={() => setShowMyOrdersModal(true)}
+        onPay={handlePayClick}
+        ordersCount={orders.length}
+      />
+
+      {showMyOrdersModal && activeTableNumber && activeAdminId && (
+        <MyOrdersModal
+          tableNumber={activeTableNumber}
+          adminId={activeAdminId}
+          customerMobile={customerMobile}
+          onClose={() => setShowMyOrdersModal(false)}
+          onOrderMore={() => setShowMyOrdersModal(false)}
+        />
+      )}
+
+      {payOrderNumber && (
+        <UPIPaymentModal
+          orderNumber={payOrderNumber}
+          onClose={() => setPayOrderNumber(null)}
+          onSuccess={() => {
+            setPayOrderNumber(null);
+            refreshOrders();
+          }}
+        />
+      )}
+    </div>
+  );
+}

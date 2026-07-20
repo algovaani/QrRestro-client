@@ -1,0 +1,281 @@
+import React, { useState, useEffect } from 'react';
+import API from '../../services/api';
+import { prepareQrForWhatsApp, getShareQrHint, getWhatsAppLink, isMobileDevice } from '../../utils/shareWhatsApp';
+import { X, CheckCircle, ShieldCheck, Loader2, MessageSquare, Clock, AlertCircle, QrCode } from 'lucide-react';
+
+export default function UPIPaymentModal({ orderNumber, onClose, onSuccess }) {
+  const [loading, setLoading] = useState(true);
+  const [qrData, setQrData] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [sharing, setSharing] = useState(false);
+  const [shareHint, setShareHint] = useState('');
+  const [paid, setPaid] = useState(false);
+  const [pending, setPending] = useState(false);
+  const [waUrl, setWaUrl] = useState('');
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    fetchDynamicUPIQR();
+  }, [orderNumber]);
+
+  const fetchDynamicUPIQR = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const res = await API.get(`/payment/upi-qr/${orderNumber}`);
+      if (res.data.success) {
+        setQrData(res.data);
+        if (res.data.paymentStatus === 'Paid') {
+          setPaid(true);
+        } else if (res.data.paymentStatus === 'Pending') {
+          setPending(true);
+        }
+      }
+    } catch (err) {
+      setError(err.response?.data?.message || 'QR generate nahi ho paya. Admin ne UPI ID set kiya hai ya nahi check karein.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSubmitPayment = async () => {
+    setSubmitting(true);
+    setError('');
+    try {
+      const res = await API.post('/payment/verify', {
+        orderNumber,
+        paymentMethod: 'UPI'
+      });
+
+      if (res.data.success) {
+        if (res.data.pending || res.data.order?.paymentStatus === 'Pending') {
+          setPending(true);
+          if (onSuccess) onSuccess(res.data.order);
+        } else {
+          setPaid(true);
+          if (res.data.whatsApp?.waUrl) {
+            setWaUrl(res.data.whatsApp.waUrl);
+          }
+          if (onSuccess) onSuccess(res.data.order);
+        }
+      }
+    } catch (err) {
+      setError(err.response?.data?.message || 'Payment submit nahi ho paya. Dubara try karein.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleShareQrWhatsApp = async () => {
+    if (!qrData?.qrCodeDataUrl || isMobileDevice()) return;
+
+    setSharing(true);
+    setShareHint('');
+    setError('');
+
+    try {
+      const result = await prepareQrForWhatsApp({
+        qrDataUrl: qrData.qrCodeDataUrl,
+        filename: `payment-${qrData.orderNumber}.png`
+      });
+      const hint = getShareQrHint(result);
+      if (hint) setShareHint(hint);
+      if (result.error) setError(result.error);
+    } catch {
+      setError('QR copy nahi ho payi.');
+    } finally {
+      setSharing(false);
+    }
+  };
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-card upi-payment-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '420px', borderRadius: '24px', padding: '1.5rem', textAlign: 'center' }}>
+
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.85rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: 'var(--primary)', fontWeight: '800', fontSize: '0.9rem' }}>
+            <ShieldCheck size={18} />
+            <span>UPI QR Payment</span>
+          </div>
+          <button type="button" onClick={onClose} style={{ background: '#f1f5f9', padding: '0.3rem', borderRadius: '50%' }}>
+            <X size={18} />
+          </button>
+        </div>
+
+        {loading ? (
+          <div style={{ padding: '3rem 1rem' }}>
+            <Loader2 size={32} className="animate-spin" style={{ margin: '0 auto 1rem auto', color: 'var(--primary)' }} />
+            <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>QR Code ban raha hai...</p>
+          </div>
+        ) : error && !qrData ? (
+          <div style={{ padding: '1.5rem 0.5rem' }}>
+            <AlertCircle size={40} color="#dc2626" style={{ margin: '0 auto 0.75rem' }} />
+            <p style={{ fontSize: '0.9rem', color: '#991b1b', marginBottom: '1rem' }}>{error}</p>
+            <button type="button" onClick={fetchDynamicUPIQR} className="btn btn-primary" style={{ width: '100%', borderRadius: '12px' }}>
+              Retry
+            </button>
+          </div>
+        ) : paid ? (
+          <div style={{ padding: '1.5rem 0.5rem' }}>
+            <div style={{ width: '70px', height: '70px', background: '#dcfce7', color: '#15803d', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1rem auto' }}>
+              <CheckCircle size={40} />
+            </div>
+            <h3 style={{ fontSize: '1.3rem', fontWeight: '800', color: 'var(--secondary)' }}>Payment Approved! 🎉</h3>
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginTop: '0.25rem', marginBottom: '1.5rem' }}>
+              Order #{orderNumber} is <strong>PAID</strong> and sent to kitchen.
+            </p>
+
+            {waUrl && (
+              <a
+                href={waUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="btn btn-primary"
+                style={{
+                  width: '100%',
+                  padding: '0.85rem',
+                  fontSize: '0.95rem',
+                  borderRadius: '14px',
+                  background: '#25D366',
+                  color: '#ffffff',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '0.5rem',
+                  marginBottom: '0.75rem',
+                  boxShadow: '0 6px 16px rgba(37,211,102,0.3)'
+                }}
+              >
+                <MessageSquare size={18} />
+                <span>Get Bill Receipt on WhatsApp</span>
+              </a>
+            )}
+
+            <button type="button" onClick={onClose} className="btn btn-secondary" style={{ width: '100%', borderRadius: '12px' }}>
+              Close
+            </button>
+          </div>
+        ) : pending ? (
+          <div style={{ padding: '1.5rem 0.5rem' }}>
+            <div style={{ width: '70px', height: '70px', background: '#fef3c7', color: '#b45309', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1rem auto' }}>
+              <Clock size={40} />
+            </div>
+            <h3 style={{ fontSize: '1.2rem', fontWeight: '800', color: 'var(--secondary)' }}>Approval Pending ⏳</h3>
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginTop: '0.35rem', marginBottom: '1rem', lineHeight: 1.5 }}>
+              Order #{orderNumber} ka payment submit ho gaya. Admin verify karke approve karenge.
+            </p>
+            <button type="button" onClick={onClose} className="btn btn-secondary" style={{ width: '100%', borderRadius: '12px' }}>
+              OK, Got It
+            </button>
+          </div>
+        ) : qrData ? (
+          <>
+            <div style={{ background: '#fff0e6', borderRadius: '14px', padding: '0.75rem', marginBottom: '0.85rem', border: '1px solid #ffd6bc' }}>
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Pay Amount</span>
+              <div style={{ fontSize: '2.2rem', fontWeight: '800', color: 'var(--primary)', lineHeight: '1.1' }}>
+                ₹{qrData.grandTotal}
+              </div>
+              <div style={{ fontSize: '0.75rem', color: 'var(--secondary)', fontWeight: '600', marginTop: '0.2rem' }}>
+                Order #{qrData.orderNumber} • Table {qrData.tableNumber}
+              </div>
+            </div>
+
+            <div className="upi-payment-steps">
+              <span>1. QR Scan</span>
+              <span>2. Pay in App</span>
+              <span>3. Submit</span>
+            </div>
+
+            <div style={{ background: '#ffffff', padding: '1rem', borderRadius: '20px', border: '2px solid var(--primary)', marginBottom: '0.85rem', boxShadow: '0 4px 16px rgba(255,107,0,0.08)' }}>
+              {qrData.qrCodeDataUrl ? (
+                <img
+                  src={qrData.qrCodeDataUrl}
+                  alt="UPI QR Code"
+                  style={{ width: '240px', height: '240px', objectFit: 'contain', display: 'block', margin: '0 auto' }}
+                />
+              ) : (
+                <div style={{ padding: '2rem', color: 'var(--text-muted)' }}>
+                  <QrCode size={48} style={{ margin: '0 auto 0.5rem' }} />
+                  QR unavailable
+                </div>
+              )}
+              <div style={{ fontSize: '0.85rem', color: 'var(--secondary)', fontWeight: '800', marginTop: '0.5rem' }}>
+                PhonePe / GPay / Paytm se QR Scan karein
+              </div>
+            </div>
+
+            {isMobileDevice() ? (
+              <a
+                href={getWhatsAppLink()}
+                className="btn btn-whatsapp-share"
+                style={{
+                  width: '100%',
+                  marginBottom: '0.85rem',
+                  borderRadius: '12px',
+                  padding: '0.75rem',
+                  fontSize: '0.9rem',
+                  textDecoration: 'none',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '0.5rem'
+                }}
+              >
+                <MessageSquare size={18} />
+                WhatsApp Kholo
+              </a>
+            ) : (
+              <a
+                href={getWhatsAppLink()}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={handleShareQrWhatsApp}
+                className="btn btn-whatsapp-share"
+                style={{
+                  width: '100%',
+                  marginBottom: shareHint ? '0.5rem' : '0.85rem',
+                  borderRadius: '12px',
+                  padding: '0.75rem',
+                  fontSize: '0.9rem',
+                  textDecoration: 'none',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '0.5rem',
+                  pointerEvents: sharing || !qrData.qrCodeDataUrl ? 'none' : 'auto',
+                  opacity: sharing || !qrData.qrCodeDataUrl ? 0.6 : 1
+                }}
+              >
+                <MessageSquare size={18} />
+                {sharing ? 'QR copy ho raha hai...' : 'WhatsApp par QR Bhejein'}
+              </a>
+            )}
+            {!isMobileDevice() && shareHint && (
+              <div style={{ background: '#ecfdf5', color: '#047857', padding: '0.55rem 0.65rem', borderRadius: '10px', fontSize: '0.78rem', marginBottom: '0.85rem', lineHeight: 1.45, border: '1px solid #a7f3d0', textAlign: 'left' }}>
+                {shareHint}
+              </div>
+            )}
+
+            {error && (
+              <div style={{ background: '#fee2e2', color: '#991b1b', padding: '0.55rem', borderRadius: '10px', fontSize: '0.8rem', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.4rem', justifyContent: 'center' }}>
+                <AlertCircle size={16} />
+                {error}
+              </div>
+            )}
+
+            <button
+              type="button"
+              onClick={handleSubmitPayment}
+              disabled={submitting}
+              className="btn btn-primary pulse-button"
+              style={{ width: '100%', padding: '0.85rem', fontSize: '0.9rem', borderRadius: '14px' }}
+            >
+              {submitting ? 'Submitting...' : '✓ Maine Pay Kar Diya — Submit for Approval'}
+            </button>
+          </>
+        ) : null}
+
+      </div>
+    </div>
+  );
+}
