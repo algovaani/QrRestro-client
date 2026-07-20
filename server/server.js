@@ -21,6 +21,8 @@ const server = http.createServer(app);
 const isProduction = process.env.NODE_ENV === 'production';
 const allowedOrigins = getAllowedOrigins();
 
+app.set('trust proxy', 1);
+
 // Ensure uploads folder exists
 const uploadDir = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadDir)) {
@@ -30,10 +32,15 @@ if (!fs.existsSync(uploadDir)) {
 connectDB();
 
 const io = new Server(server, {
+  path: '/socket.io',
   cors: {
     origin: allowedOrigins.length ? allowedOrigins : true,
     credentials: true
-  }
+  },
+  transports: ['websocket', 'polling'],
+  allowUpgrades: true,
+  pingTimeout: 60000,
+  pingInterval: 25000
 });
 
 initSocket(io);
@@ -101,14 +108,7 @@ if (isProduction) {
   const clientDist = path.join(__dirname, '../client/dist');
   if (fs.existsSync(clientDist)) {
     app.use(express.static(clientDist));
-    app.get('*', (req, res, next) => {
-      if (
-        req.path.startsWith('/api') ||
-        req.path.startsWith('/uploads') ||
-        req.path.startsWith('/socket.io')
-      ) {
-        return next();
-      }
+    app.get(/^(?!\/api|\/uploads|\/socket\.io).*/, (req, res) => {
       res.sendFile(path.join(clientDist, 'index.html'));
     });
   } else {

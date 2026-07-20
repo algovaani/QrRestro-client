@@ -1,0 +1,13 @@
+{
+  "name": "restaurant-qr-app",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Restaurant QR Ordering System — full stack (client + server)",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "npm install --prefix client && npm run build --prefix client && npm install --prefix server --omit=dev",
+    "start": "node server/server.js --prod"
+  }
+}

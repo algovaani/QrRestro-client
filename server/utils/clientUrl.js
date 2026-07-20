@@ -1,16 +1,25 @@
+function getUrlSources() {
+  const parts = [];
+  if (process.env.CLIENT_URL) {
+    parts.push(...process.env.CLIENT_URL.split(','));
+  }
+  if (process.env.RENDER_EXTERNAL_URL) {
+    parts.push(process.env.RENDER_EXTERNAL_URL);
+  }
+  if (!parts.length) {
+    parts.push('http://localhost:5173');
+  }
+  return parts.map((s) => s.trim().replace(/\/$/, '')).filter(Boolean);
+}
+
 /** Primary public URL for QR links (first entry if comma-separated) */
 function getClientUrl() {
-  const raw = process.env.CLIENT_URL || 'http://localhost:5173';
-  return raw.split(',')[0].trim().replace(/\/$/, '');
+  return getUrlSources()[0];
 }
 
 /** CORS allowed origins — CLIENT_URL can be comma-separated */
 function getAllowedOrigins() {
-  const raw = process.env.CLIENT_URL || 'http://localhost:5173';
-  return raw
-    .split(',')
-    .map((s) => s.trim().replace(/\/$/, ''))
-    .filter(Boolean);
+  return [...new Set(getUrlSources())];
 }
 
 module.exports = { getClientUrl, getAllowedOrigins };
