@@ -69,17 +69,17 @@ exports.updateSettings = async (req, res, next) => {
     ];
 
     fields.forEach(field => {
-      if (req.body[field] !== undefined) {
-        setting[field] = req.body[field];
+      if (req.body[field] === undefined) return;
+      if (field === 'taxPercentage') {
+        setting.taxPercentage = Math.min(100, Math.max(0, Number(req.body.taxPercentage) || 0));
+        return;
       }
+      if (field === 'soundNotification') {
+        setting.soundNotification = req.body.soundNotification === 'true' || req.body.soundNotification === true;
+        return;
+      }
+      setting[field] = req.body[field];
     });
-
-    if (req.body.taxPercentage !== undefined) {
-      setting.taxPercentage = Number(req.body.taxPercentage);
-    }
-    if (req.body.soundNotification !== undefined) {
-      setting.soundNotification = req.body.soundNotification === 'true' || req.body.soundNotification === true;
-    }
 
     if (req.files?.logo?.[0]) {
       setting.logo = `/uploads/${req.files.logo[0].filename}`;

@@ -17,7 +17,7 @@ const loadUserFromToken = async (req, res) => {
   }
 
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'super_secret_jwt_key');
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'super_secret_jwt_key_restaurant_qr_2026_safe');
 
     const user = await User.findById(decoded.id).select('-password');
 
@@ -25,15 +25,6 @@ const loadUserFromToken = async (req, res) => {
       res.status(401).json({
         success: false,
         message: 'User belonging to this token no longer exists.'
-      });
-      return null;
-    }
-
-    if (!user.isActive) {
-      res.status(403).json({
-        success: false,
-        code: 'ACCOUNT_DEACTIVATED',
-        message: 'Your account has been deactivated by Super Admin. Please contact support.'
       });
       return null;
     }
@@ -59,6 +50,17 @@ exports.protectAllowExpired = async (req, res, next) => {
 exports.protect = async (req, res, next) => {
   const user = await loadUserFromToken(req, res);
   if (!user) return;
+
+  if (user.role === 'Admin' && !user.isActive) {
+    return res.status(403).json({
+      success: false,
+      code: 'ACCOUNT_DEACTIVATED',
+      message: 'Your account has been deactivated. Please renew membership to continue.',
+      membershipOfferSent: Boolean(user.membershipOfferSent),
+      membershipOfferPlanName: user.membershipOfferPlanName || '',
+      renewalRequested: Boolean(user.renewalRequested)
+    });
+  }
 
   if (user.role === 'Admin') {
     const now = new Date();

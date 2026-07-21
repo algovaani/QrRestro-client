@@ -27,7 +27,9 @@ export default function CartPage() {
     customerDetailsComplete,
     resetCustomerDetails,
     specialNote,
-    setSpecialNote
+    setSpecialNote,
+    restaurantSettings,
+    applyRestaurantSettings
   } = useCart();
 
   const [loading, setLoading] = useState(false);
@@ -36,16 +38,37 @@ export default function CartPage() {
   const [showMyOrdersModal, setShowMyOrdersModal] = useState(false);
   const [payOrderNumber, setPayOrderNumber] = useState(null);
 
+  const activeAdminId = restaurantAdminId || routeAdminId || '';
+  const activeTableNumber = tableNumber || routeTableNumber || '';
+  const menuPath = getCustomerMenuPath(activeAdminId, activeTableNumber);
+  const hasTableContext = Boolean(activeTableNumber);
+
   useEffect(() => {
     if (routeAdminId && routeTableNumber) {
       initTableCart(routeTableNumber, routeAdminId);
     }
   }, [routeAdminId, routeTableNumber]);
 
-  const activeAdminId = restaurantAdminId || routeAdminId || '';
-  const activeTableNumber = tableNumber || routeTableNumber || '';
-  const menuPath = getCustomerMenuPath(activeAdminId, activeTableNumber);
-  const hasTableContext = Boolean(activeTableNumber);
+  useEffect(() => {
+    if (!activeAdminId || !activeTableNumber) return;
+
+    let cancelled = false;
+    const loadTaxSettings = async () => {
+      try {
+        const menuUrl = `/public/menu/${activeAdminId}/table/${activeTableNumber}`;
+        const res = await API.get(menuUrl);
+        if (!cancelled && res.data.success) {
+          const setting = res.data.setting || res.data.settings;
+          if (setting) applyRestaurantSettings(setting);
+        }
+      } catch {
+        /* keep last known or default tax */
+      }
+    };
+
+    loadTaxSettings();
+    return () => { cancelled = true; };
+  }, [activeAdminId, activeTableNumber, applyRestaurantSettings]);
 
   const { orders, refreshOrders } = useTableSessionOrders(
     customerDetailsComplete ? activeAdminId : '',
@@ -65,8 +88,7 @@ export default function CartPage() {
     }
   }, [activeTableNumber, activeAdminId, customerDetailsComplete, menuPath, navigate]);
 
-  // Tax 5% calculation
-  const taxPercentage = 5;
+  const taxPercentage = Number(restaurantSettings?.taxPercentage) || 5;
   const tax = Math.round((subtotal * taxPercentage) / 100);
   const grandTotal = subtotal + tax;
 

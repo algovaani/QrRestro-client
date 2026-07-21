@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import NotificationToasts from './NotificationToasts';
 
 export default function Header({ title }) {
-  const { notifications, removeNotification } = useSocket();
+  const { notifications, removeNotification, isConnected } = useSocket();
   const navigate = useNavigate();
 
   return (
@@ -14,9 +14,12 @@ export default function Header({ title }) {
         <h2 className="admin-header-title">{title}</h2>
 
         <div className="admin-header-actions">
-          <div className="admin-header-sync">
+          <div
+            className={`admin-header-sync${isConnected ? ' is-connected' : ' is-disconnected'}`}
+            title={isConnected ? 'Real-time orders connected' : 'Reconnecting… refresh page if this persists'}
+          >
             <Wifi size={16} />
-            <span>Live Sync</span>
+            <span>{isConnected ? 'Live Sync' : 'Offline'}</span>
           </div>
 
           <div className={`admin-header-bell${notifications.length > 0 ? ' has-notifications' : ''}`}>

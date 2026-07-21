@@ -30,11 +30,25 @@ export default function OrdersPage() {
   // Payment confirm dialog (Paid / Unpaid toggle)
   const [paymentConfirm, setPaymentConfirm] = useState(null);
 
-  const { socket } = useSocket();
+  const { socket, isConnected } = useSocket();
 
   useEffect(() => {
     fetchOrders();
   }, [statusFilter, paymentFilter]);
+
+  // Refetch orders when socket reconnects (catch missed events during disconnect)
+  useEffect(() => {
+    if (!socket || !isConnected) return;
+
+    const handleReconnect = () => {
+      fetchOrders();
+    };
+
+    socket.on('connect', handleReconnect);
+    return () => {
+      socket.off('connect', handleReconnect);
+    };
+  }, [socket, isConnected]);
 
   // Handle URL change if navigated from Dashboard
   useEffect(() => {

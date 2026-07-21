@@ -21,6 +21,7 @@ import {
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { canShowMembershipOption } from '../../utils/membershipAccess';
+import { formatExpiryDate, getMembershipDaysLabel, resolveMembershipDisplay } from '../../utils/membershipDays';
 
 const toLocalDateStr = (date) => {
   const y = date.getFullYear();
@@ -65,7 +66,7 @@ export default function AdminDashboard() {
   const [topItems, setTopItems] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  const { socket } = useSocket();
+  const { socket, isConnected } = useSocket();
 
   const fetchDashboardData = useCallback(async (sDate, eDate, silent = false) => {
     if (!silent) setLoading(true);
@@ -162,6 +163,19 @@ export default function AdminDashboard() {
     };
   }, [socket, startDate, endDate, fetchDashboardData]);
 
+  useEffect(() => {
+    if (!socket || !isConnected) return;
+
+    const handleReconnect = () => {
+      fetchDashboardData(startDate, endDate, true);
+    };
+
+    socket.on('connect', handleReconnect);
+    return () => {
+      socket.off('connect', handleReconnect);
+    };
+  }, [socket, isConnected, startDate, endDate, fetchDashboardData]);
+
   const handlePresetChange = (preset) => {
     setFilterPreset(preset);
     const today = new Date();
@@ -190,6 +204,8 @@ export default function AdminDashboard() {
 
   const revenueDisplay = (stats.todayRevenue || stats.totalRevenue || 0).toLocaleString();
   const ordersDisplay = stats.todayOrders || stats.totalOrders || 0;
+  const membership = resolveMembershipDisplay(user);
+  const membershipActive = user?.isActive !== false && user?.planStatus !== 'Expired' && membership.daysRemaining > 0;
 
   return (
     <div className="admin-layout">
@@ -197,6 +213,29 @@ export default function AdminDashboard() {
       <div className="admin-main">
         <Header title="Dashboard Overview" />
         <div className="admin-content">
+
+          {membershipActive && (
+            <div
+              className="admin-membership-banner"
+              style={{
+                background: membership.daysRemaining <= 3 ? '#fff7ed' : '#f0fdf4',
+                borderColor: membership.daysRemaining <= 3 ? '#fdba74' : '#86efac'
+              }}
+            >
+              <div>
+                <strong>
+                  {membership.planName} — {getMembershipDaysLabel(membership.daysRemaining)}
+                </strong>
+                <p>
+                  Valid till <strong>{formatExpiryDate(membership.expiryDate)}</strong>
+                  {membership.daysRemaining <= 3 && ' • Jaldi renew karein!'}
+                </p>
+              </div>
+              <Link to="/admin/membership" className="btn btn-primary btn-sm">
+                <CreditCard size={14} /> Membership
+              </Link>
+            </div>
+          )}
 
           {canShowMembershipOption(user) && (
             <div className={`admin-membership-banner ${user?.renewalRequested ? 'admin-membership-banner--pending' : 'admin-membership-banner--warning'}`}>

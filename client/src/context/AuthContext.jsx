@@ -3,6 +3,23 @@ import API from '../services/api';
 
 const AuthContext = createContext();
 
+const syncUserFromApi = (prev, u) => ({
+  ...prev,
+  ...u,
+  isActive: u.isActive,
+  planName: u.planName,
+  planStatus: u.planStatus,
+  isExpired: u.isExpired,
+  daysRemaining: u.daysRemaining,
+  displayPlanName: u.displayPlanName,
+  renewalRequested: u.renewalRequested,
+  requestedPlanName: u.requestedPlanName || '',
+  membershipOfferSent: u.membershipOfferSent,
+  membershipOfferPlanName: u.membershipOfferPlanName || '',
+  subscriptionEndsAt: u.subscriptionEndsAt,
+  trialEndsAt: u.trialEndsAt
+});
+
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(() => {
     const saved = localStorage.getItem('user');
@@ -10,16 +27,19 @@ export const AuthProvider = ({ children }) => {
   });
   const [token, setToken] = useState(() => localStorage.getItem('token') || null);
   const [loading, setLoading] = useState(false);
+  const [authReady, setAuthReady] = useState(false);
 
   useEffect(() => {
-    const onDeactivated = () => {
+    const onDeactivated = (e) => {
       setUser((prev) => {
         if (!prev) return prev;
+        const detail = e.detail || {};
         const updated = {
           ...prev,
           isActive: false,
-          membershipOfferSent: false,
-          renewalRequested: false
+          membershipOfferSent: detail.membershipOfferSent ?? prev.membershipOfferSent ?? false,
+          membershipOfferPlanName: detail.membershipOfferPlanName ?? prev.membershipOfferPlanName ?? '',
+          renewalRequested: detail.renewalRequested ?? prev.renewalRequested ?? false
         };
         localStorage.setItem('user', JSON.stringify(updated));
         return updated;
@@ -30,7 +50,42 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   useEffect(() => {
-    if (!token || !user || user.role === 'SuperAdmin' || user.isActive === false) return;
+    let cancelled = false;
+
+    const bootstrapAuth = async () => {
+      if (!token || !user) {
+        if (!cancelled) setAuthReady(true);
+        return;
+      }
+
+      try {
+        const res = await API.get('/auth/me');
+        if (!cancelled && res.data.success && res.data.user) {
+          setUser((prev) => {
+            if (!prev) return prev;
+            const updated = syncUserFromApi(prev, res.data.user);
+            localStorage.setItem('user', JSON.stringify(updated));
+            return updated;
+          });
+        }
+      } catch (err) {
+        if (!cancelled && err.response?.status === 401) {
+          setUser(null);
+          setToken(null);
+          localStorage.removeItem('token');
+          localStorage.removeItem('user');
+        }
+      } finally {
+        if (!cancelled) setAuthReady(true);
+      }
+    };
+
+    bootstrapAuth();
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    if (!authReady || !token || !user || user.role === 'SuperAdmin') return;
 
     API.get('/auth/subscription-status')
       .then((res) => {
@@ -38,25 +93,13 @@ export const AuthProvider = ({ children }) => {
         const u = res.data.user;
         setUser((prev) => {
           if (!prev) return prev;
-          const updated = {
-            ...prev,
-            isActive: u.isActive,
-            planName: u.planName,
-            planStatus: u.planStatus,
-            isExpired: u.isExpired,
-            renewalRequested: u.renewalRequested,
-            requestedPlanName: u.requestedPlanName || '',
-            membershipOfferSent: u.membershipOfferSent,
-            membershipOfferPlanName: u.membershipOfferPlanName || '',
-            subscriptionEndsAt: u.subscriptionEndsAt,
-            trialEndsAt: u.trialEndsAt
-          };
+          const updated = syncUserFromApi(prev, u);
           localStorage.setItem('user', JSON.stringify(updated));
           return updated;
         });
       })
       .catch(() => {});
-  }, [token, user?.isActive, user?.role]);
+  }, [authReady, token, user?.role]);
 
   const login = async (email, password) => {
     setLoading(true);
@@ -67,6 +110,7 @@ export const AuthProvider = ({ children }) => {
         setToken(res.data.token);
         localStorage.setItem('token', res.data.token);
         localStorage.setItem('user', JSON.stringify(res.data.user));
+        setAuthReady(true);
         return { success: true, user: res.data.user };
       }
     } catch (err) {
@@ -96,7 +140,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, token, loading, login, logout, updateUser }}>
+    <AuthContext.Provider value={{ user, token, loading, authReady, login, logout, updateUser }}>
       {children}
     </AuthContext.Provider>
   );

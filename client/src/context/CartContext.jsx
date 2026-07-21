@@ -1,4 +1,4 @@
-import React, { createContext, useState, useEffect, useContext } from 'react';
+import React, { createContext, useState, useEffect, useContext, useCallback } from 'react';
 
 const CartContext = createContext();
 
@@ -51,6 +51,19 @@ export const CartProvider = ({ children }) => {
   const [customerName, setCustomerName] = useState('');
   const [customerMobile, setCustomerMobile] = useState('');
   const [specialNote, setSpecialNote] = useState('');
+  const [restaurantSettings, setRestaurantSettings] = useState({
+    taxPercentage: 5,
+    currency: '₹',
+    restaurantName: ''
+  });
+
+  const applyRestaurantSettings = useCallback((setting = {}) => {
+    setRestaurantSettings({
+      taxPercentage: Number(setting.taxPercentage) || 5,
+      currency: setting.currency || '₹',
+      restaurantName: setting.restaurantName || ''
+    });
+  }, []);
 
   const loadSessionData = (adminId, tNum, sessionId) => {
     const savedCustomer = sessionStorage.getItem(getCustomerStorageKey(adminId, tNum, sessionId));
@@ -227,6 +240,8 @@ export const CartProvider = ({ children }) => {
       tableNumber,
       restaurantAdminId,
       bindRestaurantAdmin,
+      restaurantSettings,
+      applyRestaurantSettings,
       customerSessionId,
       initTableCart,
       cartItems,

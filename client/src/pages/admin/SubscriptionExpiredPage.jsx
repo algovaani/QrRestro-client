@@ -1,13 +1,29 @@
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { useSocket } from '../../context/SocketContext';
 import AdminMembershipRoute from './AdminMembershipRoute';
 import MembershipWaitingPage from './MembershipWaitingPage';
+import NotificationToasts from '../../components/common/NotificationToasts';
 import { canAccessMembershipPage } from '../../utils/membershipAccess';
 import { UserX, LogOut } from 'lucide-react';
 
 export default function SubscriptionExpiredPage() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const { notifications, removeNotification } = useSocket();
+
+  if (canAccessMembershipPage(user)) {
+    return (
+      <>
+        <AdminMembershipRoute standalone />
+        <NotificationToasts
+          notifications={notifications}
+          removeNotification={removeNotification}
+          onNavigate={(path) => navigate(path)}
+        />
+      </>
+    );
+  }
 
   if (user?.isActive === false) {
     return (
@@ -16,11 +32,11 @@ export default function SubscriptionExpiredPage() {
           <div className="membership-waiting-icon">
             <UserX size={40} color="#dc2626" />
           </div>
-          <h2>Account Deactivated</h2>
+          <h2>Account Band Hai</h2>
           <p>
-            Super Admin ne aapka account deactivate kar diya hai.
+            Super Admin ne aapka account band kar diya hai.
             <br />
-            Dashboard access ke liye Super Admin se contact karein.
+            Membership renew ka offer aane ka wait karein ya Super Admin se contact karein.
           </p>
           <button
             type="button"
@@ -38,9 +54,5 @@ export default function SubscriptionExpiredPage() {
     );
   }
 
-  if (!canAccessMembershipPage(user)) {
-    return <MembershipWaitingPage standalone />;
-  }
-
-  return <AdminMembershipRoute standalone />;
+  return <MembershipWaitingPage standalone />;
 }

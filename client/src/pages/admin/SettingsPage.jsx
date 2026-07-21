@@ -57,9 +57,29 @@ export default function SettingsPage() {
     setSaving(true);
 
     try {
-      const res = await API.put('/settings', formData);
+      const payload = {
+        ...formData,
+        taxPercentage: Number(formData.taxPercentage) || 0,
+        soundNotification: Boolean(formData.soundNotification)
+      };
+      const res = await API.put('/settings', payload);
 
       if (res.data.success) {
+        const s = res.data.setting;
+        if (s) {
+          setFormData({
+            restaurantName: s.restaurantName || '',
+            upiId: s.upiId || '',
+            address: s.address || '',
+            mobile: s.mobile || '',
+            gstNumber: s.gstNumber || '',
+            taxPercentage: s.taxPercentage ?? 5,
+            currency: s.currency || '₹',
+            openingTime: s.openingTime || '',
+            closingTime: s.closingTime || '',
+            soundNotification: s.soundNotification !== false
+          });
+        }
         setMessage('Settings saved! UPI ID se QR automatically generate hoga.');
         setTimeout(() => setMessage(''), 4000);
       }
@@ -190,6 +210,9 @@ export default function SettingsPage() {
                   <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', marginBottom: '0.3rem' }}>GST Tax (%)</label>
                   <input
                     type="number"
+                    min="0"
+                    max="100"
+                    step="0.5"
                     value={formData.taxPercentage}
                     onChange={(e) => setFormData({ ...formData, taxPercentage: e.target.value })}
                     style={{ width: '100%' }}

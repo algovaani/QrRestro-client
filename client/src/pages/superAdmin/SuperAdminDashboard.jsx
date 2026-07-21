@@ -34,7 +34,7 @@ import NotificationToasts from '../../components/common/NotificationToasts';
 import UpiQrDisplay from '../../components/common/UpiQrDisplay';
 
 export default function SuperAdminDashboard() {
-  const { user, logout } = useAuth();
+  const { user, logout, updateUser } = useAuth();
   const navigate = useNavigate();
   const { socket, notifications, removeNotification } = useSocket();
 
@@ -51,6 +51,8 @@ export default function SuperAdminDashboard() {
   const [searchTerm, setSearchTerm] = useState('');
   const [activeTab, setActiveTab] = useState('admins'); // 'admins', 'renewals', 'plans'
   const [loading, setLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState(false);
+  const [toast, setToast] = useState({ type: '', message: '' });
 
   // State to toggle password visibility per admin ID
   const [visiblePasswords, setVisiblePasswords] = useState({});
@@ -97,6 +99,26 @@ export default function SuperAdminDashboard() {
   const [sendingOfferAdmin, setSendingOfferAdmin] = useState(null);
   const [offerPlanName, setOfferPlanName] = useState('Monthly Plan');
 
+  const [showAccountModal, setShowAccountModal] = useState(false);
+  const [accountTab, setAccountTab] = useState('email');
+  const [emailForm, setEmailForm] = useState({
+    newEmail: '',
+    currentPassword: ''
+  });
+  const [passwordForm, setPasswordForm] = useState({
+    currentPassword: '',
+    newPassword: '',
+    confirmPassword: ''
+  });
+  const [emailLoading, setEmailLoading] = useState(false);
+  const [passwordLoading, setPasswordLoading] = useState(false);
+  const [accountError, setAccountError] = useState('');
+  const [accountSuccess, setAccountSuccess] = useState('');
+  const [showEmailPassword, setShowEmailPassword] = useState(false);
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
   useEffect(() => {
     fetchSuperAdminData();
   }, []);
@@ -113,6 +135,11 @@ export default function SuperAdminDashboard() {
     return () => socket.off('membership_renewal_request', onRenewalRequest);
   }, [socket]);
 
+  const showToast = (type, message) => {
+    setToast({ type, message });
+    setTimeout(() => setToast({ type: '', message: '' }), 4000);
+  };
+
   const fetchSuperAdminData = async () => {
     setLoading(true);
     try {
@@ -127,6 +154,7 @@ export default function SuperAdminDashboard() {
       if (plansRes.data.success) setPlans(plansRes.data.plans);
     } catch (err) {
       console.error('Super Admin fetch error:', err);
+      showToast('error', err.response?.data?.message || 'Failed to load Super Admin data');
     } finally {
       setLoading(false);
     }
@@ -148,15 +176,19 @@ export default function SuperAdminDashboard() {
   const handleCreateAdmin = async (e) => {
     e.preventDefault();
     setModalError('');
+    setActionLoading(true);
     try {
       const res = await API.post('/super-admin/admins', newAdmin);
       if (res.data.success) {
         setShowAddModal(false);
-        setNewAdmin({ name: '', restaurantName: '', email: '', password: '', planName: '5-Day Free Trial' });
+        setNewAdmin({ name: '', restaurantName: '', email: '', password: '', planName: plans[0]?.name || '5-Day Free Trial' });
+        showToast('success', res.data.message || 'Admin account created successfully');
         fetchSuperAdminData();
       }
     } catch (err) {
       setModalError(err.response?.data?.message || 'Error creating Restaurant Admin account');
+    } finally {
+      setActionLoading(false);
     }
   };
 
@@ -175,41 +207,65 @@ export default function SuperAdminDashboard() {
   const handleUpdateAdminSubmit = async (e) => {
     e.preventDefault();
     setModalError('');
+    setActionLoading(true);
     try {
       const res = await API.put(`/super-admin/admins/${editingAdmin._id}`, editForm);
       if (res.data.success) {
         setEditingAdmin(null);
+        showToast('success', res.data.message || 'Admin updated successfully');
         fetchSuperAdminData();
       }
     } catch (err) {
       setModalError(err.response?.data?.message || 'Error updating admin account');
+    } finally {
+      setActionLoading(false);
     }
   };
 
-  const handleToggleStatus = async (adminId) => {
+  const handleToggleStatus = async (admin) => {
+    const adminId = admin._id;
+    if (admin.isActive) {
+      const confirmed = window.confirm(
+        `"${admin.restaurantName || admin.name}" ko band karna hai?\n\nAdmin ke screen par membership renew ka popup dikhega aur dashboard band ho jayega.`
+      );
+      if (!confirmed) return;
+    }
+
+    setActionLoading(true);
     try {
       const res = await API.patch(`/super-admin/admins/${adminId}/toggle-status`);
       if (res.data.success) {
         fetchSuperAdminData();
+        showToast(
+          'success',
+          !admin.isActive
+            ? 'Admin account activate ho gaya.'
+            : 'Admin band ho gaya. Unhe membership renew ka popup dikhega.'
+        );
       }
     } catch (err) {
-      alert('Error updating account status');
+      showToast('error', err.response?.data?.message || 'Error updating account status');
+    } finally {
+      setActionLoading(false);
     }
   };
 
   const handleApproveRenew = async (adminId) => {
+    setActionLoading(true);
     try {
       const res = await API.patch(`/super-admin/admins/${adminId}/renew`, {
         planName: renewPlanName,
-        extendDays: renewDays
+        extendDays: Number(renewDays)
       });
       if (res.data.success) {
         setRenewingAdmin(null);
-        alert(res.data.message || 'Membership renewed & account reactivated!');
+        showToast('success', res.data.message || 'Membership renewed & account reactivated!');
         fetchSuperAdminData();
       }
     } catch (err) {
-      alert(err.response?.data?.message || 'Error renewing membership');
+      showToast('error', err.response?.data?.message || 'Error renewing membership');
+    } finally {
+      setActionLoading(false);
     }
   };
 
@@ -228,27 +284,34 @@ export default function SuperAdminDashboard() {
 
   const handleSendMembershipOffer = async () => {
     if (!sendingOfferAdmin) return;
+    setActionLoading(true);
     try {
       const res = await API.patch(`/super-admin/admins/${sendingOfferAdmin._id}/send-membership-offer`, {
         planName: offerPlanName
       });
       if (res.data.success) {
         setSendingOfferAdmin(null);
-        alert(res.data.message || 'Membership offer sent!');
+        showToast('success', res.data.message || 'Membership offer sent!');
         fetchSuperAdminData();
       }
     } catch (err) {
       setModalError(err.response?.data?.message || 'Error sending membership offer');
+    } finally {
+      setActionLoading(false);
     }
   };
 
   const handleDeleteAdmin = async (adminId) => {
     if (!window.confirm('Are you sure you want to delete this Restaurant Admin account?')) return;
+    setActionLoading(true);
     try {
-      await API.delete(`/super-admin/admins/${adminId}`);
+      const res = await API.delete(`/super-admin/admins/${adminId}`);
+      showToast('success', res.data?.message || 'Admin account deleted successfully');
       fetchSuperAdminData();
     } catch (err) {
-      alert('Error deleting account');
+      showToast('error', err.response?.data?.message || 'Error deleting account');
+    } finally {
+      setActionLoading(false);
     }
   };
 
@@ -286,6 +349,7 @@ export default function SuperAdminDashboard() {
   const handleSavePlanSubmit = async (e) => {
     e.preventDefault();
     setModalError('');
+    setActionLoading(true);
     try {
       const payload = {
         name: planForm.name,
@@ -301,33 +365,134 @@ export default function SuperAdminDashboard() {
         const res = await API.put(`/super-admin/plans/${editingPlan._id}`, payload);
         if (res.data.success) {
           setShowPlanModal(false);
+          showToast('success', res.data.message || 'Plan updated successfully');
           fetchSuperAdminData();
         }
       } else {
         const res = await API.post('/super-admin/plans', payload);
         if (res.data.success) {
           setShowPlanModal(false);
+          showToast('success', res.data.message || 'Plan created successfully');
           fetchSuperAdminData();
         }
       }
     } catch (err) {
       setModalError(err.response?.data?.message || 'Error saving membership plan');
+    } finally {
+      setActionLoading(false);
     }
   };
 
   const handleDeletePlan = async (planId) => {
     if (!window.confirm('Are you sure you want to delete this Membership Plan?')) return;
+    setActionLoading(true);
     try {
-      await API.delete(`/super-admin/plans/${planId}`);
+      const res = await API.delete(`/super-admin/plans/${planId}`);
+      showToast('success', res.data?.message || 'Plan deleted successfully');
       fetchSuperAdminData();
     } catch (err) {
-      alert('Error deleting membership plan');
+      showToast('error', err.response?.data?.message || 'Error deleting membership plan');
+    } finally {
+      setActionLoading(false);
     }
   };
 
   const handleLogout = () => {
     logout();
     navigate('/admin/login');
+  };
+
+  const openAccountModal = () => {
+    setAccountTab('email');
+    setEmailForm({ newEmail: '', currentPassword: '' });
+    setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
+    setAccountError('');
+    setAccountSuccess('');
+    setShowEmailPassword(false);
+    setShowCurrentPassword(false);
+    setShowNewPassword(false);
+    setShowConfirmPassword(false);
+    setShowAccountModal(true);
+  };
+
+  const handleChangeEmailSubmit = async (e) => {
+    e.preventDefault();
+    setAccountError('');
+    setAccountSuccess('');
+
+    const newEmail = emailForm.newEmail.trim();
+    if (!newEmail) {
+      setAccountError('Please enter a new email address');
+      return;
+    }
+
+    if (!emailForm.currentPassword) {
+      setAccountError('Please enter your current password');
+      return;
+    }
+
+    setEmailLoading(true);
+    try {
+      const res = await API.put('/auth/change-email', {
+        newEmail,
+        currentPassword: emailForm.currentPassword
+      });
+
+      if (res.data.success) {
+        updateUser({ email: res.data.email });
+        setAccountSuccess('Email updated successfully');
+        setEmailForm({ newEmail: '', currentPassword: '' });
+        setTimeout(() => setAccountSuccess(''), 2000);
+      }
+    } catch (err) {
+      setAccountError(err.response?.data?.message || 'Failed to change email');
+    } finally {
+      setEmailLoading(false);
+    }
+  };
+
+  const handleChangePasswordSubmit = async (e) => {
+    e.preventDefault();
+    setAccountError('');
+    setAccountSuccess('');
+
+    if (!passwordForm.currentPassword) {
+      setAccountError('Please enter your current password');
+      return;
+    }
+
+    if (!passwordForm.newPassword) {
+      setAccountError('Please enter a new password');
+      return;
+    }
+
+    if (passwordForm.newPassword.length < 6) {
+      setAccountError('New password must be at least 6 characters');
+      return;
+    }
+
+    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+      setAccountError('New password and confirm password do not match');
+      return;
+    }
+
+    setPasswordLoading(true);
+    try {
+      const res = await API.put('/auth/change-password', {
+        currentPassword: passwordForm.currentPassword,
+        newPassword: passwordForm.newPassword
+      });
+
+      if (res.data.success) {
+        setAccountSuccess('Password changed successfully');
+        setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
+        setTimeout(() => setAccountSuccess(''), 2000);
+      }
+    } catch (err) {
+      setAccountError(err.response?.data?.message || 'Failed to change password');
+    } finally {
+      setPasswordLoading(false);
+    }
   };
 
   const filteredAdmins = admins.filter(admin => {
@@ -396,6 +561,15 @@ export default function SuperAdminDashboard() {
           </div>
 
           <button
+            onClick={openAccountModal}
+            className="btn btn-secondary btn-sm"
+            style={{ width: '100%', justifyContent: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}
+          >
+            <Key size={16} />
+            <span>Account Settings</span>
+          </button>
+
+          <button
             onClick={handleLogout}
             className="btn btn-secondary btn-sm"
             style={{ width: '100%', justifyContent: 'center', gap: '0.5rem', color: 'var(--danger)' }}
@@ -416,8 +590,8 @@ export default function SuperAdminDashboard() {
           </h2>
 
           <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
-            <button onClick={fetchSuperAdminData} className="btn btn-secondary btn-sm" title="Refresh Data">
-              <RefreshCw size={16} /> Refresh
+            <button onClick={fetchSuperAdminData} disabled={loading || actionLoading} className="btn btn-secondary btn-sm" title="Refresh Data">
+              <RefreshCw size={16} className={loading ? 'spin-icon' : ''} /> Refresh
             </button>
 
             {/* DIRECT ADD MEMBERSHIP PLAN BUTTON */}
@@ -433,10 +607,25 @@ export default function SuperAdminDashboard() {
         </header>
 
         <div className="admin-content">
+
+          {toast.message && (
+            <div style={{
+              marginBottom: '1rem',
+              padding: '0.75rem 1rem',
+              borderRadius: '10px',
+              fontSize: '0.85rem',
+              fontWeight: '600',
+              background: toast.type === 'error' ? '#fee2e2' : '#dcfce7',
+              color: toast.type === 'error' ? '#991b1b' : '#166534',
+              border: `1px solid ${toast.type === 'error' ? '#fecaca' : '#bbf7d0'}`
+            }}>
+              {toast.message}
+            </div>
+          )}
           
           {/* STATS GRID */}
           <div className="stats-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', marginBottom: '1.5rem' }}>
-            <div className="stat-card">
+            <div className="stat-card" onClick={() => setActiveTab('admins')} style={{ cursor: 'pointer' }}>
               <div>
                 <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: '600' }}>Total Admins</span>
                 <h3 style={{ fontSize: '1.6rem', fontWeight: '800', marginTop: '0.2rem' }}>{stats.totalAdmins}</h3>
@@ -446,7 +635,7 @@ export default function SuperAdminDashboard() {
               </div>
             </div>
 
-            <div className="stat-card">
+            <div className="stat-card" onClick={() => setActiveTab('admins')} style={{ cursor: 'pointer' }}>
               <div>
                 <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: '600' }}>Active Accounts</span>
                 <h3 style={{ fontSize: '1.6rem', fontWeight: '800', marginTop: '0.2rem', color: '#15803d' }}>{stats.activeAdmins}</h3>
@@ -456,13 +645,28 @@ export default function SuperAdminDashboard() {
               </div>
             </div>
 
-            <div className="stat-card">
+            <div className="stat-card" onClick={() => setActiveTab('admins')} style={{ cursor: 'pointer' }}>
               <div>
                 <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: '600' }}>5-Day Free Trials</span>
                 <h3 style={{ fontSize: '1.6rem', fontWeight: '800', marginTop: '0.2rem', color: 'var(--primary)' }}>{stats.trialingAdmins}</h3>
               </div>
               <div className="stat-icon" style={{ background: '#fff0e6', color: 'var(--primary)' }}>
                 <Clock size={22} />
+              </div>
+            </div>
+
+            <div
+              onClick={() => setActiveTab('renewals')}
+              className="stat-card"
+              style={{ cursor: 'pointer' }}
+            >
+              <div>
+                <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: '600' }}>Renewal Requests</span>
+                <h3 style={{ fontSize: '1.6rem', fontWeight: '800', marginTop: '0.2rem', color: '#dc2626' }}>{stats.renewalRequestsCount}</h3>
+                <span style={{ fontSize: '0.7rem', color: '#dc2626', fontWeight: '700' }}>Review Requests →</span>
+              </div>
+              <div className="stat-icon" style={{ background: '#fee2e2', color: '#dc2626' }}>
+                <BellRing size={22} />
               </div>
             </div>
 
@@ -514,7 +718,19 @@ export default function SuperAdminDashboard() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredAdmins.map(admin => {
+                  {loading ? (
+                    <tr>
+                      <td colSpan="7" style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+                        Loading admin accounts...
+                      </td>
+                    </tr>
+                  ) : filteredAdmins.length === 0 ? (
+                    <tr>
+                      <td colSpan="7" style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+                        Koi admin account nahi mila. <button type="button" className="btn btn-primary btn-sm" style={{ marginLeft: '0.5rem' }} onClick={() => setShowAddModal(true)}>+ Create Admin</button>
+                      </td>
+                    </tr>
+                  ) : filteredAdmins.map(admin => {
                     const isPassVisible = visiblePasswords[admin._id];
                     const passText = admin.rawPassword || 'admin123';
 
@@ -530,6 +746,7 @@ export default function SuperAdminDashboard() {
                           <div style={{ fontWeight: '700', color: 'var(--secondary)', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                             <span>{admin.email}</span>
                             <button
+                              type="button"
                               onClick={() => copyToClipboard(admin.email, 'Email')}
                               style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: 'var(--text-muted)' }}
                               title="Copy Email"
@@ -566,7 +783,7 @@ export default function SuperAdminDashboard() {
 
                         <td style={{ padding: '1rem' }}>
                           <span style={{ fontWeight: '700', color: 'var(--primary)', background: 'var(--primary-light)', padding: '0.2rem 0.55rem', borderRadius: '6px', fontSize: '0.75rem' }}>
-                            {admin.planName}
+                            {admin.displayPlanName || admin.planName}
                           </span>
                           {admin.renewalRequested && (
                             <div style={{ fontSize: '0.7rem', color: '#0284c7', fontWeight: '800', marginTop: '0.2rem' }}>
@@ -593,22 +810,27 @@ export default function SuperAdminDashboard() {
                         </td>
 
                         <td style={{ padding: '1rem', fontSize: '0.8rem' }}>
-                          <div style={{ fontWeight: '800', color: admin.daysRemaining <= 1 ? 'var(--danger)' : 'var(--secondary)' }}>
-                            {admin.daysRemaining > 0 ? `${admin.daysRemaining} Day(s)` : 'Expired'}
+                          <div style={{ fontWeight: '800', color: admin.daysRemaining <= 3 ? 'var(--danger)' : 'var(--secondary)' }}>
+                            {admin.daysRemaining > 0 ? `${admin.daysRemaining} din bache` : 'Expired'}
                           </div>
                           <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
-                            Ends: {admin.subscriptionEndsAt ? new Date(admin.subscriptionEndsAt).toLocaleDateString() : new Date(admin.trialEndsAt).toLocaleDateString()}
+                            Ends: {admin.subscriptionEndsAt
+                              ? new Date(admin.subscriptionEndsAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+                              : new Date(admin.trialEndsAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
                           </div>
                         </td>
 
                         <td style={{ padding: '1rem' }}>
                           <button
-                            onClick={() => handleToggleStatus(admin._id)}
+                            type="button"
+                            onClick={() => handleToggleStatus(admin)}
+                            disabled={actionLoading}
                             className={`btn btn-sm ${admin.isActive ? 'btn-secondary' : 'btn-primary'}`}
                             style={{ padding: '0.3rem 0.65rem', fontSize: '0.75rem' }}
+                            title={admin.isActive ? 'Admin ko band karein — membership popup dikhega' : 'Admin ko wapas activate karein'}
                           >
                             {admin.isActive ? <UserX size={14} color="var(--danger)" /> : <UserCheck size={14} />}
-                            <span>{admin.isActive ? 'Deactivate' : 'Activate'}</span>
+                            <span>{admin.isActive ? 'Band Karo' : 'Activate'}</span>
                           </button>
                         </td>
 
@@ -616,7 +838,9 @@ export default function SuperAdminDashboard() {
                           <div style={{ display: 'inline-flex', gap: '0.35rem', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                             {(admin.planStatus === 'Expired' || admin.daysRemaining <= 0) && (
                               <button
+                                type="button"
                                 onClick={() => handleReactivateAdmin(admin)}
+                                disabled={actionLoading}
                                 className="btn btn-primary btn-sm"
                                 style={{ padding: '0.35rem 0.6rem', fontSize: '0.75rem', background: '#10b981' }}
                                 title="Recharge & Reactivate Account"
@@ -626,7 +850,9 @@ export default function SuperAdminDashboard() {
                             )}
 
                             <button
+                              type="button"
                               onClick={() => handleOpenSendOffer(admin)}
+                              disabled={actionLoading}
                               className="btn btn-primary btn-sm"
                               style={{ padding: '0.35rem 0.6rem', fontSize: '0.75rem', background: '#8b5cf6' }}
                               title="Send Membership Offer to Admin"
@@ -635,12 +861,14 @@ export default function SuperAdminDashboard() {
                             </button>
 
                             <button
+                              type="button"
                               onClick={() => {
                                 setRenewingAdmin(admin);
-                                setRenewPlanName(admin.planName || 'Monthly Plan');
+                                setRenewPlanName(admin.planName || plans[0]?.name || 'Monthly Plan');
                                 const matched = plans.find((p) => p.name === admin.planName);
                                 setRenewDays(matched?.durationDays || 30);
                               }}
+                              disabled={actionLoading}
                               className="btn btn-primary btn-sm"
                               style={{ padding: '0.35rem 0.6rem', fontSize: '0.75rem', background: '#0284c7' }}
                               title="Renew Membership Plan"
@@ -649,7 +877,9 @@ export default function SuperAdminDashboard() {
                             </button>
 
                             <button
+                              type="button"
                               onClick={() => handleOpenEditAdmin(admin)}
+                              disabled={actionLoading}
                               className="btn btn-secondary btn-sm"
                               style={{ padding: '0.35rem 0.5rem' }}
                               title="Edit Admin Account"
@@ -658,7 +888,9 @@ export default function SuperAdminDashboard() {
                             </button>
 
                             <button
+                              type="button"
                               onClick={() => handleDeleteAdmin(admin._id)}
+                              disabled={actionLoading}
                               className="btn btn-danger btn-sm"
                               style={{ padding: '0.35rem 0.5rem' }}
                               title="Delete Admin Account"
@@ -715,6 +947,7 @@ export default function SuperAdminDashboard() {
 
                       <div className="membership-sa-request-actions">
                         <button
+                          type="button"
                           onClick={() => {
                             setRenewingAdmin(admin);
                             const planName = admin.requestedPlanName || admin.planName || plans[0]?.name || 'Monthly Plan';
@@ -722,6 +955,7 @@ export default function SuperAdminDashboard() {
                             const matched = plans.find((p) => p.name === planName);
                             setRenewDays(matched?.durationDays || 30);
                           }}
+                          disabled={actionLoading}
                           className="btn btn-primary"
                           style={{ background: '#10b981', width: '100%' }}
                         >
@@ -758,6 +992,15 @@ export default function SuperAdminDashboard() {
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.25rem' }}>
+                {plans.length === 0 && (
+                  <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '3rem', color: 'var(--text-muted)', background: 'var(--bg-surface)', borderRadius: 'var(--radius)', border: '1px dashed var(--border)' }}>
+                    <Layers size={40} style={{ margin: '0 auto 0.75rem', opacity: 0.4 }} />
+                    Koi membership plan nahi hai.
+                    <button type="button" onClick={handleOpenAddPlan} className="btn btn-primary btn-sm" style={{ marginTop: '1rem' }}>
+                      <Plus size={14} /> Add First Plan
+                    </button>
+                  </div>
+                )}
                 {plans.map(plan => (
                   <div key={plan._id} style={{ background: '#ffffff', borderRadius: '18px', border: '1px solid var(--border)', padding: '1.5rem', boxShadow: '0 4px 12px rgba(0,0,0,0.03)', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
                     <div>
@@ -792,7 +1035,7 @@ export default function SuperAdminDashboard() {
                           Included Features:
                         </div>
                         <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
-                          {plan.features.map((feat, idx) => (
+                          {(plan.features || []).map((feat, idx) => (
                             <li key={idx} style={{ fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.4rem', color: 'var(--secondary)' }}>
                               <Check size={14} color="#10b981" /> {feat}
                             </li>
@@ -819,14 +1062,18 @@ export default function SuperAdminDashboard() {
 
                     <div style={{ display: 'flex', gap: '0.5rem', borderTop: '1px solid var(--border)', paddingTop: '1rem' }}>
                       <button
+                        type="button"
                         onClick={() => handleOpenEditPlan(plan)}
+                        disabled={actionLoading}
                         className="btn btn-secondary btn-sm"
                         style={{ flex: 1, justifyContent: 'center' }}
                       >
                         <Edit2 size={14} /> Edit Plan
                       </button>
                       <button
+                        type="button"
                         onClick={() => handleDeletePlan(plan._id)}
+                        disabled={actionLoading}
                         className="btn btn-danger btn-sm"
                         style={{ padding: '0.4rem 0.65rem' }}
                         title="Delete Plan"
@@ -846,8 +1093,8 @@ export default function SuperAdminDashboard() {
 
       {/* CREATE NEW ADMIN MODAL */}
       {showAddModal && (
-        <div className="modal-overlay">
-          <div className="modal-card" style={{ maxWidth: '500px' }}>
+        <div className="modal-overlay" onClick={() => { setShowAddModal(false); setModalError(''); }}>
+          <div className="modal-card" style={{ maxWidth: '500px' }} onClick={(e) => e.stopPropagation()}>
             <h3 style={{ fontSize: '1.25rem', fontWeight: '800', marginBottom: '1rem' }}>
               Create New Restaurant Admin
             </h3>
@@ -916,11 +1163,13 @@ export default function SuperAdminDashboard() {
                   onChange={(e) => setNewAdmin({ ...newAdmin, planName: e.target.value })}
                   style={{ width: '100%', fontWeight: '700', color: 'var(--primary)' }}
                 >
-                  {plans.map(p => (
+                  {plans.length > 0 ? plans.map(p => (
                     <option key={p._id} value={p.name}>
                       {p.name} ({p.durationDays} Days - {p.price === 0 ? 'FREE' : `₹${p.price}`})
                     </option>
-                  ))}
+                  )) : (
+                    <option value="5-Day Free Trial">5-Day Free Trial (5 Days - FREE)</option>
+                  )}
                 </select>
               </div>
 
@@ -928,8 +1177,8 @@ export default function SuperAdminDashboard() {
                 <button type="button" onClick={() => setShowAddModal(false)} className="btn btn-secondary">
                   Cancel
                 </button>
-                <button type="submit" className="btn btn-primary">
-                  Create Admin Account
+                <button type="submit" disabled={actionLoading} className="btn btn-primary">
+                  {actionLoading ? 'Creating...' : 'Create Admin Account'}
                 </button>
               </div>
             </form>
@@ -939,8 +1188,8 @@ export default function SuperAdminDashboard() {
 
       {/* EDIT ADMIN MODAL */}
       {editingAdmin && (
-        <div className="modal-overlay">
-          <div className="modal-card" style={{ maxWidth: '500px' }}>
+        <div className="modal-overlay" onClick={() => { setEditingAdmin(null); setModalError(''); }}>
+          <div className="modal-card" style={{ maxWidth: '500px' }} onClick={(e) => e.stopPropagation()}>
             <h3 style={{ fontSize: '1.2rem', fontWeight: '800', marginBottom: '1rem' }}>
               Edit Admin: {editingAdmin.restaurantName}
             </h3>
@@ -1017,8 +1266,8 @@ export default function SuperAdminDashboard() {
                 <button type="button" onClick={() => setEditingAdmin(null)} className="btn btn-secondary">
                   Cancel
                 </button>
-                <button type="submit" className="btn btn-primary">
-                  Save Changes
+                <button type="submit" disabled={actionLoading} className="btn btn-primary">
+                  {actionLoading ? 'Saving...' : 'Save Changes'}
                 </button>
               </div>
             </form>
@@ -1028,8 +1277,8 @@ export default function SuperAdminDashboard() {
 
       {/* SEND MEMBERSHIP OFFER MODAL */}
       {sendingOfferAdmin && (
-        <div className="modal-overlay">
-          <div className="modal-card" style={{ maxWidth: '440px' }}>
+        <div className="modal-overlay" onClick={() => { setSendingOfferAdmin(null); setModalError(''); }}>
+          <div className="modal-card" style={{ maxWidth: '440px' }} onClick={(e) => e.stopPropagation()}>
             <h3 style={{ fontSize: '1.15rem', fontWeight: '800', marginBottom: '0.5rem' }}>
               Send Membership Offer
             </h3>
@@ -1065,8 +1314,8 @@ export default function SuperAdminDashboard() {
               <button type="button" onClick={() => setSendingOfferAdmin(null)} className="btn btn-secondary">
                 Cancel
               </button>
-              <button type="button" onClick={handleSendMembershipOffer} className="btn btn-primary" style={{ background: '#8b5cf6' }}>
-                <Send size={16} /> Send Offer to Admin
+              <button type="button" disabled={actionLoading} onClick={handleSendMembershipOffer} className="btn btn-primary" style={{ background: '#8b5cf6' }}>
+                <Send size={16} /> {actionLoading ? 'Sending...' : 'Send Offer to Admin'}
               </button>
             </div>
           </div>
@@ -1075,8 +1324,8 @@ export default function SuperAdminDashboard() {
 
       {/* RENEW MEMBERSHIP MODAL */}
       {renewingAdmin && (
-        <div className="modal-overlay">
-          <div className="modal-card" style={{ maxWidth: '440px' }}>
+        <div className="modal-overlay" onClick={() => setRenewingAdmin(null)}>
+          <div className="modal-card" style={{ maxWidth: '440px' }} onClick={(e) => e.stopPropagation()}>
             <h3 style={{ fontSize: '1.15rem', fontWeight: '800', marginBottom: '0.5rem' }}>
               {renewingAdmin?.planStatus === 'Expired' || renewingAdmin?.daysRemaining <= 0
                 ? `Reactivate ${renewingAdmin.restaurantName}`
@@ -1128,12 +1377,15 @@ export default function SuperAdminDashboard() {
               </button>
               <button
                 type="button"
+                disabled={actionLoading || !renewDays || Number(renewDays) <= 0}
                 onClick={() => handleApproveRenew(renewingAdmin._id)}
                 className="btn btn-primary"
               >
-                {renewingAdmin?.planStatus === 'Expired' || renewingAdmin?.daysRemaining <= 0
-                  ? 'Confirm Recharge & Reactivate'
-                  : 'Confirm Membership Renewal'}
+                {actionLoading
+                  ? 'Processing...'
+                  : renewingAdmin?.planStatus === 'Expired' || renewingAdmin?.daysRemaining <= 0
+                    ? 'Confirm Recharge & Reactivate'
+                    : 'Confirm Membership Renewal'}
               </button>
             </div>
           </div>
@@ -1142,8 +1394,8 @@ export default function SuperAdminDashboard() {
 
       {/* CREATE / EDIT MEMBERSHIP PLAN MODAL */}
       {showPlanModal && (
-        <div className="modal-overlay">
-          <div className="modal-card" style={{ maxWidth: '520px' }}>
+        <div className="modal-overlay" onClick={() => { setShowPlanModal(false); setModalError(''); }}>
+          <div className="modal-card" style={{ maxWidth: '520px' }} onClick={(e) => e.stopPropagation()}>
             <h3 style={{ fontSize: '1.25rem', fontWeight: '800', marginBottom: '1rem' }}>
               {editingPlan ? `Edit Plan: ${editingPlan.name}` : '✨ Create New Membership Plan'}
             </h3>
@@ -1228,10 +1480,9 @@ export default function SuperAdminDashboard() {
               </div>
 
               <div>
-                <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '700', marginBottom: '0.3rem' }}>UPI ID (for recharge payments) *</label>
+                <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '700', marginBottom: '0.3rem' }}>UPI ID (optional — for recharge QR)</label>
                 <input
                   type="text"
-                  required
                   placeholder="e.g. restaurant@upi"
                   value={planForm.upiId}
                   onChange={(e) => setPlanForm({ ...planForm, upiId: e.target.value })}
@@ -1258,11 +1509,224 @@ export default function SuperAdminDashboard() {
                 <button type="button" onClick={() => setShowPlanModal(false)} className="btn btn-secondary">
                   Cancel
                 </button>
-                <button type="submit" className="btn btn-primary">
-                  {editingPlan ? 'Update Plan' : 'Save Membership Plan'}
+                <button type="submit" disabled={actionLoading} className="btn btn-primary">
+                  {actionLoading ? 'Saving...' : (editingPlan ? 'Update Plan' : 'Save Membership Plan')}
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {showAccountModal && (
+        <div className="modal-overlay" onClick={() => setShowAccountModal(false)}>
+          <div className="modal-card" style={{ maxWidth: '460px' }} onClick={(e) => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
+              <div>
+                <h3 style={{ fontSize: '1.15rem', fontWeight: '800', marginBottom: '0.25rem' }}>
+                  Account Settings
+                </h3>
+                <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                  Update your Super Admin login details
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAccountModal(false)}
+                className="btn btn-secondary btn-sm"
+                style={{ minWidth: 'auto', padding: '0.35rem 0.6rem' }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', background: '#f1f5f9', padding: '0.35rem', borderRadius: '10px' }}>
+              <button
+                type="button"
+                onClick={() => { setAccountTab('email'); setAccountError(''); setAccountSuccess(''); }}
+                style={{
+                  flex: 1,
+                  padding: '0.55rem 0.75rem',
+                  borderRadius: '8px',
+                  border: 'none',
+                  fontWeight: '700',
+                  fontSize: '0.8rem',
+                  cursor: 'pointer',
+                  background: accountTab === 'email' ? '#ffffff' : 'transparent',
+                  color: accountTab === 'email' ? 'var(--primary)' : 'var(--text-muted)',
+                  boxShadow: accountTab === 'email' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none'
+                }}
+              >
+                Change Email
+              </button>
+              <button
+                type="button"
+                onClick={() => { setAccountTab('password'); setAccountError(''); setAccountSuccess(''); }}
+                style={{
+                  flex: 1,
+                  padding: '0.55rem 0.75rem',
+                  borderRadius: '8px',
+                  border: 'none',
+                  fontWeight: '700',
+                  fontSize: '0.8rem',
+                  cursor: 'pointer',
+                  background: accountTab === 'password' ? '#ffffff' : 'transparent',
+                  color: accountTab === 'password' ? 'var(--primary)' : 'var(--text-muted)',
+                  boxShadow: accountTab === 'password' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none'
+                }}
+              >
+                Change Password
+              </button>
+            </div>
+
+            {accountError && (
+              <div style={{ background: '#fee2e2', color: '#dc2626', padding: '0.65rem', borderRadius: '8px', fontSize: '0.8rem', marginBottom: '0.85rem' }}>
+                {accountError}
+              </div>
+            )}
+
+            {accountSuccess && (
+              <div style={{ background: '#dcfce7', color: '#166534', padding: '0.65rem', borderRadius: '8px', fontSize: '0.8rem', marginBottom: '0.85rem' }}>
+                {accountSuccess}
+              </div>
+            )}
+
+            {accountTab === 'email' ? (
+              <form onSubmit={handleChangeEmailSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '700', marginBottom: '0.3rem' }}>
+                    Current Email
+                  </label>
+                  <input
+                    type="email"
+                    value={user?.email || ''}
+                    readOnly
+                    style={{ width: '100%', background: '#f8fafc', color: 'var(--text-muted)', cursor: 'not-allowed' }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '700', marginBottom: '0.3rem' }}>
+                    New Email
+                  </label>
+                  <input
+                    type="email"
+                    placeholder="Enter new Gmail / email address"
+                    value={emailForm.newEmail}
+                    onChange={(e) => setEmailForm({ ...emailForm, newEmail: e.target.value })}
+                    style={{ width: '100%' }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '700', marginBottom: '0.3rem' }}>
+                    Current Password
+                  </label>
+                  <div style={{ position: 'relative' }}>
+                    <input
+                      type={showEmailPassword ? 'text' : 'password'}
+                      placeholder="Enter current password to verify"
+                      value={emailForm.currentPassword}
+                      onChange={(e) => setEmailForm({ ...emailForm, currentPassword: e.target.value })}
+                      style={{ width: '100%', paddingRight: '2.5rem' }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowEmailPassword(!showEmailPassword)}
+                      style={{ position: 'absolute', right: '0.75rem', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}
+                    >
+                      {showEmailPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '0.25rem' }}>
+                  <button type="button" onClick={() => setShowAccountModal(false)} className="btn btn-secondary">
+                    Cancel
+                  </button>
+                  <button type="submit" disabled={emailLoading} className="btn btn-primary">
+                    {emailLoading ? 'Updating...' : 'Update Email'}
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <form onSubmit={handleChangePasswordSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '700', marginBottom: '0.3rem' }}>
+                    Current Password
+                  </label>
+                  <div style={{ position: 'relative' }}>
+                    <input
+                      type={showCurrentPassword ? 'text' : 'password'}
+                      placeholder="Enter current password"
+                      value={passwordForm.currentPassword}
+                      onChange={(e) => setPasswordForm({ ...passwordForm, currentPassword: e.target.value })}
+                      style={{ width: '100%', paddingRight: '2.5rem' }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                      style={{ position: 'absolute', right: '0.75rem', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}
+                    >
+                      {showCurrentPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '700', marginBottom: '0.3rem' }}>
+                    New Password
+                  </label>
+                  <div style={{ position: 'relative' }}>
+                    <input
+                      type={showNewPassword ? 'text' : 'password'}
+                      placeholder="Minimum 6 characters"
+                      value={passwordForm.newPassword}
+                      onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })}
+                      style={{ width: '100%', paddingRight: '2.5rem' }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowNewPassword(!showNewPassword)}
+                      style={{ position: 'absolute', right: '0.75rem', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}
+                    >
+                      {showNewPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '700', marginBottom: '0.3rem' }}>
+                    Confirm New Password
+                  </label>
+                  <div style={{ position: 'relative' }}>
+                    <input
+                      type={showConfirmPassword ? 'text' : 'password'}
+                      placeholder="Re-enter new password"
+                      value={passwordForm.confirmPassword}
+                      onChange={(e) => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })}
+                      style={{ width: '100%', paddingRight: '2.5rem' }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                      style={{ position: 'absolute', right: '0.75rem', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}
+                    >
+                      {showConfirmPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '0.25rem' }}>
+                  <button type="button" onClick={() => setShowAccountModal(false)} className="btn btn-secondary">
+                    Cancel
+                  </button>
+                  <button type="submit" disabled={passwordLoading} className="btn btn-primary">
+                    {passwordLoading ? 'Updating...' : 'Update Password'}
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
         </div>
       )}

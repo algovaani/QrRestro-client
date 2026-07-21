@@ -19,6 +19,7 @@ import ReportsPage from './pages/admin/ReportsPage';
 import SettingsPage from './pages/admin/SettingsPage';
 import SubscriptionExpiredPage from './pages/admin/SubscriptionExpiredPage';
 import AdminMembershipRoute from './pages/admin/AdminMembershipRoute';
+import { isAdminDashboardBlocked, getPostLoginPath } from './utils/adminAccess';
 
 // Customer Pages
 import CustomerMenu from './pages/customer/CustomerMenu';
@@ -28,30 +29,33 @@ import OrderStatusPage from './pages/customer/OrderStatusPage';
 
 // Protected Route Wrapper
 const ProtectedRoute = ({ children, allowedRoles, allowExpired = false }) => {
-  const { user, token } = useAuth();
+  const { user, token, authReady } = useAuth();
+
+  if (!authReady) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>
+        Loading...
+      </div>
+    );
+  }
+
   if (!token || !user) {
     return <Navigate to="/admin/login" replace />;
   }
 
-  // Super Admin bypasses expired checks and goes straight to Super Admin Dashboard
   if (user.role === 'SuperAdmin') {
-    return children;
+    if (allowedRoles?.includes('SuperAdmin')) return children;
+    return <Navigate to="/super-admin/dashboard" replace />;
   }
 
-  // Check Expiry / Active Status for Restaurant Admin
-  if (user.role === 'Admin' && !allowExpired) {
-    const expiry = user.subscriptionEndsAt || user.trialEndsAt;
-    const isExpired = (user.planStatus === 'Expired') ||
-      (expiry && new Date(expiry) < new Date());
-
-    if (!user.isActive || isExpired) {
-      return <Navigate to="/subscription-expired" replace />;
-    }
+  if (user.role === 'Admin' && !allowExpired && isAdminDashboardBlocked(user)) {
+    return <Navigate to="/subscription-expired" replace />;
   }
 
   if (allowedRoles && !allowedRoles.includes(user.role)) {
-    return <Navigate to="/admin/dashboard" replace />;
+    return <Navigate to={getPostLoginPath(user)} replace />;
   }
+
   return children;
 };
 
@@ -60,7 +64,7 @@ export default function App() {
     <AuthProvider>
       <CartProvider>
         <SocketProvider>
-          <BrowserRouter>
+          <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
             <Routes>
               {/* Public Customer QR Routes — cart route pehle (specific match) */}
               <Route path="/menu/:adminId/table/:tableNumber/cart" element={<CartPage />} />

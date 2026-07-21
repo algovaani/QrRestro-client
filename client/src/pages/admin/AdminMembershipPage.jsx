@@ -24,6 +24,7 @@ import {
   Hourglass,
   BadgeCheck
 } from 'lucide-react';
+import { getDaysRemaining, formatExpiryDate, getMembershipDaysLabel, resolveMembershipDisplay } from '../../utils/membershipDays';
 
 export default function AdminMembershipPage({ standalone = false }) {
   const { user, logout, updateUser } = useAuth();
@@ -111,10 +112,10 @@ export default function AdminMembershipPage({ standalone = false }) {
     subscription?.planStatus === 'Expired' ||
     user?.planStatus === 'Expired';
 
-  const expiryDate = subscription?.subscriptionEndsAt || user?.subscriptionEndsAt;
-  const daysLeft = expiryDate
-    ? Math.ceil((new Date(expiryDate) - new Date()) / (1000 * 60 * 60 * 24))
-    : 0;
+  const membership = resolveMembershipDisplay({ ...user, ...subscription });
+  const expiryDate = membership.expiryDate;
+  const daysLeft = membership.daysRemaining;
+  const displayPlanName = membership.planName;
 
   const pendingPlan = useMemo(() => {
     const name = requestedPlanName || selectedPlan?.name;
@@ -213,17 +214,19 @@ export default function AdminMembershipPage({ standalone = false }) {
           <h2>
             {requested
               ? 'Membership Request Pending'
+              : !user?.isActive
+                ? 'Account Band — Membership Renew Karein'
               : isExpired
                 ? 'Plan Expired — Renew Karein'
                 : 'My Membership'}
           </h2>
           <p>
-            {user?.restaurantName} • {subscription?.planName || user?.planName}
+            {user?.restaurantName} • {displayPlanName}
             {expiryDate && !requested && (
-              <> • Valid till <strong>{new Date(expiryDate).toLocaleDateString('en-IN')}</strong></>
+              <> • Valid till <strong>{formatExpiryDate(expiryDate)}</strong></>
             )}
-            {!isExpired && !requested && daysLeft > 0 && (
-              <> • <strong className={daysLeft <= 3 ? 'text-warning' : 'text-success'}>{daysLeft} day(s) left</strong></>
+            {!isExpired && !requested && daysLeft >= 0 && (
+              <> • <strong className={daysLeft <= 3 ? 'text-warning' : 'text-success'}>{getMembershipDaysLabel(daysLeft)}</strong></>
             )}
           </p>
         </div>
@@ -320,9 +323,9 @@ export default function AdminMembershipPage({ standalone = false }) {
       {!requested && !isExpired && selectedPlan && (
         <div className="membership-active-card">
           <div className="membership-active-badge"><Crown size={16} /> Active Plan</div>
-          <h3>{subscription?.planName || user?.planName}</h3>
+          <h3>{displayPlanName}</h3>
           {expiryDate && (
-            <p>Valid until {new Date(expiryDate).toLocaleDateString('en-IN')} ({daysLeft} days remaining)</p>
+            <p>{formatExpiryDate(expiryDate)} tak valid • {getMembershipDaysLabel(daysLeft)}</p>
           )}
           <Link to="/admin/dashboard" className="btn btn-secondary btn-sm" style={{ marginTop: '0.75rem', display: 'inline-flex' }}>
             <ArrowRight size={14} /> Go to Dashboard

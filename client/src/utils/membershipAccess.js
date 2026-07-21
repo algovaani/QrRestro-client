@@ -5,8 +5,8 @@ export function canShowMembershipOption(user) {
   return Boolean(user.membershipOfferSent || user.renewalRequested);
 }
 
+/** Membership page — band/expired admin bhi dekh sakta hai jab offer ya pending request ho */
 export function canAccessMembershipPage(user) {
   if (!user || user.role !== 'Admin') return false;
-  if (user.isActive === false) return false;
   return Boolean(user.membershipOfferSent || user.renewalRequested);
 }

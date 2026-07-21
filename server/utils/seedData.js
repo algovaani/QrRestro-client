@@ -11,6 +11,7 @@ const MembershipPlan = require('../models/MembershipPlan');
 dotenv.config();
 
 const { getClientUrl } = require('./clientUrl');
+const { addMembershipDays } = require('./membershipDays');
 const clientUrl = getClientUrl();
 
 const { buildMenuQrUrl } = require('../utils/tenantUtils');
@@ -72,21 +73,21 @@ const seedData = async () => {
     
     // 1. SUPER ADMIN ACCOUNT
     const superAdmin = await User.create({
-      name: 'Super System Admin',
+      name: 'Anil',
       restaurantName: 'SaaS Platform Admin',
-      email: 'superadmin@restaurant.com',
-      password: 'superadmin123',
-      rawPassword: 'superadmin123',
+      email: 'Anil@gmail.com',
+      password: 'Anil@1234',
+      rawPassword: 'Anil@1234',
       role: 'SuperAdmin',
       isActive: true,
       planName: 'Annual Plan',
       planStatus: 'Active'
     });
-    console.log('Created Super Admin user: superadmin@restaurant.com / superadmin123');
+    console.log('Created Super Admin user: Anil@gmail.com / Anil@1234');
 
     // 2. RESTAURANT ADMIN ACCOUNT (5-Day Free Trial)
     const now = new Date();
-    const trialEndsAt = new Date(now.getTime() + 5 * 24 * 60 * 60 * 1000);
+    const trialEndsAt = addMembershipDays(now, 5);
 
     const admin = await User.create({
       name: 'Rajesh Kumar',

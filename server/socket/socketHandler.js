@@ -1,4 +1,5 @@
 let ioInstance = null;
+const { getDaysRemaining, formatExpiryDate } = require('../utils/membershipDays');
 
 const toPayload = (order) => (order?.toObject ? order.toObject() : order);
 
@@ -40,7 +41,15 @@ const emitToTenant = (order, eventName) => {
     .emit(eventName, payload);
 };
 
-const emitNewOrder = (order) => emitToTenant(order, 'new_order');
+const emitNewOrder = (order) => {
+  if (!ioInstance || !order?.adminId) {
+    console.warn('emitNewOrder skipped: socket not ready or missing adminId');
+    return;
+  }
+  const payload = toPayload(order);
+  console.log(`Emitting new_order to admin_${String(payload.adminId)} — ${payload.orderNumber}`);
+  emitToTenant(order, 'new_order');
+};
 const emitOrderStatusUpdate = (order) => emitToTenant(order, 'order_status_update');
 const emitPaymentPending = (order) => emitToTenant(order, 'payment_pending');
 const emitPaymentSuccess = (order) => emitToTenant(order, 'payment_success');
@@ -62,18 +71,20 @@ const emitMembershipRenewalRequest = (admin) => {
 const emitMembershipActivated = (admin) => {
   if (!ioInstance || !admin?._id) return;
   const expiry = admin.subscriptionEndsAt || admin.trialEndsAt;
+  const daysLeft = getDaysRemaining(expiry);
   const payload = {
     adminId: String(admin._id),
     planName: admin.planName,
     planStatus: admin.planStatus,
     subscriptionEndsAt: expiry,
+    daysRemaining: daysLeft,
     renewalRequested: false,
     requestedPlanName: '',
     membershipOfferSent: false,
     membershipOfferPlanName: '',
     isExpired: false,
     isActive: admin.isActive,
-    message: `Membership activated! ${admin.planName} valid until ${expiry ? new Date(expiry).toLocaleDateString('en-IN') : 'N/A'}`
+    message: `Membership activated! ${admin.planName} — ${daysLeft} din bache (${formatExpiryDate(expiry)} tak)`
   };
   ioInstance.to(getAdminRoom(String(admin._id))).emit('membership_activated', payload);
 };
@@ -103,7 +114,7 @@ const emitAdminStatusChanged = (admin) => {
     requestedPlanName: admin.requestedPlanName || '',
     message: admin.isActive
       ? 'Super Admin ne aapka account activate kar diya hai.'
-      : 'Super Admin ne aapka account deactivate kar diya hai.'
+      : `Aapka account band kar diya gaya hai. Membership renew karein${admin.membershipOfferPlanName ? ` — ${admin.membershipOfferPlanName} plan available hai` : ''}.`
   };
   ioInstance.to(getAdminRoom(String(admin._id))).emit('admin_status_changed', payload);
 };

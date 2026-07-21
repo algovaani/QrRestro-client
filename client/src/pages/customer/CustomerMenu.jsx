@@ -38,7 +38,7 @@ export default function CustomerMenu() {
   const [quantity, setQuantity] = useState(1);
   const [instructions, setInstructions] = useState('');
 
-  const { initTableCart, bindRestaurantAdmin, addToCart, saveCustomerDetails, customerDetailsComplete, customerMobile, restaurantAdminId } = useCart();
+  const { initTableCart, bindRestaurantAdmin, addToCart, saveCustomerDetails, customerDetailsComplete, customerMobile, restaurantAdminId, applyRestaurantSettings } = useCart();
   const { socket, playOrderChime } = useSocket();
 
   useEffect(() => {
@@ -120,9 +120,13 @@ export default function CustomerMenu() {
         if (resolvedAdminId) {
           bindRestaurantAdmin(resolvedAdminId);
         }
+        const setting = res.data.setting || res.data.settings;
+        if (setting) {
+          applyRestaurantSettings(setting);
+        }
         setTableInfo({
           tableNumber: res.data.tableNumber || tableNumber,
-          settings: res.data.setting || res.data.settings
+          settings: setting
         });
         setCategories(res.data.categories);
         setMenuItems(res.data.menuItems);

@@ -1,30 +1,27 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { getPostLoginPath } from '../../utils/adminAccess';
 import { LogIn, AlertCircle } from 'lucide-react';
 
 export default function AdminLogin() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
-  const { login, loading } = useAuth();
+  const { user, token, authReady, login, loading } = useAuth();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    if (!authReady || !token || !user) return;
+    navigate(getPostLoginPath(user), { replace: true });
+  }, [authReady, token, user, navigate]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
     const res = await login(email, password);
     if (res && res.success) {
-      const role = res.user?.role;
-      if (role === 'SuperAdmin') {
-        navigate('/super-admin/dashboard');
-      } else if (role === 'Kitchen') {
-        navigate('/admin/kitchen');
-      } else if (res.user?.isExpired || res.user?.planStatus === 'Expired') {
-        navigate('/subscription-expired');
-      } else {
-        navigate('/admin/dashboard');
-      }
+      navigate(getPostLoginPath(res.user));
     } else {
       setError(res?.message || 'Invalid email or password');
     }
@@ -125,11 +122,6 @@ export default function AdminLogin() {
             <LogIn size={18} />
             <span>{loading ? 'Authenticating...' : 'Sign In'}</span>
           </button>
-
-          <div style={{ background: '#f8fafc', padding: '0.75rem', borderRadius: '10px', fontSize: '0.75rem', color: 'var(--text-muted)', textAlign: 'center' }}>
-            <div>🔑 Super Admin: <strong>superadmin@restaurant.com</strong> / <strong>superadmin123</strong></div>
-            <div style={{ marginTop: '0.2rem' }}>👨‍💼 Restaurant Admin: <strong>admin@restaurant.com</strong> / <strong>admin123</strong></div> 
-          </div>
         </form>
       </div>
     </div>

@@ -6,6 +6,7 @@ const Category = require('../models/Category');
 const MenuItem = require('../models/MenuItem');
 const Order = require('../models/Order');
 const MembershipPlan = require('../models/MembershipPlan');
+const { getDaysRemaining, formatExpiryDate, formatRenewalMessage, withMembershipDays, isTrialPlanName, inferPlanNameFromDays, addMembershipDays } = require('../utils/membershipDays');
 
 const getPlanConfig = async (planName) => {
   const plan = await MembershipPlan.findOne({ name: planName });
@@ -53,18 +54,7 @@ exports.getAllAdmins = async (req, res, next) => {
   try {
     const admins = await User.find({ role: 'Admin' }).select('-password').sort({ createdAt: -1 });
 
-    const now = new Date();
-    const processedAdmins = admins.map(admin => {
-      const adminObj = admin.toObject();
-      const expiry = adminObj.subscriptionEndsAt || adminObj.trialEndsAt;
-
-      const timeDiff = expiry ? expiry.getTime() - now.getTime() : 0;
-      const daysRemaining = Math.ceil(timeDiff / (1000 * 3600 * 24));
-
-      adminObj.daysRemaining = daysRemaining;
-      adminObj.isExpired = daysRemaining <= 0;
-      return adminObj;
-    });
+    const processedAdmins = admins.map(admin => withMembershipDays(admin.toObject()));
 
     res.json({
       success: true,
@@ -91,7 +81,7 @@ exports.createAdmin = async (req, res, next) => {
     const { durationDays, planStatus } = await getPlanConfig(selectedPlan);
 
     const now = new Date();
-    const expiryDate = new Date(now.getTime() + durationDays * 24 * 60 * 60 * 1000);
+    const expiryDate = addMembershipDays(now, durationDays);
 
     const newAdmin = await User.create({
       name,
@@ -114,9 +104,11 @@ exports.createAdmin = async (req, res, next) => {
       upiId: `${email.split('@')[0]}@upi`
     });
 
+    const daysRemaining = getDaysRemaining(expiryDate);
+
     res.status(201).json({
       success: true,
-      message: `Admin created with ${selectedPlan} (Valid until: ${expiryDate.toLocaleDateString()})`,
+      message: `Admin created with ${selectedPlan} — ${daysRemaining} din valid (${formatExpiryDate(expiryDate)} tak)`,
       admin: {
         id: newAdmin._id,
         name: newAdmin.name,
@@ -151,15 +143,20 @@ exports.updateAdmin = async (req, res, next) => {
       admin.rawPassword = password;
     }
 
-    if (planName) {
-      admin.planName = planName;
+    const previousPlanName = admin.planName;
+    if (planName) admin.planName = planName;
+
+    const planChanged = planName && planName !== previousPlanName;
+    const hasExtendDays = extendDays !== undefined && extendDays !== null && String(extendDays).trim() !== '';
+
+    if (planChanged || hasExtendDays) {
       admin.planStatus = 'Active';
       admin.isActive = true;
 
-      const config = await getPlanConfig(planName);
-      const daysToAdd = parseInt(extendDays, 10) || config.durationDays;
+      const config = await getPlanConfig(planName || admin.planName);
+      const daysToAdd = hasExtendDays ? parseInt(extendDays, 10) : config.durationDays;
       const now = new Date();
-      admin.subscriptionEndsAt = new Date(now.getTime() + daysToAdd * 24 * 60 * 60 * 1000);
+      admin.subscriptionEndsAt = addMembershipDays(now, daysToAdd);
       admin.trialEndsAt = admin.subscriptionEndsAt;
       admin.renewalRequested = false;
       admin.renewalRequestDate = null;
@@ -193,6 +190,14 @@ exports.toggleAdminStatus = async (req, res, next) => {
     admin.isActive = !admin.isActive;
 
     if (!admin.isActive) {
+      admin.planStatus = 'Expired';
+      admin.membershipOfferSent = true;
+      admin.membershipOfferPlanName = admin.planName || 'Monthly Plan';
+      admin.membershipOfferSentAt = new Date();
+      admin.renewalRequested = false;
+      admin.renewalRequestDate = null;
+      admin.requestedPlanName = '';
+    } else {
       admin.membershipOfferSent = false;
       admin.membershipOfferPlanName = '';
       admin.membershipOfferSentAt = null;
@@ -204,6 +209,9 @@ exports.toggleAdminStatus = async (req, res, next) => {
     await admin.save();
 
     emitAdminStatusChanged(admin);
+    if (!admin.isActive) {
+      emitMembershipOfferSent(admin);
+    }
 
     res.json({
       success: true,
@@ -235,11 +243,17 @@ exports.renewAdminMembership = async (req, res, next) => {
     const daysToAdd = parseInt(extendDays, 10) || (await getPlanConfig(planName || admin.planName)).durationDays;
     const now = new Date();
 
-    const baseDate = (admin.subscriptionEndsAt && admin.subscriptionEndsAt > now) ? admin.subscriptionEndsAt : now;
-    const newExpiryDate = new Date(baseDate.getTime() + daysToAdd * 24 * 60 * 60 * 1000);
+    let selectedPlan = planName || admin.planName || 'Monthly Plan';
+    if (isTrialPlanName(selectedPlan) && daysToAdd > 5) {
+      selectedPlan = inferPlanNameFromDays(daysToAdd);
+    }
 
-    admin.planName = planName || admin.planName || 'Monthly Plan';
-    admin.planStatus = 'Active';
+    const planConfig = await getPlanConfig(selectedPlan);
+    // Fresh period from payment/activation date — do not stack leftover days
+    const newExpiryDate = addMembershipDays(now, daysToAdd);
+
+    admin.planName = selectedPlan;
+    admin.planStatus = planConfig.planStatus;
     admin.subscriptionEndsAt = newExpiryDate;
     admin.trialEndsAt = newExpiryDate;
     admin.isActive = true;
@@ -254,9 +268,14 @@ exports.renewAdminMembership = async (req, res, next) => {
 
     emitMembershipActivated(admin);
 
+    const daysRemaining = getDaysRemaining(newExpiryDate);
+
     res.json({
       success: true,
-      message: `Membership renewed & account reactivated! Valid until ${newExpiryDate.toLocaleDateString()}`,
+      message: formatRenewalMessage(admin.planName, newExpiryDate),
+      daysRemaining,
+      daysAdded: daysToAdd,
+      expiryDate: newExpiryDate,
       admin
     });
   } catch (error) {

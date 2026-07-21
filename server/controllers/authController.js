@@ -1,5 +1,6 @@
 const User = require('../models/User');
 const jwt = require('jsonwebtoken');
+const { getDaysRemaining, withMembershipDays } = require('../utils/membershipDays');
 
 const generateToken = (id) => {
   return jwt.sign({ id }, process.env.JWT_SECRET || 'super_secret_jwt_key_restaurant_qr_2026_safe', {
@@ -24,10 +25,6 @@ exports.login = async (req, res, next) => {
       return res.status(401).json({ success: false, message: 'Invalid credentials. User not found.' });
     }
 
-    if (!user.isActive) {
-      return res.status(403).json({ success: false, message: 'Your account is deactivated. Please contact Super Admin.' });
-    }
-
     const isMatch = await user.comparePassword(password);
     if (!isMatch) {
       return res.status(401).json({ success: false, message: 'Invalid email or password.' });
@@ -46,7 +43,7 @@ exports.login = async (req, res, next) => {
     res.json({
       success: true,
       token,
-      user: {
+      user: withMembershipDays({
         _id: user._id,
         name: user.name,
         restaurantName: user.restaurantName,
@@ -62,8 +59,9 @@ exports.login = async (req, res, next) => {
         membershipOfferPlanName: user.membershipOfferPlanName || '',
         membershipOfferSentAt: user.membershipOfferSentAt,
         subscriptionEndsAt: user.subscriptionEndsAt,
+        trialEndsAt: user.trialEndsAt,
         isExpired: Boolean(isExpired)
-      }
+      })
     });
   } catch (error) {
     next(error);
@@ -77,14 +75,15 @@ exports.getSubscriptionStatus = async (req, res, next) => {
     const user = await User.findById(req.user._id).select('-password');
     const expiry = user.subscriptionEndsAt || user.trialEndsAt;
     const isExpired = user.role === 'Admin' && expiry && new Date(expiry) < new Date();
+    const daysRemaining = getDaysRemaining(expiry);
 
     res.json({
       success: true,
-      user: {
+      user: withMembershipDays({
         ...user.toObject(),
         isExpired: Boolean(isExpired),
         planStatus: isExpired ? 'Expired' : user.planStatus
-      }
+      })
     });
   } catch (error) {
     next(error);
@@ -96,7 +95,17 @@ exports.getSubscriptionStatus = async (req, res, next) => {
 exports.getMe = async (req, res, next) => {
   try {
     const user = await User.findById(req.user._id).select('-password');
-    res.json({ success: true, user });
+    const expiry = user.subscriptionEndsAt || user.trialEndsAt;
+    const isExpired = user.role === 'Admin' && expiry && new Date(expiry) < new Date();
+
+    res.json({
+      success: true,
+      user: withMembershipDays({
+        ...user.toObject(),
+        isExpired: Boolean(isExpired),
+        planStatus: isExpired ? 'Expired' : user.planStatus
+      })
+    });
   } catch (error) {
     next(error);
   }
@@ -120,9 +129,57 @@ exports.changePassword = async (req, res, next) => {
     }
 
     user.password = newPassword;
+    if (user.rawPassword !== undefined) {
+      user.rawPassword = newPassword;
+    }
     await user.save();
 
     res.json({ success: true, message: 'Password updated successfully' });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc Change Email
+// @route PUT /api/auth/change-email
+exports.changeEmail = async (req, res, next) => {
+  try {
+    const { newEmail, currentPassword } = req.body;
+
+    if (!newEmail || !currentPassword) {
+      return res.status(400).json({ success: false, message: 'Please provide new email and current password' });
+    }
+
+    const cleanEmail = newEmail.toLowerCase().trim();
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(cleanEmail)) {
+      return res.status(400).json({ success: false, message: 'Please provide a valid email address' });
+    }
+
+    const user = await User.findById(req.user._id);
+    const isMatch = await user.comparePassword(currentPassword);
+
+    if (!isMatch) {
+      return res.status(400).json({ success: false, message: 'Current password is incorrect' });
+    }
+
+    if (user.email === cleanEmail) {
+      return res.status(400).json({ success: false, message: 'New email is same as current email' });
+    }
+
+    const existingUser = await User.findOne({ email: cleanEmail });
+    if (existingUser) {
+      return res.status(400).json({ success: false, message: 'This email is already in use' });
+    }
+
+    user.email = cleanEmail;
+    await user.save();
+
+    res.json({
+      success: true,
+      message: 'Email updated successfully',
+      email: user.email
+    });
   } catch (error) {
     next(error);
   }

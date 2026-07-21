@@ -3,6 +3,7 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { LayoutDashboard, ShoppingCart, Utensils, Grid, QrCode, BarChart3, Settings, LogOut, ChefHat, CreditCard } from 'lucide-react';
 import { canShowMembershipOption } from '../../utils/membershipAccess';
+import { resolveMembershipDisplay, getMembershipDaysLabel } from '../../utils/membershipDays';
 
 export default function Sidebar() {
   const { user, logout } = useAuth();
@@ -12,6 +13,9 @@ export default function Sidebar() {
     logout();
     navigate('/admin/login');
   };
+
+  const membership = resolveMembershipDisplay(user);
+  const showMembershipDays = user?.role === 'Admin' && user?.isActive !== false;
 
   return (
     <div className="admin-sidebar">
@@ -86,6 +90,16 @@ export default function Sidebar() {
           <div>
             <div style={{ fontWeight: '700', fontSize: '0.85rem' }}>{user?.name || 'Administrator'}</div>
             <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{user?.email || 'admin@restaurant.com'}</div>
+            {showMembershipDays && (
+              <div style={{
+                marginTop: '0.35rem',
+                fontSize: '0.7rem',
+                fontWeight: '700',
+                color: membership.daysRemaining <= 3 ? 'var(--danger)' : 'var(--primary)'
+              }}>
+                {membership.planName} • {getMembershipDaysLabel(membership.daysRemaining)}
+              </div>
+            )}
           </div>
         </div>
 

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { io } from 'socket.io-client';
 import { useAuth } from './AuthContext';
 
@@ -7,6 +7,13 @@ const SocketContext = createContext();
 export const getTableRoom = (adminId, tableNumber) => {
   if (!adminId || !tableNumber) return null;
   return `table_${adminId}_${tableNumber}`;
+};
+
+const getTenantId = (user, token) => {
+  if (!user || !token || user.role === 'SuperAdmin') return null;
+  if (user.role === 'Admin') return String(user._id);
+  if (user.restaurantAdminId) return String(user.restaurantAdminId);
+  return null;
 };
 
 const playOrderChime = () => {
@@ -33,37 +40,27 @@ const playOrderChime = () => {
 };
 
 export const SocketProvider = ({ children }) => {
-  const { user, token, updateUser } = useAuth();
+  const { user, token, authReady, updateUser } = useAuth();
   const [socket, setSocket] = useState(null);
+  const [isConnected, setIsConnected] = useState(false);
   const [notifications, setNotifications] = useState([]);
 
+  const tenantId = useMemo(() => getTenantId(user, token), [user, token]);
+  const authRef = useRef({ user, tenantId, updateUser });
+  authRef.current = { user, tenantId, updateUser };
+
+  // Single long-lived socket — do not recreate on every auth/user update
   useEffect(() => {
     const newSocket = io(window.location.origin, {
       transports: ['polling', 'websocket'],
       reconnection: true,
-      reconnectionAttempts: 10,
-      reconnectionDelay: 1000
+      reconnectionAttempts: Infinity,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000
     });
 
     setSocket(newSocket);
-
-    const tenantId = user && token && user.role !== 'SuperAdmin'
-      ? (user.role === 'Admin' ? user._id : user.restaurantAdminId)
-      : null;
-
-    newSocket.on('connect', () => {
-      if (tenantId) {
-        newSocket.emit('join_room', `admin_${tenantId}`);
-        newSocket.emit('join_room', `kitchen_${tenantId}`);
-      }
-      if (user?.role === 'SuperAdmin') {
-        newSocket.emit('join_room', 'super_admin');
-      }
-    });
-
-    newSocket.on('connect_error', (err) => {
-      console.log('Socket reconnecting...', err.message);
-    });
+    setIsConnected(newSocket.connected);
 
     const vibrateAlert = () => {
       if (typeof navigator !== 'undefined' && navigator.vibrate) {
@@ -71,8 +68,13 @@ export const SocketProvider = ({ children }) => {
       }
     };
 
+    const belongsToTenant = (order) => {
+      const { tenantId: tid } = authRef.current;
+      return tid && order?.adminId && String(order.adminId) === String(tid);
+    };
+
     const handleNewOrder = (order) => {
-      if (!tenantId) return;
+      if (!belongsToTenant(order)) return;
       playOrderChime();
       vibrateAlert();
       const newNotif = {
@@ -95,7 +97,7 @@ export const SocketProvider = ({ children }) => {
     };
 
     const handlePaymentPending = (order) => {
-      if (!tenantId) return;
+      if (!belongsToTenant(order)) return;
       playOrderChime();
       vibrateAlert();
       const newNotif = {
@@ -118,7 +120,7 @@ export const SocketProvider = ({ children }) => {
     };
 
     const handlePaymentSuccess = (order) => {
-      if (!tenantId) return;
+      if (!belongsToTenant(order)) return;
       playOrderChime();
       vibrateAlert();
       const newNotif = {
@@ -140,21 +142,20 @@ export const SocketProvider = ({ children }) => {
         return [newNotif, ...prev];
       });
       setTimeout(() => {
-        setNotifications(prev => prev.filter(n => n.id !== newNotif.id));
+        setNotifications((prev) => prev.filter((n) => n.id !== newNotif.id));
       }, 8000);
     };
 
     const handleMembershipOfferSent = (data) => {
-      if (user?.role !== 'Admin' || !tenantId) return;
+      const { user: currentUser, tenantId: tid, updateUser: patchUser } = authRef.current;
+      if (currentUser?.role !== 'Admin' || !tid || String(data.adminId) !== String(tid)) return;
       playOrderChime();
       vibrateAlert();
-      if (updateUser) {
-        updateUser({
-          membershipOfferSent: true,
-          membershipOfferPlanName: data.membershipOfferPlanName || '',
-          membershipOfferSentAt: data.membershipOfferSentAt
-        });
-      }
+      patchUser?.({
+        membershipOfferSent: true,
+        membershipOfferPlanName: data.membershipOfferPlanName || '',
+        membershipOfferSentAt: data.membershipOfferSentAt
+      });
       const newNotif = {
         id: `membership_offer_${Date.now()}`,
         type: 'membership_offer_sent',
@@ -170,22 +171,22 @@ export const SocketProvider = ({ children }) => {
     };
 
     const handleMembershipActivated = (data) => {
-      if (user?.role !== 'Admin' || !tenantId) return;
+      const { user: currentUser, tenantId: tid, updateUser: patchUser } = authRef.current;
+      if (currentUser?.role !== 'Admin' || !tid || String(data.adminId) !== String(tid)) return;
       playOrderChime();
       vibrateAlert();
-      if (updateUser) {
-        updateUser({
-          planName: data.planName,
-          planStatus: data.planStatus || 'Active',
-          subscriptionEndsAt: data.subscriptionEndsAt,
-          renewalRequested: false,
-          requestedPlanName: '',
-          membershipOfferSent: false,
-          membershipOfferPlanName: '',
-          isExpired: false,
-          isActive: true
-        });
-      }
+      patchUser?.({
+        planName: data.planName,
+        planStatus: data.planStatus || 'Active',
+        subscriptionEndsAt: data.subscriptionEndsAt,
+        daysRemaining: data.daysRemaining,
+        renewalRequested: false,
+        requestedPlanName: '',
+        membershipOfferSent: false,
+        membershipOfferPlanName: '',
+        isExpired: false,
+        isActive: true
+      });
       const newNotif = {
         id: `membership_active_${Date.now()}`,
         type: 'membership_activated',
@@ -201,7 +202,8 @@ export const SocketProvider = ({ children }) => {
     };
 
     const handleMembershipRenewalRequest = (data) => {
-      if (user?.role !== 'SuperAdmin') return;
+      const { user: currentUser } = authRef.current;
+      if (currentUser?.role !== 'SuperAdmin') return;
       playOrderChime();
       vibrateAlert();
       const newNotif = {
@@ -220,18 +222,51 @@ export const SocketProvider = ({ children }) => {
     };
 
     const handleAdminStatusChanged = (data) => {
-      if (user?.role !== 'Admin' || String(user._id) !== String(data.adminId)) return;
-      if (updateUser) {
-        updateUser({
-          isActive: data.isActive,
-          membershipOfferSent: Boolean(data.membershipOfferSent),
-          membershipOfferPlanName: data.membershipOfferPlanName || '',
-          renewalRequested: Boolean(data.renewalRequested),
-          requestedPlanName: data.requestedPlanName || ''
-        });
+      const { user: currentUser, updateUser: patchUser } = authRef.current;
+      if (currentUser?.role !== 'Admin' || String(currentUser._id) !== String(data.adminId)) return;
+      patchUser?.({
+        isActive: data.isActive,
+        membershipOfferSent: Boolean(data.membershipOfferSent),
+        membershipOfferPlanName: data.membershipOfferPlanName || '',
+        renewalRequested: Boolean(data.renewalRequested),
+        requestedPlanName: data.requestedPlanName || '',
+        planStatus: data.isActive ? currentUser.planStatus : 'Expired'
+      });
+
+      if (!data.isActive) {
+        playOrderChime();
+        vibrateAlert();
+        const newNotif = {
+          id: `admin_deactivated_${Date.now()}`,
+          type: 'membership_offer_sent',
+          title: '⚠️ ACCOUNT BAND',
+          message: data.message || 'Aapka account band kar diya gaya hai. Membership renew karein.',
+          timestamp: new Date(),
+          actionPath: '/subscription-expired'
+        };
+        setNotifications((prev) => [newNotif, ...prev]);
+        setTimeout(() => {
+          setNotifications((prev) => prev.filter((n) => n.id !== newNotif.id));
+        }, 15000);
+
+        if (
+          window.location.pathname.startsWith('/admin') &&
+          !window.location.pathname.includes('subscription-expired') &&
+          !window.location.pathname.includes('/admin/membership')
+        ) {
+          window.location.href = '/subscription-expired';
+        }
       }
     };
 
+    const onConnect = () => setIsConnected(true);
+    const onDisconnect = () => setIsConnected(false);
+
+    newSocket.on('connect', onConnect);
+    newSocket.on('disconnect', onDisconnect);
+    newSocket.on('connect_error', (err) => {
+      console.log('Socket reconnecting...', err.message);
+    });
     newSocket.on('new_order', handleNewOrder);
     newSocket.on('payment_pending', handlePaymentPending);
     newSocket.on('payment_success', handlePaymentSuccess);
@@ -241,6 +276,8 @@ export const SocketProvider = ({ children }) => {
     newSocket.on('admin_status_changed', handleAdminStatusChanged);
 
     return () => {
+      newSocket.off('connect', onConnect);
+      newSocket.off('disconnect', onDisconnect);
       newSocket.off('new_order', handleNewOrder);
       newSocket.off('payment_pending', handlePaymentPending);
       newSocket.off('payment_success', handlePaymentSuccess);
@@ -250,15 +287,38 @@ export const SocketProvider = ({ children }) => {
       newSocket.off('admin_status_changed', handleAdminStatusChanged);
       newSocket.disconnect();
       setSocket(null);
+      setIsConnected(false);
     };
-  }, [user, token, updateUser]);
+  }, []);
+
+  // Join tenant rooms whenever auth is ready — also re-join after reconnect
+  useEffect(() => {
+    if (!socket || !authReady) return;
+
+    const joinRooms = () => {
+      if (tenantId) {
+        socket.emit('join_room', `admin_${tenantId}`);
+        socket.emit('join_room', `kitchen_${tenantId}`);
+      }
+      if (user?.role === 'SuperAdmin') {
+        socket.emit('join_room', 'super_admin');
+      }
+    };
+
+    joinRooms();
+    socket.on('connect', joinRooms);
+
+    return () => {
+      socket.off('connect', joinRooms);
+    };
+  }, [socket, authReady, tenantId, user?.role]);
 
   const removeNotification = (id) => {
-    setNotifications(prev => prev.filter(n => n.id !== id));
+    setNotifications((prev) => prev.filter((n) => n.id !== id));
   };
 
   return (
-    <SocketContext.Provider value={{ socket, notifications, removeNotification, playOrderChime }}>
+    <SocketContext.Provider value={{ socket, isConnected, notifications, removeNotification, playOrderChime }}>
       {children}
     </SocketContext.Provider>
   );
