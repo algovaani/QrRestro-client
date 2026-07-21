@@ -146,7 +146,7 @@ export default function OrdersPage() {
           setSelectedOrder(order);
         }
 
-        if (order?.customerMobile && window.confirm('Payment approved! Customer ko PDF bill WhatsApp par bhejein?')) {
+        if (order?.customerMobile && window.confirm('Payment approved! Send PDF bill to customer on WhatsApp?')) {
           try {
             const result = await sendOrderBillOnWhatsApp(order, {
               restaurantName: user?.restaurantName || res.data.bill?.restaurantName || 'Royal Spice Restaurant',
@@ -156,7 +156,7 @@ export default function OrdersPage() {
               alert(result.hint);
             }
           } catch {
-            alert('PDF bill generate nahi ho payi. Orders page se dubara try karein.');
+            alert('Could not generate PDF bill. Try again from the Orders page.');
           }
         }
       }
@@ -260,7 +260,7 @@ export default function OrdersPage() {
 
   const sendWhatsAppBill = async (order) => {
     if (!order?.customerMobile) {
-      alert('Customer mobile number nahi hai — bill WhatsApp par nahi bhej sakte.');
+      alert('Customer mobile number is missing — cannot send bill on WhatsApp.');
       return;
     }
 
@@ -274,7 +274,7 @@ export default function OrdersPage() {
         alert(result.hint);
       }
     } catch {
-      alert('Bill PDF generate/share nahi ho payi. Dubara try karein.');
+      alert('Could not generate or share bill PDF. Please try again.');
     } finally {
       setBillSendingId(null);
     }

@@ -1,4 +1,4 @@
-/** Admin hamesha membership page khol sakta hai — renew / request ke liye */
+/** Admin can always open the membership page — for renew / request */
 export function canShowMembershipOption(user) {
   return user?.role === 'Admin';
 }
@@ -7,7 +7,7 @@ export function canAccessMembershipPage(user) {
   return user?.role === 'Admin';
 }
 
-/** Sirf tab jab account band ho aur koi offer/request na ho — rare legacy state */
+/** Only when account is deactivated and no offer/request exists — rare legacy state */
 export function isAdminAccountLocked(user) {
   if (!user || user.role !== 'Admin') return false;
   return user.isActive === false && !user.membershipOfferSent && !user.renewalRequested;

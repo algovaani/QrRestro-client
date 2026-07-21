@@ -235,7 +235,7 @@ export default function AdminDashboard() {
                 </strong>
                 <p>
                   Valid till <strong>{formatExpiryDate(membership.expiryDate)}</strong>
-                  {membership.daysRemaining <= 3 && ' • Jaldi renew karein!'}
+                  {membership.daysRemaining <= 3 && ' • Renew soon!'}
                 </p>
               </div>
               <Link to="/admin/membership" className="btn btn-primary btn-sm">
@@ -250,12 +250,12 @@ export default function AdminDashboard() {
                 <strong>
                   {user?.renewalRequested
                     ? `Membership request pending — ${user?.requestedPlanName || 'Renewal'}`
-                    : `Super Admin ne membership offer bheja — ${user?.membershipOfferPlanName || 'Renew karein'}`}
+                    : `Super Admin sent a membership offer — ${user?.membershipOfferPlanName || 'Renew now'}`}
                 </strong>
                 <p>
                   {user?.renewalRequested
-                    ? 'Super Admin payment verify karke activate karenge.'
-                    : 'Neeche membership page se plan select karke payment karein.'}
+                    ? 'Super Admin will verify payment and activate your plan.'
+                    : 'Select a plan on the membership page and complete payment.'}
                 </p>
               </div>
               <Link to="/admin/membership" className="btn btn-primary btn-sm">

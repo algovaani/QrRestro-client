@@ -64,6 +64,6 @@ export function formatExpiryDate(date) {
 
 export function getMembershipDaysLabel(days) {
   if (days <= 0) return 'Expired';
-  if (days === 1) return '1 din bacha';
-  return `${days} din bache`;
+  if (days === 1) return '1 day left';
+  return `${days} days left`;
 }

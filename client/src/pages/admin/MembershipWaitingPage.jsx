@@ -2,23 +2,23 @@ import React from 'react';
 import { Clock, Mail, CreditCard } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
-/** Jab Super Admin ne abhi membership offer nahi bheja (deactivated account) */
+/** When Super Admin has not sent a membership offer yet (deactivated account) */
 export default function MembershipWaitingPage({ standalone = false }) {
   const content = (
     <div className="membership-waiting">
       <div className="membership-waiting-icon">
         <Clock size={40} color="#64748b" />
       </div>
-      <h2>Super Admin Offer Ka Wait</h2>
+      <h2>Waiting for Super Admin Offer</h2>
       <p>
-        Aapka account abhi band hai.
+        Your account is currently deactivated.
         <br />
-        <strong>Super Admin</strong> jab membership offer bhejenge tab aap
-        <strong> Buy / Renew Membership</strong> kar sakte hain.
+        When <strong>Super Admin</strong> sends a membership offer, you can
+        <strong> buy or renew membership</strong>.
       </p>
       <div className="membership-waiting-tip">
         <Mail size={16} />
-        Super Admin se contact karein ya unke offer ka wait karein.
+        Contact Super Admin or wait for their offer.
       </div>
       {standalone && (
         <Link

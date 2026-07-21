@@ -40,7 +40,7 @@ export default function UpiQrDisplay({
     return (
       <div className={`upi-qr-placeholder ${className}`} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '1rem' }}>
         <QrCode size={40} style={{ margin: '0 auto 0.5rem', opacity: 0.5 }} />
-        <p style={{ fontSize: '0.8rem' }}>Pehle UPI ID enter karein</p>
+        <p style={{ fontSize: '0.8rem' }}>Enter UPI ID first</p>
       </div>
     );
   }

@@ -111,7 +111,7 @@ export default function MyOrdersModal({ tableNumber, adminId, customerMobile, on
         setStatusToast(result.hint);
       }
     } catch {
-      setStatusToast('Bill PDF share nahi ho payi.');
+      setStatusToast('Could not share bill PDF.');
     } finally {
       setBillSendingId(null);
     }

@@ -79,7 +79,7 @@ const emitMembershipRenewalRejected = (admin, reason) => {
     requestedPlanName: '',
     renewalRejectionReason: reason || '',
     renewalRejectedAt: admin.renewalRejectedAt,
-    message: reason || 'Aapki membership request reject ho gayi. Sahi payment screenshot ke saath dubara try karein.'
+    message: reason || 'Your membership request was rejected. Please try again with a valid payment screenshot.'
   };
   ioInstance.to(getAdminRoom(String(admin._id))).emit('membership_renewal_rejected', payload);
 };
@@ -100,7 +100,7 @@ const emitMembershipActivated = (admin) => {
     membershipOfferPlanName: '',
     isExpired: false,
     isActive: admin.isActive,
-    message: `Membership activated! ${admin.planName} — ${daysLeft} din bache (${formatExpiryDate(expiry)} tak)`
+    message: `Membership activated! ${admin.planName} — ${daysLeft} days remaining (until ${formatExpiryDate(expiry)})`
   };
   ioInstance.to(getAdminRoom(String(admin._id))).emit('membership_activated', payload);
 };
@@ -113,8 +113,8 @@ const emitMembershipOfferSent = (admin) => {
     membershipOfferPlanName: admin.membershipOfferPlanName || '',
     membershipOfferSentAt: admin.membershipOfferSentAt,
     message: admin.membershipOfferPlanName
-      ? `Super Admin ne "${admin.membershipOfferPlanName}" membership offer bheja hai. Ab renew kar sakte hain.`
-      : 'Super Admin ne membership renew karne ka offer bheja hai.'
+      ? `Super Admin sent a "${admin.membershipOfferPlanName}" membership offer. You can renew now.`
+      : 'Super Admin sent a membership renewal offer.'
   };
   ioInstance.to(getAdminRoom(String(admin._id))).emit('membership_offer_sent', payload);
 };
@@ -129,8 +129,8 @@ const emitAdminStatusChanged = (admin) => {
     renewalRequested: Boolean(admin.renewalRequested),
     requestedPlanName: admin.requestedPlanName || '',
     message: admin.isActive
-      ? 'Super Admin ne aapka account activate kar diya hai.'
-      : `Aapka account band kar diya gaya hai. Membership renew karein${admin.membershipOfferPlanName ? ` — ${admin.membershipOfferPlanName} plan available hai` : ''}.`
+      ? 'Super Admin has activated your account.'
+      : `Your account has been deactivated. Renew your membership${admin.membershipOfferPlanName ? ` — ${admin.membershipOfferPlanName} plan is available` : ''}.`
   };
   ioInstance.to(getAdminRoom(String(admin._id))).emit('admin_status_changed', payload);
 };

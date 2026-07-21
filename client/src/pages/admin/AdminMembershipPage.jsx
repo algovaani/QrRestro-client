@@ -112,7 +112,7 @@ export default function AdminMembershipPage({ standalone = false }) {
       setPaymentProofUrl('');
       setRejectionReason('');
       setSubscription((prev) => ({ ...prev, ...data, isExpired: false }));
-      setMsg('🎉 Membership activate ho gayi! Dashboard khul raha hai...');
+      setMsg('🎉 Membership activated! Opening dashboard...');
       setTimeout(() => navigate('/admin/dashboard'), 1500);
     };
 
@@ -124,7 +124,7 @@ export default function AdminMembershipPage({ standalone = false }) {
       setPaymentProofFile(null);
       setPaymentProofPreview('');
       setPaymentProofUrl('');
-      const reason = data?.renewalRejectionReason || data?.message || 'Request reject ho gayi.';
+      const reason = data?.renewalRejectionReason || data?.message || 'Request was rejected.';
       setRejectionReason(reason);
       updateUser({
         renewalRequested: false,
@@ -170,11 +170,11 @@ export default function AdminMembershipPage({ standalone = false }) {
     const file = e.target.files?.[0];
     if (!file) return;
     if (!file.type.startsWith('image/')) {
-      setMsg('Sirf image file upload karein (JPG, PNG, etc.)');
+      setMsg('Please upload an image file only (JPG, PNG, etc.)');
       return;
     }
     if (file.size > 5 * 1024 * 1024) {
-      setMsg('Image 5MB se chhoti honi chahiye.');
+      setMsg('Image must be smaller than 5MB.');
       return;
     }
     setPaymentProofFile(file);
@@ -193,7 +193,7 @@ export default function AdminMembershipPage({ standalone = false }) {
       return;
     }
     if (!paymentProofFile) {
-      setMsg('Payment ka screenshot upload karein — bina proof ke request submit nahi hogi.');
+      setMsg('Upload a payment screenshot — request cannot be submitted without proof.');
       return;
     }
     setSubmitting(true);
@@ -222,7 +222,7 @@ export default function AdminMembershipPage({ standalone = false }) {
           renewalRejectionReason: '',
           renewalRejectedAt: null
         });
-        setMsg(`Request bhej di gayi — "${selectedPlan.name}" ke liye Super Admin review karenge.`);
+        setMsg(`Request sent — Super Admin will review "${selectedPlan.name}".`);
       }
     } catch (err) {
       setMsg(err.response?.data?.message || 'Error submitting renewal request.');
@@ -252,11 +252,11 @@ export default function AdminMembershipPage({ standalone = false }) {
           setMsg('Membership active! Redirecting to dashboard...');
           setTimeout(() => navigate('/admin/dashboard'), 1200);
         } else {
-          setMsg('Abhi bhi pending hai — Super Admin payment verify karke activate karenge.');
+          setMsg('Still pending — Super Admin will verify payment and activate your plan.');
         }
       }
     } catch {
-      setMsg('Status check nahi ho paya. Thodi der baad try karein.');
+      setMsg('Could not check status. Please try again in a moment.');
     } finally {
       setChecking(false);
     }
@@ -286,9 +286,9 @@ export default function AdminMembershipPage({ standalone = false }) {
             {requested
               ? 'Membership Request Pending'
               : !user?.isActive
-                ? 'Account Band — Membership Renew Karein'
+                ? 'Account Deactivated — Renew Membership'
               : isExpired
-                ? 'Plan Expired — Renew Karein'
+                ? 'Plan Expired — Renew Now'
                 : 'My Membership'}
           </h2>
           <p>
@@ -313,7 +313,7 @@ export default function AdminMembershipPage({ standalone = false }) {
         <div className="membership-rejection-banner">
           <XCircle size={18} />
           <div>
-            <strong>Pehli request reject ho gayi</strong>
+            <strong>Previous request was rejected</strong>
             <p>{rejectionReason}</p>
           </div>
         </div>
@@ -322,7 +322,7 @@ export default function AdminMembershipPage({ standalone = false }) {
       {!requested && user?.membershipOfferSent && user?.membershipOfferPlanName && (
         <div className="membership-offer-banner">
           <Sparkles size={18} />
-          Super Admin ne <strong>{user.membershipOfferPlanName}</strong> plan ka offer bheja hai — neeche se select karke pay karein.
+          Super Admin sent an offer for the <strong>{user.membershipOfferPlanName}</strong> plan — select it below and pay.
         </div>
       )}
 
@@ -331,8 +331,8 @@ export default function AdminMembershipPage({ standalone = false }) {
           <div className="membership-pending-header">
             <BadgeCheck size={22} color="var(--info)" />
             <div>
-              <h3>Aapki Membership Request Submit Ho Chuki Hai</h3>
-              <p>Super Admin payment verify karke plan activate karenge</p>
+              <h3>Your Membership Request Has Been Submitted</h3>
+              <p>Super Admin will verify payment and activate your plan</p>
             </div>
           </div>
 
@@ -365,7 +365,7 @@ export default function AdminMembershipPage({ standalone = false }) {
 
             {paymentProofUrl && (
               <div className="membership-proof-sent">
-                <ImageIcon size={14} /> Payment screenshot submit ho chuka hai — Super Admin verify kar rahe hain
+                <ImageIcon size={14} /> Payment screenshot submitted — Super Admin is verifying
               </div>
             )}
           </div>
@@ -412,7 +412,7 @@ export default function AdminMembershipPage({ standalone = false }) {
           <div className="membership-active-badge"><Crown size={16} /> Active Plan</div>
           <h3>{displayPlanName}</h3>
           {expiryDate && (
-            <p>{formatExpiryDate(expiryDate)} tak valid • {getMembershipDaysLabel(daysLeft)}</p>
+            <p>{formatExpiryDate(expiryDate)} • {getMembershipDaysLabel(daysLeft)}</p>
           )}
           <Link to="/admin/dashboard" className="btn btn-secondary btn-sm" style={{ marginTop: '0.75rem', display: 'inline-flex' }}>
             <ArrowRight size={14} /> Go to Dashboard
@@ -424,13 +424,13 @@ export default function AdminMembershipPage({ standalone = false }) {
       {(!requested || showPlans) && (
         <>
           <div className="membership-steps-card">
-            <h3><Sparkles size={18} /> Membership Kaise Lein?</h3>
+            <h3><Sparkles size={18} /> How to Get Membership</h3>
             <div className="membership-steps-list">
               {[
-                { n: 1, t: 'Plan Choose Karein', d: 'Neeche se apna plan select karein' },
-                { n: 2, t: 'QR Scan karke Pay Karein', d: 'PhonePe / GPay / Paytm se payment karein' },
-                { n: 3, t: 'Screenshot Upload karein', d: 'Payment ka screenshot upload karke request bhejein' },
-                { n: 4, t: 'Activate Check Karein', d: 'Super Admin approve ke baad dashboard khulega' }
+                { n: 1, t: 'Choose a Plan', d: 'Select your plan below' },
+                { n: 2, t: 'Scan QR & Pay', d: 'Pay with PhonePe / GPay / Paytm' },
+                { n: 3, t: 'Upload Screenshot', d: 'Upload payment screenshot and submit request' },
+                { n: 4, t: 'Check Activation', d: 'Dashboard opens after Super Admin approval' }
               ].map((s) => (
                 <div key={s.n} className="membership-step-row">
                   <span className="membership-step-num">{s.n}</span>
@@ -443,12 +443,12 @@ export default function AdminMembershipPage({ standalone = false }) {
             </div>
           </div>
 
-          <h3 className="membership-section-title">Plan Select karein & QR se Pay karein</h3>
+          <h3 className="membership-section-title">Select Plan & Pay via QR</h3>
 
           {loading ? (
             <div className="membership-loading">Loading plans...</div>
           ) : plans.length === 0 ? (
-            <div className="membership-empty">Abhi koi plan available nahi. Super Admin se contact karein.</div>
+            <div className="membership-empty">No plans available right now. Contact Super Admin.</div>
           ) : (
             <div className="membership-plans-grid">
               {plans.map((plan) => {
@@ -509,9 +509,9 @@ export default function AdminMembershipPage({ standalone = false }) {
 
           {!requested && (
             <div className="membership-submit-card">
-              <h3>Payment ke baad Screenshot upload karein & Request Submit karein</h3>
+              <h3>Upload Screenshot After Payment & Submit Request</h3>
               <p className="membership-submit-hint">
-                UPI payment ka screenshot yahan upload karein — Super Admin isse verify karke plan activate karenge.
+                Upload your UPI payment screenshot here — Super Admin will verify it and activate your plan.
               </p>
 
               <div className="membership-proof-upload">
@@ -531,7 +531,7 @@ export default function AdminMembershipPage({ standalone = false }) {
                       hidden
                     />
                     <Upload size={28} />
-                    <span>Payment Screenshot Upload karein</span>
+                    <span>Upload Payment Screenshot</span>
                     <small>JPG, PNG — max 5MB</small>
                   </label>
                 )}
@@ -547,7 +547,7 @@ export default function AdminMembershipPage({ standalone = false }) {
                   ? 'Submitting...'
                   : selectedPlan
                     ? `Submit Request — ${selectedPlan.name} (₹${selectedPlan.price})`
-                    : 'Pehle plan select karein'}
+                    : 'Select a plan first'}
               </button>
             </div>
           )}

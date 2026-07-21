@@ -108,7 +108,7 @@ exports.createAdmin = async (req, res, next) => {
 
     res.status(201).json({
       success: true,
-      message: `Admin created with ${selectedPlan} — ${daysRemaining} din valid (${formatExpiryDate(expiryDate)} tak)`,
+      message: `Admin created with ${selectedPlan} — valid for ${daysRemaining} days (until ${formatExpiryDate(expiryDate)})`,
       admin: {
         id: newAdmin._id,
         name: newAdmin.name,
@@ -371,7 +371,7 @@ exports.requestRenewal = async (req, res, next) => {
     if (!req.file) {
       return res.status(400).json({
         success: false,
-        message: 'Payment screenshot upload karein — UPI payment ka proof zaroori hai.'
+        message: 'Upload a payment screenshot — UPI payment proof is required.'
       });
     }
 
@@ -423,10 +423,10 @@ exports.rejectRenewal = async (req, res, next) => {
     }
 
     if (!admin.renewalRequested) {
-      return res.status(400).json({ success: false, message: 'Is admin ki koi pending renewal request nahi hai.' });
+      return res.status(400).json({ success: false, message: 'This admin has no pending renewal request.' });
     }
 
-    const rejectionReason = reason ? String(reason).trim() : 'Payment verify nahi hua. Sahi screenshot ke saath dubara try karein.';
+    const rejectionReason = reason ? String(reason).trim() : 'Payment could not be verified. Please try again with a valid screenshot.';
 
     admin.renewalRequested = false;
     admin.renewalRequestDate = null;
@@ -441,7 +441,7 @@ exports.rejectRenewal = async (req, res, next) => {
 
     res.json({
       success: true,
-      message: `Renewal request reject ho gayi — ${admin.restaurantName} ko notify kar diya gaya.`,
+      message: `Renewal request rejected — ${admin.restaurantName} has been notified.`,
       admin
     });
   } catch (error) {

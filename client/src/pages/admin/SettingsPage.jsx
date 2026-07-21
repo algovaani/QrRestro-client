@@ -80,7 +80,7 @@ export default function SettingsPage() {
             soundNotification: s.soundNotification !== false
           });
         }
-        setMessage('Settings saved! UPI ID se QR automatically generate hoga.');
+        setMessage('Settings saved! QR code will be generated automatically from your UPI ID.');
         setTimeout(() => setMessage(''), 4000);
       }
     } catch (err) {
@@ -114,7 +114,7 @@ export default function SettingsPage() {
               <Building size={20} color="var(--primary)" /> Restaurant & Payment Settings
             </h3>
             <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '1.5rem' }}>
-              Sirf UPI ID enter karein — customer payment ke liye QR automatically ban jayega.
+              Enter your UPI ID only — a payment QR code will be generated automatically for customers.
             </p>
 
             {message && (
@@ -154,10 +154,10 @@ export default function SettingsPage() {
               <div style={{ padding: '1.25rem', background: '#f8fafc', borderRadius: '14px', border: '1px solid var(--border)', textAlign: 'center' }}>
                 <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', fontSize: '0.9rem', fontWeight: '700', marginBottom: '0.75rem', color: 'var(--secondary)' }}>
                   <QrCode size={18} color="var(--primary)" />
-                  Auto UPI QR Code (UPI ID se generate)
+                  Auto UPI QR Code (generated from UPI ID)
                 </label>
                 <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>
-                  Customer order pay karte waqt isi UPI ID se amount ke saath dynamic QR banega.
+                  When customers pay for orders, a dynamic QR will be generated with this UPI ID and the order amount.
                 </p>
                 <UpiQrDisplay
                   upiId={formData.upiId}

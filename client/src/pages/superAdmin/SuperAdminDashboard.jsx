@@ -145,7 +145,7 @@ export default function SuperAdminDashboard() {
       setActiveTab('renewals');
       const name = data?.restaurantName || data?.adminName || 'Restaurant admin';
       const plan = data?.requestedPlanName ? ` (${data.requestedPlanName})` : '';
-      showToast('success', `📋 ${name} ne membership renewal request bheji${plan} — payment screenshot attached!`);
+      showToast('success', `📋 ${name} submitted a membership renewal request${plan} — payment screenshot attached!`);
     };
 
     socket.on('membership_renewal_request', onRenewalRequest);
@@ -245,7 +245,7 @@ export default function SuperAdminDashboard() {
     const adminId = admin._id;
     if (admin.isActive) {
       const confirmed = window.confirm(
-        `"${admin.restaurantName || admin.name}" ko band karna hai?\n\nAdmin ke screen par membership renew ka popup dikhega aur dashboard band ho jayega.`
+        `Deactivate "${admin.restaurantName || admin.name}"?\n\nThe admin will see a membership renewal popup and lose dashboard access.`
       );
       if (!confirmed) return;
     }
@@ -258,8 +258,8 @@ export default function SuperAdminDashboard() {
         showToast(
           'success',
           !admin.isActive
-            ? 'Admin account activate ho gaya.'
-            : 'Admin band ho gaya. Unhe membership renew ka popup dikhega.'
+            ? 'Admin account activated.'
+            : 'Admin deactivated. They will see the membership renewal popup.'
         );
       }
     } catch (err) {
@@ -299,7 +299,7 @@ export default function SuperAdminDashboard() {
         setRejectingAdmin(null);
         setRejectReason('');
         setRenewingAdmin(null);
-        showToast('success', res.data.message || 'Renewal request reject ho gayi.');
+        showToast('success', res.data.message || 'Renewal request rejected.');
         fetchSuperAdminData();
       }
     } catch (err) {
@@ -681,7 +681,7 @@ export default function SuperAdminDashboard() {
               }}
             >
               <BellRing size={20} />
-              {stats.renewalRequestsCount} admin ne membership renewal request bheji hai — click karke dekhein
+              {stats.renewalRequestsCount} admin(s) submitted membership renewal requests — click to review
             </div>
           )}
 
@@ -804,7 +804,7 @@ export default function SuperAdminDashboard() {
                   ) : filteredAdmins.length === 0 ? (
                     <tr>
                       <td colSpan="7" style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>
-                        Koi admin account nahi mila. <button type="button" className="btn btn-primary btn-sm" style={{ marginLeft: '0.5rem' }} onClick={() => setShowAddModal(true)}>+ Create Admin</button>
+                        No admin accounts found. <button type="button" className="btn btn-primary btn-sm" style={{ marginLeft: '0.5rem' }} onClick={() => setShowAddModal(true)}>+ Create Admin</button>
                       </td>
                     </tr>
                   ) : filteredAdmins.map(admin => {
@@ -888,7 +888,7 @@ export default function SuperAdminDashboard() {
 
                         <td style={{ padding: '1rem', fontSize: '0.8rem' }}>
                           <div style={{ fontWeight: '800', color: admin.daysRemaining <= 3 ? 'var(--danger)' : 'var(--secondary)' }}>
-                            {admin.daysRemaining > 0 ? `${admin.daysRemaining} din bache` : 'Expired'}
+                            {admin.daysRemaining > 0 ? `${admin.daysRemaining} days left` : 'Expired'}
                           </div>
                           <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
                             Ends: {admin.subscriptionEndsAt
@@ -904,7 +904,7 @@ export default function SuperAdminDashboard() {
                             disabled={actionLoading}
                             className={`btn btn-sm ${admin.isActive ? 'btn-secondary' : 'btn-primary'}`}
                             style={{ padding: '0.3rem 0.65rem', fontSize: '0.75rem' }}
-                            title={admin.isActive ? 'Admin ko band karein — membership popup dikhega' : 'Admin ko wapas activate karein'}
+                            title={admin.isActive ? 'Deactivate admin — membership popup will appear' : 'Reactivate admin account'}
                           >
                             {admin.isActive ? <UserX size={14} color="var(--danger)" /> : <UserCheck size={14} />}
                             <span>{admin.isActive ? 'Band Karo' : 'Activate'}</span>
@@ -991,7 +991,7 @@ export default function SuperAdminDashboard() {
                 Pending Membership Requests
               </h3>
               <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '1.25rem' }}>
-                Admin ne payment karke request bheji hai — verify karke membership activate karein
+                Admin submitted payment — verify and activate membership
               </p>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
@@ -1077,7 +1077,7 @@ export default function SuperAdminDashboard() {
                 {admins.filter(a => a.renewalRequested).length === 0 && (
                   <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
                     <CreditCard size={40} style={{ margin: '0 auto 0.75rem', opacity: 0.4 }} />
-                    Koi pending membership request nahi hai.
+                    No pending membership requests.
                   </div>
                 )}
               </div>
@@ -1102,7 +1102,7 @@ export default function SuperAdminDashboard() {
                 {plans.length === 0 && (
                   <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '3rem', color: 'var(--text-muted)', background: 'var(--bg-surface)', borderRadius: 'var(--radius)', border: '1px dashed var(--border)' }}>
                     <Layers size={40} style={{ margin: '0 auto 0.75rem', opacity: 0.4 }} />
-                    Koi membership plan nahi hai.
+                    No membership plans yet.
                     <button type="button" onClick={handleOpenAddPlan} className="btn btn-primary btn-sm" style={{ marginTop: '1rem' }}>
                       <Plus size={14} /> Add First Plan
                     </button>
@@ -1440,7 +1440,7 @@ export default function SuperAdminDashboard() {
             </h3>
             <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>
               {renewingAdmin?.renewalRequested && renewingAdmin?.requestedPlanName ? (
-                <>Admin ne <strong>{renewingAdmin.requestedPlanName}</strong> plan ke liye request bheji hai.</>
+                <>Admin requested the <strong>{renewingAdmin.requestedPlanName}</strong> plan.</>
               ) : (
                 <>Extend membership & turn dashboard back ON for {renewingAdmin.name} ({renewingAdmin.email}).</>
               )}
@@ -1540,8 +1540,8 @@ export default function SuperAdminDashboard() {
               Reject Renewal Request
             </h3>
             <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>
-              <strong>{rejectingAdmin.restaurantName}</strong> ki membership request reject karein?
-              Admin ko reason dikhega aur woh dubara screenshot upload kar sakta hai.
+              Reject membership request for <strong>{rejectingAdmin.restaurantName}</strong>?
+              The admin will see the reason and can upload a new screenshot.
             </p>
 
             <div style={{ marginBottom: '1.25rem' }}>
@@ -1551,7 +1551,7 @@ export default function SuperAdminDashboard() {
               <textarea
                 value={rejectReason}
                 onChange={(e) => setRejectReason(e.target.value)}
-                placeholder="e.g. Payment amount galat hai, screenshot clear nahi hai..."
+                placeholder="e.g. Incorrect payment amount, screenshot not clear..."
                 rows={3}
                 style={{ width: '100%', resize: 'vertical' }}
               />
@@ -1672,7 +1672,7 @@ export default function SuperAdminDashboard() {
                   style={{ width: '100%' }}
                 />
                 <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.35rem' }}>
-                  QR code automatically UPI ID aur plan price se generate hoga.
+                  QR code will be generated automatically from the UPI ID and plan price.
                 </p>
               </div>
 

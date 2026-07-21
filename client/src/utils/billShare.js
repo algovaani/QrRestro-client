@@ -91,8 +91,8 @@ export async function sendOrderBillOnWhatsApp(order, options = {}) {
     success: true,
     method: 'download',
     hint: phone
-      ? `PDF "${filename}" download ho gayi. WhatsApp chat khul gayi — 📎 se PDF attach karke bhejein.`
-      : `PDF "${filename}" download ho gayi. WhatsApp me attach karke bhejein.`
+      ? `PDF "${filename}" downloaded. WhatsApp chat opened — attach the PDF with 📎 and send.`
+      : `PDF "${filename}" downloaded. Attach it in WhatsApp and send.`
   };
 }
 

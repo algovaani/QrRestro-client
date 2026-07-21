@@ -29,7 +29,7 @@ export default function NotificationPanel({
       </div>
 
       {notifications.length === 0 ? (
-        <div className="admin-notifications-panel-empty">Koi notification nahi hai</div>
+        <div className="admin-notifications-panel-empty">No notifications</div>
       ) : (
         <div className="admin-notifications-panel-list">
           {notifications.map((n) => (

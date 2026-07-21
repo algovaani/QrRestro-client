@@ -287,7 +287,7 @@ export default function CartPage() {
                   <div>
                     <div style={{ fontWeight: '800', fontSize: '0.9rem', color: 'var(--secondary)' }}>UPI QR Scan & Pay Online</div>
                     <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.15rem' }}>
-                      Order ke baad QR scan karke PhonePe / GPay se pay karein
+                      After ordering, scan the QR with PhonePe / GPay to pay
                     </div>
                   </div>
                 </button>
@@ -310,7 +310,7 @@ export default function CartPage() {
                   <div>
                     <div style={{ fontWeight: '800', fontSize: '0.9rem', color: 'var(--secondary)' }}>Pay Cash at Counter</div>
                     <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.15rem' }}>
-                      Table par cash payment — QR ki zaroorat nahi
+                      Pay cash at the table — no QR needed
                     </div>
                   </div>
                 </button>

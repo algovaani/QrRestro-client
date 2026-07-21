@@ -22,7 +22,7 @@ export function getWhatsAppLink(phone) {
   return 'https://web.whatsapp.com/';
 }
 
-/** Mobile par WhatsApp app kholo */
+/** Open WhatsApp app on mobile */
 export function openWhatsAppMobile(phone, text) {
   const clean = phone ? String(phone).replace(/\D/g, '').slice(-10) : '';
   const waBase = clean ? `https://wa.me/91${clean}` : 'https://wa.me/';
@@ -96,7 +96,7 @@ function imageSrcToPngFile(src, filename = 'qr-code.png') {
       canvas.toBlob(
         (blob) => {
           if (!blob) {
-            reject(new Error('QR PNG ban nahi paya'));
+            reject(new Error('Could not create QR PNG'));
             return;
           }
           resolve(new File([blob], filename, { type: 'image/png' }));
@@ -181,7 +181,7 @@ async function tryNativeShare(file, text) {
   return null;
 }
 
-/** QR + payment details ek hi image mein — WhatsApp par sirf image bhejne par bhi data dikhe */
+/** Embed QR + payment details in one image so data shows even when only the image is sent */
 async function buildQrImageWithDetails(qrDataUrl, message, filename = 'qr-code.png') {
   return new Promise((resolve, reject) => {
     const img = new Image();
@@ -228,7 +228,7 @@ async function buildQrImageWithDetails(qrDataUrl, message, filename = 'qr-code.p
       canvas.toBlob(
         (blob) => {
           if (!blob) {
-            reject(new Error('QR PNG ban nahi paya'));
+            reject(new Error('Could not create QR PNG'));
             return;
           }
           resolve(new File([blob], filename, { type: 'image/png' }));
@@ -242,7 +242,7 @@ async function buildQrImageWithDetails(qrDataUrl, message, filename = 'qr-code.p
   });
 }
 
-/** UPI QR share ke liye payment message */
+/** Payment message for UPI QR share */
 export function buildPaymentQrShareMessage(data = {}) {
   const lines = [
     `🧾 ${data.restaurantName || 'Restaurant'}`,
@@ -251,7 +251,7 @@ export function buildPaymentQrShareMessage(data = {}) {
     `Payment Amount: ₹${data.grandTotal ?? '—'}`,
     data.upiId ? `UPI ID: ${data.upiId}` : '',
     '',
-    'QR scan karke UPI payment karein 📱'
+    'Scan the QR code to pay via UPI 📱'
   ];
   return lines.filter((l) => l !== '').join('\n');
 }
@@ -262,7 +262,7 @@ export function buildPaymentQrShareMessage(data = {}) {
  */
 export async function prepareQrForWhatsApp({ qrDataUrl, filename = 'qr-code.png', phone, message }) {
   if (!qrDataUrl) {
-    return { method: 'error', error: 'QR available nahi hai' };
+    return { method: 'error', error: 'QR code is not available' };
   }
 
   let file;
@@ -271,10 +271,10 @@ export async function prepareQrForWhatsApp({ qrDataUrl, filename = 'qr-code.png'
       ? await buildQrImageWithDetails(qrDataUrl, message, filename)
       : await urlToFile(qrDataUrl, filename);
   } catch {
-    return { method: 'error', error: 'QR image load nahi ho payi' };
+    return { method: 'error', error: 'Could not load QR image' };
   }
 
-  // MOBILE — native share (image mein details + optional text caption)
+  // MOBILE — native share (details in image + optional text caption)
   if (isMobileDevice()) {
     const shared = await tryNativeShare(file, message);
     if (shared === 'share-file') return { method: 'share-file', message };
@@ -309,13 +309,13 @@ export function getShareQrHint(result) {
 
   switch (result?.method) {
     case 'share-file':
-      return 'WhatsApp choose karein — QR image ke saath payment details bhi jayengi. Send dabayein.';
+      return 'Choose WhatsApp — payment details will go with the QR image. Tap Send.';
     case 'download':
       return isMobileDevice()
-        ? 'WhatsApp khul raha hai — payment message ready hai. QR image attach karke send karein.'
-        : 'QR download ho gayi aur payment details copy ho gayi! WhatsApp me paste karein + image attach karein.';
+        ? 'WhatsApp is opening with the payment message ready. Attach the QR image and send.'
+        : 'QR downloaded and payment details copied! Paste in WhatsApp and attach the image.';
     case 'clipboard':
-      return 'QR copy ho gayi aur payment details bhi copy ho gayi! WhatsApp me pehle text paste karein, phir image attach karein.';
+      return 'QR and payment details copied! Paste the text in WhatsApp first, then attach the image.';
     case 'cancelled':
       return '';
     default:

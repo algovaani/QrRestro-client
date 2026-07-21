@@ -29,7 +29,7 @@ export default function UPIPaymentModal({ orderNumber, onClose, onSuccess }) {
         });
       }
     } catch {
-      setError('Paid order details load nahi ho payi.');
+      setError('Could not load paid order details.');
     }
   }, [orderNumber, qrData?.restaurantName]);
 
@@ -57,7 +57,7 @@ export default function UPIPaymentModal({ orderNumber, onClose, onSuccess }) {
         }
       }
     } catch (err) {
-      setError(err.response?.data?.message || 'QR generate nahi ho paya. Admin ne UPI ID set kiya hai ya nahi check karein.');
+      setError(err.response?.data?.message || 'Could not generate QR code. Ask the admin to set a UPI ID in settings.');
     } finally {
       setLoading(false);
     }
@@ -88,7 +88,7 @@ export default function UPIPaymentModal({ orderNumber, onClose, onSuccess }) {
         }
       }
     } catch (err) {
-      setError(err.response?.data?.message || 'Payment submit nahi ho paya. Dubara try karein.');
+      setError(err.response?.data?.message || 'Could not submit payment. Please try again.');
     } finally {
       setSubmitting(false);
     }
@@ -108,7 +108,7 @@ export default function UPIPaymentModal({ orderNumber, onClose, onSuccess }) {
         setBillHint(result.hint);
       }
     } catch {
-      setError('PDF bill generate/share nahi ho payi. Dubara try karein.');
+      setError('Could not generate or share PDF bill. Please try again.');
     } finally {
       setBillSending(false);
     }
@@ -141,7 +141,7 @@ export default function UPIPaymentModal({ orderNumber, onClose, onSuccess }) {
         openWhatsApp(null, shareMessage);
       }
     } catch {
-      setError('QR WhatsApp par share nahi ho payi. Dubara try karein.');
+      setError('Could not share QR on WhatsApp. Please try again.');
     } finally {
       setSharing(false);
     }
@@ -164,7 +164,7 @@ export default function UPIPaymentModal({ orderNumber, onClose, onSuccess }) {
         {loading ? (
           <div style={{ padding: '3rem 1rem' }}>
             <Loader2 size={32} className="animate-spin" style={{ margin: '0 auto 1rem auto', color: 'var(--primary)' }} />
-            <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>QR Code ban raha hai...</p>
+            <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>Generating QR code...</p>
           </div>
         ) : error && !qrData && !paid ? (
           <div style={{ padding: '1.5rem 0.5rem' }}>
@@ -209,12 +209,12 @@ export default function UPIPaymentModal({ orderNumber, onClose, onSuccess }) {
                 }}
               >
                 {billSending ? <Loader2 size={18} className="animate-spin" /> : <FileText size={18} />}
-                <span>{billSending ? 'PDF bill taiyar ho rahi hai...' : 'PDF Bill WhatsApp par Bhejein'}</span>
+                <span>{billSending ? 'Preparing PDF bill...' : 'Send PDF Bill on WhatsApp'}</span>
               </button>
             ) : (
               <div style={{ marginBottom: '0.75rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
                 <Loader2 size={16} className="animate-spin" style={{ display: 'inline', marginRight: '0.35rem' }} />
-                Bill details load ho rahi hain...
+                Loading bill details...
               </div>
             )}
 
@@ -241,7 +241,7 @@ export default function UPIPaymentModal({ orderNumber, onClose, onSuccess }) {
             </div>
             <h3 style={{ fontSize: '1.2rem', fontWeight: '800', color: 'var(--secondary)' }}>Approval Pending ⏳</h3>
             <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginTop: '0.35rem', marginBottom: '1rem', lineHeight: 1.5 }}>
-              Order #{orderNumber} ka payment submit ho gaya. Admin verify karke approve karenge.
+              Payment submitted for order #{orderNumber}. The admin will verify and approve it.
             </p>
             <button type="button" onClick={onClose} className="btn btn-secondary" style={{ width: '100%', borderRadius: '12px' }}>
               OK, Got It
@@ -279,7 +279,7 @@ export default function UPIPaymentModal({ orderNumber, onClose, onSuccess }) {
                 </div>
               )}
               <div style={{ fontSize: '0.85rem', color: 'var(--secondary)', fontWeight: '800', marginTop: '0.5rem' }}>
-                PhonePe / GPay / Paytm se QR Scan karein
+                Scan QR with PhonePe / GPay / Paytm
               </div>
             </div>
 
@@ -303,7 +303,7 @@ export default function UPIPaymentModal({ orderNumber, onClose, onSuccess }) {
               }}
             >
               <MessageSquare size={18} />
-              {sharing ? 'QR taiyar ho raha hai...' : 'WhatsApp par QR Bhejein'}
+              {sharing ? 'Preparing QR...' : 'Share QR on WhatsApp'}
             </button>
             {shareHint && (
               <div style={{ background: '#ecfdf5', color: '#047857', padding: '0.55rem 0.65rem', borderRadius: '10px', fontSize: '0.78rem', marginBottom: '0.85rem', lineHeight: 1.45, border: '1px solid #a7f3d0', textAlign: 'left' }}>
@@ -325,7 +325,7 @@ export default function UPIPaymentModal({ orderNumber, onClose, onSuccess }) {
               className="btn btn-primary pulse-button"
               style={{ width: '100%', padding: '0.85rem', fontSize: '0.9rem', borderRadius: '14px' }}
             >
-              {submitting ? 'Submitting...' : '✓ Maine Pay Kar Diya — Submit for Approval'}
+              {submitting ? 'Submitting...' : '✓ I Have Paid — Submit for Approval'}
             </button>
           </>
         ) : null}

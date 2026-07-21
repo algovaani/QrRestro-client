@@ -59,11 +59,11 @@ export default function SubscriptionExpiredPage() {
           <div className="membership-waiting-icon">
             <UserX size={40} color="#dc2626" />
           </div>
-          <h2>Account Band Hai</h2>
+          <h2>Account Deactivated</h2>
           <p>
-            Super Admin ne aapka account band kar diya hai.
+            Super Admin has deactivated your account.
             <br />
-            Unse membership offer ya reactivate karne ko kahein.
+            Ask them to send a membership offer or reactivate your account.
           </p>
           <button
             type="button"

@@ -65,7 +65,7 @@ function formatExpiryDate(date) {
 function formatRenewalMessage(planName, expiryDate) {
   const daysLeft = getDaysRemaining(expiryDate);
   const dateStr = formatExpiryDate(expiryDate);
-  return `Membership renewed & account reactivated! ${planName} — ${daysLeft} din bache (${dateStr} tak)`;
+  return `Membership renewed & account reactivated! ${planName} — ${daysLeft} days left (until ${dateStr})`;
 }
 
 function withMembershipDays(userObj) {

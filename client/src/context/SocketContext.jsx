@@ -157,7 +157,7 @@ export const SocketProvider = ({ children }) => {
         id: `membership_offer_${Date.now()}`,
         type: 'membership_offer_sent',
         title: '📩 MEMBERSHIP OFFER RECEIVED',
-        message: data.message || 'Super Admin ne membership renew ka offer bheja hai.',
+        message: data.message || 'Super Admin sent a membership renewal offer.',
         timestamp: new Date(),
         actionPath: '/admin/membership'
       };
@@ -226,7 +226,7 @@ export const SocketProvider = ({ children }) => {
         id: `membership_rejected_${Date.now()}`,
         type: 'membership_renewal_rejected',
         title: '❌ MEMBERSHIP REQUEST REJECTED',
-        message: data.message || data.renewalRejectionReason || 'Aapki request reject ho gayi. Dubara screenshot upload karein.',
+        message: data.message || data.renewalRejectionReason || 'Your request was rejected. Upload a new payment screenshot.',
         timestamp: new Date(),
         actionPath: '/subscription-expired'
       };
@@ -251,8 +251,8 @@ export const SocketProvider = ({ children }) => {
         const newNotif = {
           id: `admin_deactivated_${Date.now()}`,
           type: 'membership_offer_sent',
-          title: '⚠️ ACCOUNT BAND',
-          message: data.message || 'Aapka account band kar diya gaya hai. Membership renew karein.',
+          title: '⚠️ ACCOUNT DEACTIVATED',
+          message: data.message || 'Your account has been deactivated. Renew your membership.',
           timestamp: new Date(),
           actionPath: '/subscription-expired'
         };
