@@ -140,9 +140,24 @@ export default function OrdersPage() {
     try {
       const res = await API.post(`/payment/approve/${orderId}`);
       if (res.data.success) {
-        setOrders((prev) => prev.map((o) => (o._id === orderId ? res.data.order : o)));
+        const order = res.data.order;
+        setOrders((prev) => prev.map((o) => (o._id === orderId ? order : o)));
         if (selectedOrder && selectedOrder._id === orderId) {
-          setSelectedOrder(res.data.order);
+          setSelectedOrder(order);
+        }
+
+        if (order?.customerMobile && window.confirm('Payment approved! Customer ko PDF bill WhatsApp par bhejein?')) {
+          try {
+            const result = await sendOrderBillOnWhatsApp(order, {
+              restaurantName: user?.restaurantName || res.data.bill?.restaurantName || 'Royal Spice Restaurant',
+              taxLabel: res.data.bill?.taxLabel || 'GST Tax'
+            });
+            if (result.hint) {
+              alert(result.hint);
+            }
+          } catch {
+            alert('PDF bill generate nahi ho payi. Orders page se dubara try karein.');
+          }
         }
       }
     } catch (err) {
@@ -255,8 +270,8 @@ export default function OrdersPage() {
         restaurantName: user?.restaurantName || 'Royal Spice Restaurant'
       });
       if (result.cancelled) return;
-      if (result.method === 'download') {
-        alert('PDF bill download ho gayi! WhatsApp khul raha hai — PDF attach karke customer ko bhejein.');
+      if (result.hint) {
+        alert(result.hint);
       }
     } catch {
       alert('Bill PDF generate/share nahi ho payi. Dubara try karein.');

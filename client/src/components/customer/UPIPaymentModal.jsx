@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import API from '../../services/api';
-import { prepareQrForWhatsApp, getShareQrHint, isMobileDevice, openWhatsApp, openWhatsAppUrl, buildPaymentQrShareMessage } from '../../utils/shareWhatsApp';
-import { X, CheckCircle, ShieldCheck, Loader2, MessageSquare, Clock, AlertCircle, QrCode } from 'lucide-react';
+import { prepareQrForWhatsApp, getShareQrHint, isMobileDevice, openWhatsApp, buildPaymentQrShareMessage } from '../../utils/shareWhatsApp';
+import { sendOrderBillOnWhatsApp } from '../../utils/billShare';
+import { X, CheckCircle, ShieldCheck, Loader2, MessageSquare, Clock, AlertCircle, QrCode, FileText } from 'lucide-react';
 
 export default function UPIPaymentModal({ orderNumber, onClose, onSuccess }) {
   const [loading, setLoading] = useState(true);
@@ -11,12 +12,36 @@ export default function UPIPaymentModal({ orderNumber, onClose, onSuccess }) {
   const [shareHint, setShareHint] = useState('');
   const [paid, setPaid] = useState(false);
   const [pending, setPending] = useState(false);
-  const [waUrl, setWaUrl] = useState('');
+  const [paidOrder, setPaidOrder] = useState(null);
+  const [billMeta, setBillMeta] = useState(null);
+  const [billSending, setBillSending] = useState(false);
+  const [billHint, setBillHint] = useState('');
   const [error, setError] = useState('');
+
+  const loadPaidOrder = useCallback(async () => {
+    try {
+      const res = await API.get(`/public/orders/${orderNumber}/status`);
+      if (res.data.success) {
+        setPaidOrder(res.data.order);
+        setBillMeta({
+          restaurantName: res.data.setting?.restaurantName || qrData?.restaurantName || 'Royal Spice Restaurant',
+          taxLabel: `GST Tax (${res.data.setting?.taxPercentage ?? 5}%)`
+        });
+      }
+    } catch {
+      setError('Paid order details load nahi ho payi.');
+    }
+  }, [orderNumber, qrData?.restaurantName]);
 
   useEffect(() => {
     fetchDynamicUPIQR();
   }, [orderNumber]);
+
+  useEffect(() => {
+    if (paid) {
+      loadPaidOrder();
+    }
+  }, [paid, loadPaidOrder]);
 
   const fetchDynamicUPIQR = async () => {
     setLoading(true);
@@ -53,8 +78,11 @@ export default function UPIPaymentModal({ orderNumber, onClose, onSuccess }) {
           if (onSuccess) onSuccess(res.data.order);
         } else {
           setPaid(true);
-          if (res.data.whatsApp?.waUrl) {
-            setWaUrl(res.data.whatsApp.waUrl);
+          if (res.data.order) {
+            setPaidOrder(res.data.order);
+          }
+          if (res.data.bill) {
+            setBillMeta(res.data.bill);
           }
           if (onSuccess) onSuccess(res.data.order);
         }
@@ -63,6 +91,26 @@ export default function UPIPaymentModal({ orderNumber, onClose, onSuccess }) {
       setError(err.response?.data?.message || 'Payment submit nahi ho paya. Dubara try karein.');
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleShareBillPdf = async () => {
+    if (!paidOrder || billSending) return;
+
+    setBillSending(true);
+    setBillHint('');
+    setError('');
+
+    try {
+      const result = await sendOrderBillOnWhatsApp(paidOrder, billMeta || {});
+      if (result.cancelled) return;
+      if (result.hint) {
+        setBillHint(result.hint);
+      }
+    } catch {
+      setError('PDF bill generate/share nahi ho payi. Dubara try karein.');
+    } finally {
+      setBillSending(false);
     }
   };
 
@@ -89,7 +137,6 @@ export default function UPIPaymentModal({ orderNumber, onClose, onSuccess }) {
       }
       if (result.method === 'cancelled') return;
 
-      // Desktop / fallback: WhatsApp kholo with payment text pre-filled
       if (!isMobileDevice() && result.method !== 'share-file') {
         openWhatsApp(null, shareMessage);
       }
@@ -119,7 +166,7 @@ export default function UPIPaymentModal({ orderNumber, onClose, onSuccess }) {
             <Loader2 size={32} className="animate-spin" style={{ margin: '0 auto 1rem auto', color: 'var(--primary)' }} />
             <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>QR Code ban raha hai...</p>
           </div>
-        ) : error && !qrData ? (
+        ) : error && !qrData && !paid ? (
           <div style={{ padding: '1.5rem 0.5rem' }}>
             <AlertCircle size={40} color="#dc2626" style={{ margin: '0 auto 0.75rem' }} />
             <p style={{ fontSize: '0.9rem', color: '#991b1b', marginBottom: '1rem' }}>{error}</p>
@@ -137,10 +184,11 @@ export default function UPIPaymentModal({ orderNumber, onClose, onSuccess }) {
               Order #{orderNumber} is <strong>PAID</strong> and sent to kitchen.
             </p>
 
-            {waUrl && (
+            {paidOrder ? (
               <button
                 type="button"
-                onClick={() => openWhatsAppUrl(waUrl)}
+                onClick={handleShareBillPdf}
+                disabled={billSending}
                 className="btn btn-primary"
                 style={{
                   width: '100%',
@@ -153,15 +201,33 @@ export default function UPIPaymentModal({ orderNumber, onClose, onSuccess }) {
                   alignItems: 'center',
                   justifyContent: 'center',
                   gap: '0.5rem',
-                  marginBottom: '0.75rem',
+                  marginBottom: billHint ? '0.5rem' : '0.75rem',
                   boxShadow: '0 6px 16px rgba(37,211,102,0.3)',
                   border: 'none',
-                  cursor: 'pointer'
+                  cursor: billSending ? 'not-allowed' : 'pointer',
+                  opacity: billSending ? 0.7 : 1
                 }}
               >
-                <MessageSquare size={18} />
-                <span>Get Bill Receipt on WhatsApp</span>
+                {billSending ? <Loader2 size={18} className="animate-spin" /> : <FileText size={18} />}
+                <span>{billSending ? 'PDF bill taiyar ho rahi hai...' : 'PDF Bill WhatsApp par Bhejein'}</span>
               </button>
+            ) : (
+              <div style={{ marginBottom: '0.75rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                <Loader2 size={16} className="animate-spin" style={{ display: 'inline', marginRight: '0.35rem' }} />
+                Bill details load ho rahi hain...
+              </div>
+            )}
+
+            {billHint && (
+              <div style={{ background: '#ecfdf5', color: '#047857', padding: '0.55rem 0.65rem', borderRadius: '10px', fontSize: '0.78rem', marginBottom: '0.75rem', lineHeight: 1.45, border: '1px solid #a7f3d0', textAlign: 'left' }}>
+                {billHint}
+              </div>
+            )}
+
+            {error && (
+              <div style={{ background: '#fee2e2', color: '#991b1b', padding: '0.55rem', borderRadius: '10px', fontSize: '0.8rem', marginBottom: '0.75rem' }}>
+                {error}
+              </div>
             )}
 
             <button type="button" onClick={onClose} className="btn btn-secondary" style={{ width: '100%', borderRadius: '12px' }}>

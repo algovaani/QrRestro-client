@@ -9,7 +9,8 @@ const {
   getOrderStatus,
   getActiveOrdersForTable,
   getActiveOrdersForTableByAdmin,
-  submitOrderRating
+  submitOrderRating,
+  getOrderBillPdf
 } = require('../controllers/publicController');
 
 router.get('/membership-plans', getPublicMembershipPlans);
@@ -19,6 +20,7 @@ router.get('/table/:tableNumber', getTableInfo);
 router.get('/menu/:tableNumber', getPublicMenu);
 router.post('/orders', placeOrder);
 router.get('/orders/:orderNumber/status', getOrderStatus);
+router.get('/orders/:orderNumber/bill.pdf', getOrderBillPdf);
 router.get('/orders/table/:adminId/:tableNumber/active', getActiveOrdersForTableByAdmin);
 router.get('/orders/table/:tableNumber/active', getActiveOrdersForTable);
 router.post('/orders/:orderNumber/rate', submitOrderRating);

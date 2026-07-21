@@ -4,6 +4,7 @@ const MenuItem = require('../models/MenuItem');
 const Order = require('../models/Order');
 const Setting = require('../models/Setting');
 const { emitNewOrder } = require('../socket/socketHandler');
+const { generateOrderBillPdfBuffer } = require('../utils/billPdf');
 
 const generateOrderNumber = () => {
   const randomNum = Math.floor(1000 + Math.random() * 9000);
@@ -278,6 +279,38 @@ exports.getOrderStatus = async (req, res, next) => {
 };
 
 exports.getPublicOrderStatus = exports.getOrderStatus;
+
+// @desc Download order bill as PDF (paid orders only)
+// @route GET /api/public/orders/:orderNumber/bill.pdf
+exports.getOrderBillPdf = async (req, res, next) => {
+  try {
+    const { orderNumber } = req.params;
+
+    const order = await Order.findOne({ orderNumber });
+    if (!order) {
+      return res.status(404).json({ success: false, message: 'Order not found' });
+    }
+
+    if (order.paymentStatus !== 'Paid') {
+      return res.status(400).json({ success: false, message: 'Bill is available only for paid orders' });
+    }
+
+    const setting = await Setting.findOne({ adminId: order.adminId }) || {};
+    const pdfBuffer = await generateOrderBillPdfBuffer(order, {
+      restaurantName: setting.restaurantName || 'Royal Spice Restaurant',
+      taxLabel: `GST Tax (${setting.taxPercentage || 5}%)`
+    });
+
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `attachment; filename="Bill-${order.orderNumber}.pdf"`,
+      'Cache-Control': 'no-store'
+    });
+    res.send(pdfBuffer);
+  } catch (error) {
+    next(error);
+  }
+};
 
 // @desc Submit Customer 5-Star Rating & Review
 // @route POST /api/public/orders/:orderNumber/rate

@@ -5,47 +5,10 @@ const { buildUpiPayString } = require('../utils/upiHelper');
 const { getTenantAdminId } = require('../middleware/tenantMiddleware');
 const { emitPaymentPending, emitPaymentSuccess, emitOrderStatusUpdate } = require('../socket/socketHandler');
 
-// Helper to generate formatted WhatsApp Bill Message
-const generateWhatsAppBillMessage = (order, settings) => {
-  const restName = settings.restaurantName || 'Royal Spice Restaurant';
-  const cleanMobile = order.customerMobile ? order.customerMobile.replace(/\D/g, '') : '';
-  const dateStr = new Date(order.createdAt).toLocaleString('en-IN', {
-    day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'
-  });
-
-  let itemsList = '';
-  order.items.forEach(item => {
-    itemsList += `• ${item.itemName} (${item.size}) x${item.quantity} - ₹${item.total}\n`;
-  });
-
-  const billText = 
-`🧾 *${restName.toUpperCase()} - TAX INVOICE*
-----------------------------------------
-Order #: *${order.orderNumber}*
-Table #: *Table ${order.tableNumber}*
-Customer: *${order.customerName}*
-Date: ${dateStr}
-
-*ORDERED ITEMS:*
-${itemsList}
-----------------------------------------
-Subtotal: ₹${order.subtotal}
-GST Tax (${settings.taxPercentage || 5}%): ₹${order.tax}
-*GRAND TOTAL: ₹${order.grandTotal}*
-----------------------------------------
-Payment Status: *PAID (${order.paymentMethod || 'UPI'})*
-Transaction ID: *${order.transactionId || 'N/A'}*
-
-Thank you for dining with us! Have a great meal! 🙏`;
-
-  const encodedText = encodeURIComponent(billText);
-  const waUrl = cleanMobile ? `https://wa.me/91${cleanMobile}?text=${encodedText}` : `https://wa.me/?text=${encodedText}`;
-
-  return {
-    billText,
-    waUrl
-  };
-};
+const getBillMeta = (settings) => ({
+  restaurantName: settings.restaurantName || 'Royal Spice Restaurant',
+  taxLabel: `GST Tax (${settings.taxPercentage || 5}%)`
+});
 
 // @desc Generate Dynamic UPI QR Code for Order Grand Total
 // @route GET /api/payment/upi-qr/:orderNumber
@@ -136,12 +99,11 @@ exports.verifyPayment = async (req, res, next) => {
 
     if (order.paymentStatus === 'Paid') {
       const settings = await Setting.findOne({ adminId: order.adminId }) || {};
-      const { billText, waUrl } = generateWhatsAppBillMessage(order, settings);
       return res.json({
         success: true,
         message: 'Payment already approved',
         order,
-        whatsApp: { billText, waUrl }
+        bill: getBillMeta(settings)
       });
     }
 
@@ -204,7 +166,6 @@ exports.approvePayment = async (req, res, next) => {
     await order.save();
 
     const settings = await Setting.findOne({ adminId: order.adminId }) || {};
-    const { billText, waUrl } = generateWhatsAppBillMessage(order, settings);
 
     emitPaymentSuccess(order);
     emitOrderStatusUpdate(order);
@@ -213,7 +174,7 @@ exports.approvePayment = async (req, res, next) => {
       success: true,
       message: 'Payment approved and order confirmed',
       order,
-      whatsApp: { billText, waUrl }
+      bill: getBillMeta(settings)
     });
   } catch (error) {
     next(error);

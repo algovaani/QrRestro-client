@@ -107,8 +107,8 @@ export default function MyOrdersModal({ tableNumber, adminId, customerMobile, on
     setBillSendingId(order._id);
     try {
       const result = await sendOrderBillOnWhatsApp(order);
-      if (result.method === 'download') {
-        setStatusToast('PDF bill download ho gayi — WhatsApp me attach karke bhejein.');
+      if (result.hint) {
+        setStatusToast(result.hint);
       }
     } catch {
       setStatusToast('Bill PDF share nahi ho payi.');

@@ -61,6 +61,11 @@ export function openWhatsApp(phone, text) {
   openWhatsAppUrl(waUrl);
 }
 
+/** Open WhatsApp chat without pre-filled message (for PDF attach flow) */
+export function openWhatsAppChat(phone) {
+  openWhatsApp(phone, '');
+}
+
 function dataUrlToPngFile(dataUrl, filename = 'qr-code.png') {
   const parts = dataUrl.split(',');
   const mime = parts[0]?.match(/:(.*?);/)?.[1] || 'image/png';
