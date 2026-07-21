@@ -1,13 +1,16 @@
 import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { io } from 'socket.io-client';
 import { useAuth } from './AuthContext';
+import { getSocketUrl, getRestaurantRoom } from '../utils/socketUrl';
 
 const SocketContext = createContext();
 
 export const getTableRoom = (adminId, tableNumber) => {
-  if (!adminId || !tableNumber) return null;
-  return `table_${adminId}_${tableNumber}`;
+  if (!adminId || tableNumber === undefined || tableNumber === null || tableNumber === '') return null;
+  return `table_${adminId}_${String(tableNumber)}`;
 };
+
+export { getRestaurantRoom };
 
 const getTenantId = (user, token) => {
   if (!user || !token || user.role === 'SuperAdmin') return null;
@@ -51,12 +54,15 @@ export const SocketProvider = ({ children }) => {
 
   // Single long-lived socket — do not recreate on every auth/user update
   useEffect(() => {
-    const newSocket = io(window.location.origin, {
+    const newSocket = io(getSocketUrl(), {
+      path: '/socket.io',
       transports: ['polling', 'websocket'],
+      withCredentials: true,
       reconnection: true,
       reconnectionAttempts: Infinity,
       reconnectionDelay: 1000,
-      reconnectionDelayMax: 5000
+      reconnectionDelayMax: 5000,
+      timeout: 20000
     });
 
     setSocket(newSocket);

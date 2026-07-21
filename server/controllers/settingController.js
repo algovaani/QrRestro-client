@@ -2,6 +2,7 @@ const Setting = require('../models/Setting');
 const { getTenantAdminId } = require('../middleware/tenantMiddleware');
 const { generateQRCode } = require('../utils/qrGenerator');
 const { buildUpiPayString } = require('../utils/upiHelper');
+const { emitSettingsUpdated } = require('../socket/socketHandler');
 
 const resolveTenantAdminId = (req) => {
   const adminId = getTenantAdminId(req.user);
@@ -86,6 +87,12 @@ exports.updateSettings = async (req, res, next) => {
     }
 
     await setting.save();
+
+    try {
+      emitSettingsUpdated(adminId, setting);
+    } catch (e) {
+      console.error('settings_updated emit error:', e);
+    }
 
     let qrCodeDataUrl = '';
     if (setting.upiId) {

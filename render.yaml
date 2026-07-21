@@ -2,6 +2,7 @@ services:
   - type: web
     name: qr-restro
     runtime: node
+    numInstances: 1
     buildCommand: npm run build
     startCommand: npm start
     envVars:

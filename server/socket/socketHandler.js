@@ -5,7 +5,8 @@ const toPayload = (order) => (order?.toObject ? order.toObject() : order);
 
 const getAdminRoom = (adminId) => `admin_${adminId}`;
 const getKitchenRoom = (adminId) => `kitchen_${adminId}`;
-const getTableRoom = (adminId, tableNumber) => `table_${adminId}_${tableNumber}`;
+const getTableRoom = (adminId, tableNumber) => `table_${adminId}_${String(tableNumber)}`;
+const getRestaurantRoom = (adminId) => `restaurant_${adminId}`;
 
 const initSocket = (io) => {
   ioInstance = io;
@@ -134,6 +135,20 @@ const emitAdminStatusChanged = (admin) => {
   ioInstance.to(getAdminRoom(String(admin._id))).emit('admin_status_changed', payload);
 };
 
+const emitSettingsUpdated = (adminId, setting) => {
+  if (!ioInstance || !adminId) return;
+  const payload = {
+    adminId: String(adminId),
+    restaurantName: setting.restaurantName,
+    taxPercentage: setting.taxPercentage,
+    currency: setting.currency,
+    upiId: setting.upiId,
+    logo: setting.logo,
+    themeColor: setting.themeColor
+  };
+  ioInstance.to(getRestaurantRoom(String(adminId))).emit('settings_updated', payload);
+};
+
 module.exports = {
   initSocket,
   emitNewOrder,
@@ -144,5 +159,6 @@ module.exports = {
   emitMembershipActivated,
   emitMembershipOfferSent,
   emitMembershipRenewalRejected,
-  emitAdminStatusChanged
+  emitAdminStatusChanged,
+  emitSettingsUpdated
 };

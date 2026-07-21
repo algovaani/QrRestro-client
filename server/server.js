@@ -37,10 +37,14 @@ const io = new Server(server, {
     origin: allowedOrigins.length ? allowedOrigins : true,
     credentials: true
   },
-  transports: ['websocket', 'polling'],
+  transports: ['polling', 'websocket'],
   allowUpgrades: true,
   pingTimeout: 60000,
-  pingInterval: 25000
+  pingInterval: 25000,
+  connectionStateRecovery: {
+    maxDisconnectionDuration: 2 * 60 * 1000,
+    skipMiddlewares: true
+  }
 });
 
 initSocket(io);

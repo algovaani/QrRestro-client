@@ -10,6 +10,8 @@ import { getPayOrderNumber } from '../../hooks/useTableSessionOrders';
 import { Search, Plus, Minus, X, AlertCircle, Clock, Utensils, ReceiptText } from 'lucide-react';
 import { useSocket } from '../../context/SocketContext';
 import { useTableRoomSocket } from '../../hooks/useTableRoomSocket';
+import { useLivePolling, useSocketReconnectRefetch } from '../../hooks/useLivePolling';
+import { getRestaurantRoom } from '../../utils/socketUrl';
 import CustomerNotificationToast from '../../components/customer/CustomerNotificationToast';
 import { getOrderStatusMessage, mobilesMatch, vibrateCustomerAlert } from '../../utils/orderNotifications';
 
@@ -70,6 +72,13 @@ export default function CustomerMenu() {
     tableNumber,
     customerDetailsComplete
       ? {
+          onNewOrder: (newOrder) => {
+            if (!mobilesMatch(newOrder.customerMobile, customerMobile)) return;
+            setTableOrders((prev) => {
+              if (prev.some((o) => String(o._id) === String(newOrder._id))) return prev;
+              return [newOrder, ...prev];
+            });
+          },
           onStatusUpdate: (updatedOrder) => {
             if (!mobilesMatch(updatedOrder.customerMobile, customerMobile)) return;
             playOrderChime();
@@ -151,6 +160,40 @@ export default function CustomerMenu() {
       console.error(err);
     }
   };
+
+  useSocketReconnectRefetch(
+    socket,
+    fetchActiveTableOrders,
+    Boolean(restaurantAdminId && tableNumber && customerDetailsComplete && customerMobile)
+  );
+
+  useLivePolling(
+    fetchActiveTableOrders,
+    12000,
+    Boolean(restaurantAdminId && tableNumber && customerDetailsComplete && customerMobile)
+  );
+
+  // Join restaurant room for settings/menu updates from admin
+  useEffect(() => {
+    const adminId = restaurantAdminId || routeAdminId;
+    if (!socket || !adminId) return undefined;
+    const room = getRestaurantRoom(adminId);
+    const join = () => socket.emit('join_room', room);
+    join();
+    socket.on('connect', join);
+
+    const onSettingsUpdated = (data) => {
+      applyRestaurantSettings(data);
+      setStatusToast('Restaurant settings updated — tax & details refreshed');
+    };
+
+    socket.on('settings_updated', onSettingsUpdated);
+    return () => {
+      socket.off('connect', join);
+      socket.off('settings_updated', onSettingsUpdated);
+      socket.emit('leave_room', room);
+    };
+  }, [socket, restaurantAdminId, routeAdminId, applyRestaurantSettings]);
 
   const handleOpenItemModal = (item) => {
     setSelectedItem(item);

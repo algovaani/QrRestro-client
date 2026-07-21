@@ -3,6 +3,7 @@ import API from '../../services/api';
 import Sidebar from '../../components/common/Sidebar';
 import Header from '../../components/common/Header';
 import { useSocket } from '../../context/SocketContext';
+import { useLivePolling } from '../../hooks/useLivePolling';
 import {
   QrCode,
   UtensilsCrossed,
@@ -94,6 +95,12 @@ export default function AdminDashboard() {
       if (!silent) setLoading(false);
     }
   }, []);
+
+  useLivePolling(
+    () => fetchDashboardData(startDate, endDate, true),
+    20000,
+    Boolean(startDate && endDate)
+  );
 
   useEffect(() => {
     handlePresetChange('today');

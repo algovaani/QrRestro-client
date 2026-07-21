@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import API from '../../services/api';
 import { useCart } from '../../context/CartContext';
 import { useTableSessionOrders, getPayOrderNumber } from '../../hooks/useTableSessionOrders';
 import { useSocket } from '../../context/SocketContext';
 import { useTableRoomSocket } from '../../hooks/useTableRoomSocket';
+import { useLivePolling, useSocketReconnectRefetch } from '../../hooks/useLivePolling';
 import CustomerNotificationToast from '../../components/customer/CustomerNotificationToast';
 import CustomerBottomNav from '../../components/customer/CustomerBottomNav';
 import MyOrdersModal from '../../components/customer/MyOrdersModal';
@@ -53,10 +54,41 @@ export default function OrderStatusPage() {
   };
 
   const { socket, playOrderChime } = useSocket();
+  const lastStatusRef = useRef(null);
+
+  const fetchStatus = useCallback(async () => {
+    if (!orderNumber) return;
+    try {
+      const res = await API.get(`/public/orders/${orderNumber}/status`);
+      if (res.data.success) {
+        const nextOrder = res.data.order;
+        const prevStatus = lastStatusRef.current;
+        setOrder(nextOrder);
+        lastStatusRef.current = nextOrder.orderStatus;
+        if (nextOrder.rating) {
+          setUserRating(nextOrder.rating);
+          setUserReview(nextOrder.review || '');
+          setRatingSubmitted(true);
+        }
+        if (prevStatus && prevStatus !== nextOrder.orderStatus) {
+          playOrderChime();
+          vibrateCustomerAlert();
+          setLiveToast(getOrderStatusMessage(nextOrder));
+        }
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  }, [orderNumber, playOrderChime]);
 
   useEffect(() => {
     fetchStatus();
-  }, [orderNumber]);
+  }, [fetchStatus]);
+
+  useSocketReconnectRefetch(socket, fetchStatus, Boolean(orderNumber));
+  useLivePolling(fetchStatus, 8000, Boolean(orderNumber));
 
   useEffect(() => {
     if (!liveToast) return undefined;
@@ -111,24 +143,6 @@ export default function OrderStatusPage() {
         }
       : {}
   );
-
-  const fetchStatus = async () => {
-    try {
-      const res = await API.get(`/public/orders/${orderNumber}/status`);
-      if (res.data.success) {
-        setOrder(res.data.order);
-        if (res.data.order.rating) {
-          setUserRating(res.data.order.rating);
-          setUserReview(res.data.order.review || '');
-          setRatingSubmitted(true);
-        }
-      }
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handlePaymentSuccess = (updatedOrder) => {
     setOrder(updatedOrder);

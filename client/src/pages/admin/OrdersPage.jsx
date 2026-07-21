@@ -5,6 +5,7 @@ import Sidebar from '../../components/common/Sidebar';
 import Header from '../../components/common/Header';
 import { useSocket } from '../../context/SocketContext';
 import { prependUniqueOrder, upsertOrder } from '../../utils/orderList';
+import { useLivePolling } from '../../hooks/useLivePolling';
 import { Printer, Eye, RefreshCw, MessageSquare, Search, ArrowUpDown, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, CheckCircle2, XCircle } from 'lucide-react';
 
 export default function OrdersPage() {
@@ -114,6 +115,8 @@ export default function OrdersPage() {
       setLoading(false);
     }
   };
+
+  useLivePolling(fetchOrders, 15000, true);
 
   const updateStatus = async (orderId, newStatus) => {
     try {
