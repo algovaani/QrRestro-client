@@ -6,7 +6,9 @@ import Header from '../../components/common/Header';
 import { useSocket } from '../../context/SocketContext';
 import { prependUniqueOrder, upsertOrder } from '../../utils/orderList';
 import { useLivePolling } from '../../hooks/useLivePolling';
-import { Printer, Eye, RefreshCw, MessageSquare, Search, ArrowUpDown, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, CheckCircle2, XCircle } from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
+import { sendOrderBillOnWhatsApp } from '../../utils/billShare';
+import { Printer, Eye, RefreshCw, MessageSquare, Search, ArrowUpDown, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, CheckCircle2, XCircle, Loader2 } from 'lucide-react';
 
 export default function OrdersPage() {
   const location = useLocation();
@@ -32,6 +34,8 @@ export default function OrdersPage() {
   const [paymentConfirm, setPaymentConfirm] = useState(null);
 
   const { socket, isConnected } = useSocket();
+  const { user } = useAuth();
+  const [billSendingId, setBillSendingId] = useState(null);
 
   useEffect(() => {
     fetchOrders();
@@ -239,35 +243,26 @@ export default function OrdersPage() {
     return sortedOrders.slice(start, start + itemsPerPage);
   }, [sortedOrders, currentPage, itemsPerPage]);
 
-  const sendWhatsAppBill = (order) => {
-    const cleanMobile = order.customerMobile ? order.customerMobile.replace(/\D/g, '') : '';
-    const dateStr = new Date(order.createdAt).toLocaleString('en-IN');
-    let itemsList = '';
-    order.items.forEach(i => {
-      itemsList += `• ${i.itemName} (${i.size}) x${i.quantity} - ₹${i.total}\n`;
-    });
+  const sendWhatsAppBill = async (order) => {
+    if (!order?.customerMobile) {
+      alert('Customer mobile number nahi hai — bill WhatsApp par nahi bhej sakte.');
+      return;
+    }
 
-    const billText = 
-`Receipt - ROYAL SPICE RESTAURANT
-----------------------------------------
-Order #: *${order.orderNumber}*
-Table #: *Table ${order.tableNumber}*
-Customer: *${order.customerName}*
-Date: ${dateStr}
-
-*ORDERED ITEMS:*
-${itemsList}----------------------------------------
-Subtotal: ₹${order.subtotal}
-GST Tax: ₹${order.tax}
-*GRAND TOTAL: ₹${order.grandTotal}*
-----------------------------------------
-Payment Status: *${order.paymentStatus} (${order.paymentMethod || 'UPI'})*
-TXN ID: *${order.transactionId || 'N/A'}*
-
-Thank you for dining with us! Have a great meal! 🙏`;
-
-    const waUrl = cleanMobile ? `https://wa.me/91${cleanMobile}?text=${encodeURIComponent(billText)}` : `https://wa.me/?text=${encodeURIComponent(billText)}`;
-    window.open(waUrl, '_blank');
+    setBillSendingId(order._id);
+    try {
+      const result = await sendOrderBillOnWhatsApp(order, {
+        restaurantName: user?.restaurantName || 'Royal Spice Restaurant'
+      });
+      if (result.cancelled) return;
+      if (result.method === 'download') {
+        alert('PDF bill download ho gayi! WhatsApp khul raha hai — PDF attach karke customer ko bhejein.');
+      }
+    } catch {
+      alert('Bill PDF generate/share nahi ho payi. Dubara try karein.');
+    } finally {
+      setBillSendingId(null);
+    }
   };
 
   const handlePrint = (order, type) => {
@@ -521,8 +516,14 @@ Thank you for dining with us! Have a great meal! 🙏`;
                         <button onClick={() => setSelectedOrder(order)} className="btn btn-secondary btn-sm" title="View Details">
                           <Eye size={14} />
                         </button>
-                        <button onClick={() => sendWhatsAppBill(order)} className="btn btn-secondary btn-sm" title="WhatsApp Bill" style={{ color: '#25D366' }}>
-                          <MessageSquare size={14} />
+                        <button
+                          onClick={() => sendWhatsAppBill(order)}
+                          disabled={billSendingId === order._id}
+                          className="btn btn-secondary btn-sm"
+                          title="WhatsApp PDF Bill"
+                          style={{ color: '#25D366' }}
+                        >
+                          {billSendingId === order._id ? <Loader2 size={14} className="animate-spin" /> : <MessageSquare size={14} />}
                         </button>
                         <button onClick={() => handlePrint(order, 'kitchen')} className="btn btn-secondary btn-sm" title="Print KOT">
                           <Printer size={14} /> KOT
@@ -703,8 +704,14 @@ Thank you for dining with us! Have a great meal! 🙏`;
             </div>
 
             <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
-              <button onClick={() => sendWhatsAppBill(selectedOrder)} className="btn btn-secondary" style={{ background: '#25D366', color: '#fff' }}>
-                <MessageSquare size={16} /> WhatsApp Bill
+              <button
+                onClick={() => sendWhatsAppBill(selectedOrder)}
+                disabled={billSendingId === selectedOrder?._id}
+                className="btn btn-secondary"
+                style={{ background: '#25D366', color: '#fff' }}
+              >
+                {billSendingId === selectedOrder?._id ? <Loader2 size={16} className="animate-spin" /> : <MessageSquare size={16} />}
+                WhatsApp PDF Bill
               </button>
               <button onClick={() => handlePrint(selectedOrder, 'kitchen')} className="btn btn-secondary">
                 <Printer size={16} /> Kitchen KOT

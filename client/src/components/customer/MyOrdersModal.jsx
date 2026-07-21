@@ -4,9 +4,9 @@ import { useSocket } from '../../context/SocketContext';
 import { useTableRoomSocket } from '../../hooks/useTableRoomSocket';
 import CustomerNotificationToast from './CustomerNotificationToast';
 import { getOrderStatusMessage, mobilesMatch, vibrateCustomerAlert } from '../../utils/orderNotifications';
-import { openWhatsAppUrl } from '../../utils/shareWhatsApp';
+import { sendOrderBillOnWhatsApp } from '../../utils/billShare';
 import UPIPaymentModal from './UPIPaymentModal';
-import { X, ShoppingBag, CheckCircle2, ChevronRight, QrCode, MessageSquare, Utensils } from 'lucide-react';
+import { X, ShoppingBag, CheckCircle2, ChevronRight, QrCode, MessageSquare, Utensils, Loader2 } from 'lucide-react';
 
 export default function MyOrdersModal({ tableNumber, adminId, customerMobile, onClose, onOrderMore }) {
   const [tableOrders, setTableOrders] = useState([]);
@@ -16,6 +16,7 @@ export default function MyOrdersModal({ tableNumber, adminId, customerMobile, on
   // Selected Order for UPI Payment Modal
   const [payOrderNumber, setPayOrderNumber] = useState(null);
   const [statusToast, setStatusToast] = useState('');
+  const [billSendingId, setBillSendingId] = useState(null);
 
   const { socket, playOrderChime } = useSocket();
 
@@ -102,35 +103,18 @@ export default function MyOrdersModal({ tableNumber, adminId, customerMobile, on
     fetchTableSessionOrders();
   };
 
-  const sendWhatsAppBill = (order) => {
-    const cleanMobile = order.customerMobile ? order.customerMobile.replace(/\D/g, '') : '';
-    const dateStr = new Date(order.createdAt).toLocaleString('en-IN');
-    let itemsList = '';
-    order.items.forEach(i => {
-      itemsList += `• ${i.itemName} (${i.size}) x${i.quantity} - ₹${i.total}\n`;
-    });
-
-    const billText = 
-`Receipt - ROYAL SPICE RESTAURANT
-----------------------------------------
-Order #: *${order.orderNumber}*
-Table #: *Table ${order.tableNumber}*
-Customer: *${order.customerName}*
-Date: ${dateStr}
-
-*ORDERED ITEMS:*
-${itemsList}----------------------------------------
-Subtotal: ₹${order.subtotal}
-GST Tax: ₹${order.tax}
-*GRAND TOTAL: ₹${order.grandTotal}*
-----------------------------------------
-Payment Status: *${order.paymentStatus} (${order.paymentMethod || 'UPI'})*
-TXN ID: *${order.transactionId || 'N/A'}*
-
-Thank you for dining with us! Have a great meal! 🙏`;
-
-    const waUrl = cleanMobile ? `https://wa.me/91${cleanMobile}?text=${encodeURIComponent(billText)}` : `https://wa.me/?text=${encodeURIComponent(billText)}`;
-    openWhatsAppUrl(waUrl);
+  const sendWhatsAppBill = async (order) => {
+    setBillSendingId(order._id);
+    try {
+      const result = await sendOrderBillOnWhatsApp(order);
+      if (result.method === 'download') {
+        setStatusToast('PDF bill download ho gayi — WhatsApp me attach karke bhejein.');
+      }
+    } catch {
+      setStatusToast('Bill PDF share nahi ho payi.');
+    } finally {
+      setBillSendingId(null);
+    }
   };
 
   return (
@@ -228,11 +212,12 @@ Thank you for dining with us! Have a great meal! 🙏`;
 
                     <button
                       onClick={() => sendWhatsAppBill(order)}
+                      disabled={billSendingId === order._id}
                       className="btn btn-secondary btn-sm"
                       style={{ padding: '0.35rem 0.5rem', color: '#25D366' }}
-                      title="Share WhatsApp Receipt"
+                      title="WhatsApp PDF Bill"
                     >
-                      <MessageSquare size={14} />
+                      {billSendingId === order._id ? <Loader2 size={14} className="animate-spin" /> : <MessageSquare size={14} />}
                     </button>
                   </div>
                 </div>
