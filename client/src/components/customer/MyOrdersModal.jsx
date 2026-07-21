@@ -4,6 +4,7 @@ import { useSocket } from '../../context/SocketContext';
 import { useTableRoomSocket } from '../../hooks/useTableRoomSocket';
 import CustomerNotificationToast from './CustomerNotificationToast';
 import { getOrderStatusMessage, mobilesMatch, vibrateCustomerAlert } from '../../utils/orderNotifications';
+import { openWhatsAppUrl } from '../../utils/shareWhatsApp';
 import UPIPaymentModal from './UPIPaymentModal';
 import { X, ShoppingBag, CheckCircle2, ChevronRight, QrCode, MessageSquare, Utensils } from 'lucide-react';
 
@@ -129,7 +130,7 @@ TXN ID: *${order.transactionId || 'N/A'}*
 Thank you for dining with us! Have a great meal! 🙏`;
 
     const waUrl = cleanMobile ? `https://wa.me/91${cleanMobile}?text=${encodeURIComponent(billText)}` : `https://wa.me/?text=${encodeURIComponent(billText)}`;
-    window.open(waUrl, '_blank');
+    openWhatsAppUrl(waUrl);
   };
 
   return (

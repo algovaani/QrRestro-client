@@ -23,21 +23,42 @@ export function getWhatsAppLink(phone) {
 }
 
 /** Mobile par WhatsApp app kholo */
-export function openWhatsAppMobile(phone) {
+export function openWhatsAppMobile(phone, text) {
   const clean = phone ? String(phone).replace(/\D/g, '').slice(-10) : '';
+  const waBase = clean ? `https://wa.me/91${clean}` : 'https://wa.me/';
+  const waUrl = text ? `${waBase}?text=${encodeURIComponent(text)}` : waBase;
 
   if (isAndroid()) {
+    const intentText = text ? `?text=${encodeURIComponent(text)}` : '';
+    const intentPhone = clean ? `?phone=91${clean}${text ? `&text=${encodeURIComponent(text)}` : ''}` : intentText;
     const intent = clean
-      ? `intent://send?phone=91${clean}#Intent;scheme=whatsapp;package=com.whatsapp;end`
-      : 'intent://send#Intent;scheme=whatsapp;package=com.whatsapp;end';
+      ? `intent://send${intentPhone}#Intent;scheme=whatsapp;package=com.whatsapp;end`
+      : `intent://send${intentText}#Intent;scheme=whatsapp;package=com.whatsapp;end`;
     window.location.href = intent;
     setTimeout(() => {
-      window.location.href = clean ? `https://wa.me/91${clean}` : 'https://wa.me/';
-    }, 1200);
+      window.location.href = waUrl;
+    }, 800);
     return;
   }
 
-  window.location.href = clean ? `https://wa.me/91${clean}` : 'https://wa.me/';
+  window.location.href = waUrl;
+}
+
+/** Open any wa.me / WhatsApp URL — works inside modals on mobile */
+export function openWhatsAppUrl(url) {
+  if (!url) return;
+  if (isMobileDevice()) {
+    window.location.href = url;
+  } else {
+    window.open(url, '_blank', 'noopener,noreferrer');
+  }
+}
+
+export function openWhatsApp(phone, text) {
+  const clean = phone ? String(phone).replace(/\D/g, '').slice(-10) : '';
+  const waBase = clean ? `https://wa.me/91${clean}` : 'https://wa.me/';
+  const waUrl = text ? `${waBase}?text=${encodeURIComponent(text)}` : waBase;
+  openWhatsAppUrl(waUrl);
 }
 
 function dataUrlToPngFile(dataUrl, filename = 'qr-code.png') {
@@ -172,7 +193,7 @@ export async function prepareQrForWhatsApp({ qrDataUrl, filename = 'qr-code.png'
     if (shared === 'cancelled') return { method: 'cancelled' };
 
     downloadBlob(file, filename);
-    openWhatsAppMobile(phone);
+    setTimeout(() => openWhatsAppMobile(phone), 400);
     return { method: 'download', mobileAttach: true };
   }
 

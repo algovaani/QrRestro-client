@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import API from '../../services/api';
-import { prepareQrForWhatsApp, getShareQrHint, getWhatsAppLink, isMobileDevice } from '../../utils/shareWhatsApp';
+import { prepareQrForWhatsApp, getShareQrHint, getWhatsAppLink, isMobileDevice, openWhatsAppUrl } from '../../utils/shareWhatsApp';
 import { X, CheckCircle, ShieldCheck, Loader2, MessageSquare, Clock, AlertCircle, QrCode } from 'lucide-react';
 
 export default function UPIPaymentModal({ orderNumber, onClose, onSuccess }) {
@@ -66,8 +66,9 @@ export default function UPIPaymentModal({ orderNumber, onClose, onSuccess }) {
     }
   };
 
-  const handleShareQrWhatsApp = async () => {
-    if (!qrData?.qrCodeDataUrl || isMobileDevice()) return;
+  const handleShareQrWhatsApp = async (e) => {
+    e?.preventDefault();
+    if (!qrData?.qrCodeDataUrl || sharing) return;
 
     setSharing(true);
     setShareHint('');
@@ -80,9 +81,18 @@ export default function UPIPaymentModal({ orderNumber, onClose, onSuccess }) {
       });
       const hint = getShareQrHint(result);
       if (hint) setShareHint(hint);
-      if (result.error) setError(result.error);
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+      if (result.method === 'cancelled') return;
+
+      // Desktop: web WhatsApp kholo (QR clipboard/download ke baad)
+      if (!isMobileDevice() && result.method !== 'share-file') {
+        openWhatsAppUrl(getWhatsAppLink());
+      }
     } catch {
-      setError('QR copy nahi ho payi.');
+      setError('QR WhatsApp par share nahi ho payi. Dubara try karein.');
     } finally {
       setSharing(false);
     }
@@ -126,10 +136,9 @@ export default function UPIPaymentModal({ orderNumber, onClose, onSuccess }) {
             </p>
 
             {waUrl && (
-              <a
-                href={waUrl}
-                target="_blank"
-                rel="noopener noreferrer"
+              <button
+                type="button"
+                onClick={() => openWhatsAppUrl(waUrl)}
                 className="btn btn-primary"
                 style={{
                   width: '100%',
@@ -143,12 +152,14 @@ export default function UPIPaymentModal({ orderNumber, onClose, onSuccess }) {
                   justifyContent: 'center',
                   gap: '0.5rem',
                   marginBottom: '0.75rem',
-                  boxShadow: '0 6px 16px rgba(37,211,102,0.3)'
+                  boxShadow: '0 6px 16px rgba(37,211,102,0.3)',
+                  border: 'none',
+                  cursor: 'pointer'
                 }}
               >
                 <MessageSquare size={18} />
                 <span>Get Bill Receipt on WhatsApp</span>
-              </a>
+              </button>
             )}
 
             <button type="button" onClick={onClose} className="btn btn-secondary" style={{ width: '100%', borderRadius: '12px' }}>
@@ -204,53 +215,29 @@ export default function UPIPaymentModal({ orderNumber, onClose, onSuccess }) {
               </div>
             </div>
 
-            {isMobileDevice() ? (
-              <a
-                href={getWhatsAppLink()}
-                className="btn btn-whatsapp-share"
-                style={{
-                  width: '100%',
-                  marginBottom: '0.85rem',
-                  borderRadius: '12px',
-                  padding: '0.75rem',
-                  fontSize: '0.9rem',
-                  textDecoration: 'none',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '0.5rem'
-                }}
-              >
-                <MessageSquare size={18} />
-                WhatsApp Kholo
-              </a>
-            ) : (
-              <a
-                href={getWhatsAppLink()}
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={handleShareQrWhatsApp}
-                className="btn btn-whatsapp-share"
-                style={{
-                  width: '100%',
-                  marginBottom: shareHint ? '0.5rem' : '0.85rem',
-                  borderRadius: '12px',
-                  padding: '0.75rem',
-                  fontSize: '0.9rem',
-                  textDecoration: 'none',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '0.5rem',
-                  pointerEvents: sharing || !qrData.qrCodeDataUrl ? 'none' : 'auto',
-                  opacity: sharing || !qrData.qrCodeDataUrl ? 0.6 : 1
-                }}
-              >
-                <MessageSquare size={18} />
-                {sharing ? 'QR copy ho raha hai...' : 'WhatsApp par QR Bhejein'}
-              </a>
-            )}
-            {!isMobileDevice() && shareHint && (
+            <button
+              type="button"
+              onClick={handleShareQrWhatsApp}
+              disabled={sharing || !qrData.qrCodeDataUrl}
+              className="btn btn-whatsapp-share"
+              style={{
+                width: '100%',
+                marginBottom: shareHint ? '0.5rem' : '0.85rem',
+                borderRadius: '12px',
+                padding: '0.75rem',
+                fontSize: '0.9rem',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '0.5rem',
+                opacity: sharing || !qrData.qrCodeDataUrl ? 0.6 : 1,
+                cursor: sharing || !qrData.qrCodeDataUrl ? 'not-allowed' : 'pointer'
+              }}
+            >
+              <MessageSquare size={18} />
+              {sharing ? 'QR taiyar ho raha hai...' : 'WhatsApp par QR Bhejein'}
+            </button>
+            {shareHint && (
               <div style={{ background: '#ecfdf5', color: '#047857', padding: '0.55rem 0.65rem', borderRadius: '10px', fontSize: '0.78rem', marginBottom: '0.85rem', lineHeight: 1.45, border: '1px solid #a7f3d0', textAlign: 'left' }}>
                 {shareHint}
               </div>
