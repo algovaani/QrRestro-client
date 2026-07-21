@@ -142,14 +142,19 @@ function downloadBlob(blob, filename) {
   URL.revokeObjectURL(url);
 }
 
-async function tryNativeShare(file) {
+async function tryNativeShare(file, text) {
   if (!navigator.share) return null;
 
-  const payloads = [{ files: [file] }, { files: [file], title: 'QR Code' }];
+  const payloads = [
+    { files: [file], text: text || '', title: 'UPI Payment QR' },
+    { files: [file], text: text || '' },
+    { files: [file], title: 'UPI Payment QR' },
+    { files: [file] }
+  ];
 
   for (const payload of payloads) {
     try {
-      if (navigator.canShare && !navigator.canShare({ files: [file] })) continue;
+      if (navigator.canShare && !navigator.canShare(payload)) continue;
       await navigator.share(payload);
       return 'share-file';
     } catch (err) {
@@ -157,51 +162,137 @@ async function tryNativeShare(file) {
     }
   }
 
-  // iOS / kuch browsers me canShare nahi — phir bhi try karo
   if (!navigator.canShare) {
-    try {
-      await navigator.share({ files: [file] });
-      return 'share-file';
-    } catch (err) {
-      if (err?.name === 'AbortError') return 'cancelled';
+    for (const payload of [{ files: [file], text: text || '' }, { files: [file] }]) {
+      try {
+        await navigator.share(payload);
+        return 'share-file';
+      } catch (err) {
+        if (err?.name === 'AbortError') return 'cancelled';
+      }
     }
   }
 
   return null;
 }
 
+/** QR + payment details ek hi image mein — WhatsApp par sirf image bhejne par bhi data dikhe */
+async function buildQrImageWithDetails(qrDataUrl, message, filename = 'qr-code.png') {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const pad = 20;
+      const qrSize = 320;
+      const lines = String(message || '')
+        .split('\n')
+        .map((l) => l.trim())
+        .filter(Boolean);
+
+      const lineHeight = 20;
+      const textBlockHeight = lines.length * lineHeight + pad;
+      const canvas = document.createElement('canvas');
+      canvas.width = qrSize + pad * 2;
+      canvas.height = qrSize + textBlockHeight + pad;
+      const ctx = canvas.getContext('2d');
+
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      ctx.strokeStyle = '#ff6b00';
+      ctx.lineWidth = 3;
+      ctx.strokeRect(pad - 2, pad - 2, qrSize + 4, qrSize + 4);
+      ctx.drawImage(img, pad, pad, qrSize, qrSize);
+
+      let y = qrSize + pad + 18;
+      lines.forEach((line, idx) => {
+        const isAmount =
+          line.includes('₹') ||
+          line.toLowerCase().includes('amount') ||
+          line.toLowerCase().includes('total');
+        ctx.fillStyle = isAmount ? '#c2410c' : '#0f172a';
+        ctx.font = isAmount
+          ? 'bold 17px system-ui, -apple-system, Segoe UI, sans-serif'
+          : idx === 0
+            ? 'bold 15px system-ui, -apple-system, Segoe UI, sans-serif'
+            : '13px system-ui, -apple-system, Segoe UI, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(line, canvas.width / 2, y);
+        y += lineHeight;
+      });
+
+      canvas.toBlob(
+        (blob) => {
+          if (!blob) {
+            reject(new Error('QR PNG ban nahi paya'));
+            return;
+          }
+          resolve(new File([blob], filename, { type: 'image/png' }));
+        },
+        'image/png',
+        1
+      );
+    };
+    img.onerror = () => reject(new Error('QR image load failed'));
+    img.src = qrDataUrl.startsWith('data:') ? qrDataUrl : resolveImageUrl(qrDataUrl);
+  });
+}
+
+/** UPI QR share ke liye payment message */
+export function buildPaymentQrShareMessage(data = {}) {
+  const lines = [
+    `🧾 ${data.restaurantName || 'Restaurant'}`,
+    `Order #: ${data.orderNumber || '—'}`,
+    `Table #: ${data.tableNumber ?? '—'}`,
+    `Payment Amount: ₹${data.grandTotal ?? '—'}`,
+    data.upiId ? `UPI ID: ${data.upiId}` : '',
+    '',
+    'QR scan karke UPI payment karein 📱'
+  ];
+  return lines.filter((l) => l !== '').join('\n');
+}
+
 /**
- * Mobile: pehle share sheet (WhatsApp + QR image), fail hone par download + WhatsApp app kholo
- * Desktop: clipboard/download + web.whatsapp.com link se khulega
+ * Mobile: share sheet (QR image + text) ya download + WhatsApp with message
+ * Desktop: clipboard/download + WhatsApp with pre-filled text
  */
-export async function prepareQrForWhatsApp({ qrDataUrl, filename = 'qr-code.png', phone }) {
+export async function prepareQrForWhatsApp({ qrDataUrl, filename = 'qr-code.png', phone, message }) {
   if (!qrDataUrl) {
     return { method: 'error', error: 'QR available nahi hai' };
   }
 
   let file;
   try {
-    file = await urlToFile(qrDataUrl, filename);
+    file = message
+      ? await buildQrImageWithDetails(qrDataUrl, message, filename)
+      : await urlToFile(qrDataUrl, filename);
   } catch {
     return { method: 'error', error: 'QR image load nahi ho payi' };
   }
 
-  // MOBILE — native share sheet → WhatsApp select → QR image attach
+  // MOBILE — native share (image mein details + optional text caption)
   if (isMobileDevice()) {
-    const shared = await tryNativeShare(file);
-    if (shared === 'share-file') return { method: 'share-file' };
+    const shared = await tryNativeShare(file, message);
+    if (shared === 'share-file') return { method: 'share-file', message };
     if (shared === 'cancelled') return { method: 'cancelled' };
 
     downloadBlob(file, filename);
-    setTimeout(() => openWhatsAppMobile(phone), 400);
-    return { method: 'download', mobileAttach: true };
+    setTimeout(() => openWhatsAppMobile(phone, message), 400);
+    return { method: 'download', mobileAttach: true, message };
   }
 
-  // DESKTOP — copy ya download (WhatsApp <a href> se khulega)
+  // DESKTOP — copy/download image + message clipboard
   const copied = await copyImageBlob(file);
   if (!copied) downloadBlob(file, filename);
 
-  return { method: copied ? 'clipboard' : 'download' };
+  if (message && navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(message);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  return { method: copied ? 'clipboard' : 'download', message };
 }
 
 export async function shareQrOnWhatsApp(opts) {
@@ -213,13 +304,13 @@ export function getShareQrHint(result) {
 
   switch (result?.method) {
     case 'share-file':
-      return 'WhatsApp choose karein — QR image attach ho jayegi. Send dabayein.';
+      return 'WhatsApp choose karein — QR image ke saath payment details bhi jayengi. Send dabayein.';
     case 'download':
       return isMobileDevice()
-        ? 'WhatsApp khul raha hai — Attach 📎 dabao, Gallery/Downloads se QR PNG select karo.'
-        : 'QR download ho gayi! WhatsApp me Attach 📎 se PNG bhejein.';
+        ? 'WhatsApp khul raha hai — payment message ready hai. QR image attach karke send karein.'
+        : 'QR download ho gayi aur payment details copy ho gayi! WhatsApp me paste karein + image attach karein.';
     case 'clipboard':
-      return 'QR copy ho gayi! WhatsApp chat me Ctrl+V (paste) dabayein.';
+      return 'QR copy ho gayi aur payment details bhi copy ho gayi! WhatsApp me pehle text paste karein, phir image attach karein.';
     case 'cancelled':
       return '';
     default:

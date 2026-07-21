@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import API from '../../services/api';
-import { prepareQrForWhatsApp, getShareQrHint, getWhatsAppLink, isMobileDevice, openWhatsAppUrl } from '../../utils/shareWhatsApp';
+import { prepareQrForWhatsApp, getShareQrHint, isMobileDevice, openWhatsApp, openWhatsAppUrl, buildPaymentQrShareMessage } from '../../utils/shareWhatsApp';
 import { X, CheckCircle, ShieldCheck, Loader2, MessageSquare, Clock, AlertCircle, QrCode } from 'lucide-react';
 
 export default function UPIPaymentModal({ orderNumber, onClose, onSuccess }) {
@@ -75,9 +75,11 @@ export default function UPIPaymentModal({ orderNumber, onClose, onSuccess }) {
     setError('');
 
     try {
+      const shareMessage = buildPaymentQrShareMessage(qrData);
       const result = await prepareQrForWhatsApp({
         qrDataUrl: qrData.qrCodeDataUrl,
-        filename: `payment-${qrData.orderNumber}.png`
+        filename: `payment-${qrData.orderNumber}.png`,
+        message: shareMessage
       });
       const hint = getShareQrHint(result);
       if (hint) setShareHint(hint);
@@ -87,9 +89,9 @@ export default function UPIPaymentModal({ orderNumber, onClose, onSuccess }) {
       }
       if (result.method === 'cancelled') return;
 
-      // Desktop: web WhatsApp kholo (QR clipboard/download ke baad)
+      // Desktop / fallback: WhatsApp kholo with payment text pre-filled
       if (!isMobileDevice() && result.method !== 'share-file') {
-        openWhatsAppUrl(getWhatsAppLink());
+        openWhatsApp(null, shareMessage);
       }
     } catch {
       setError('QR WhatsApp par share nahi ho payi. Dubara try karein.');
