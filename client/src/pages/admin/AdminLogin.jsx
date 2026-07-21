@@ -126,9 +126,9 @@ export default function AdminLogin() {
             <span>{loading ? 'Authenticating...' : 'Sign In'}</span>
           </button>
 
-          {/* <div style={{ background: '#f8fafc', padding: '0.75rem', borderRadius: '10px', fontSize: '0.75rem', color: 'var(--text-muted)', textAlign: 'center' }}>
+          <div style={{ background: '#f8fafc', padding: '0.75rem', borderRadius: '10px', fontSize: '0.75rem', color: 'var(--text-muted)', textAlign: 'center' }}>
             <div>🔑 Super Admin: <strong>superadmin@restaurant.com</strong> / <strong>superadmin123</strong></div>
-            <div style={{ marginTop: '0.2rem' }}>👨‍💼 Restaurant Admin: <strong>admin@restaurant.com</strong> / <strong>admin123</strong></div> */}
+            <div style={{ marginTop: '0.2rem' }}>👨‍💼 Restaurant Admin: <strong>admin@restaurant.com</strong> / <strong>admin123</strong></div> 
           </div>
         </form>
       </div>
