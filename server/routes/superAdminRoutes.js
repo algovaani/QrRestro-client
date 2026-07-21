@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const upload = require('../middleware/uploadMiddleware');
+const { handleUpload } = require('../middleware/uploadMiddleware');
 const { protect, protectAllowExpired, isSuperAdmin } = require('../middleware/authMiddleware');
 const {
   getSuperAdminStats,
@@ -24,7 +24,7 @@ const {
 } = require('../controllers/membershipPlanController');
 
 // Restaurant Admin — renewal even when plan expired (with optional payment screenshot)
-router.post('/request-renewal', protectAllowExpired, upload.single('paymentProof'), requestRenewal);
+router.post('/request-renewal', protectAllowExpired, handleUpload('paymentProof'), requestRenewal);
 
 // Super Admin Only Protected Routes
 router.use(protect, isSuperAdmin);

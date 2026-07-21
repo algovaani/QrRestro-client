@@ -37,4 +37,17 @@ const upload = multer({
   }
 });
 
+const handleUpload = (field) => (req, res, next) => {
+  upload.single(field)(req, res, (err) => {
+    if (err) {
+      return res.status(400).json({
+        success: false,
+        message: err.message || 'Image upload failed'
+      });
+    }
+    next();
+  });
+};
+
 module.exports = upload;
+module.exports.handleUpload = handleUpload;

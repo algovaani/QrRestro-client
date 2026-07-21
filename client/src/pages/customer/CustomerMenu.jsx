@@ -14,6 +14,7 @@ import { useLivePolling, useSocketReconnectRefetch } from '../../hooks/useLivePo
 import { getRestaurantRoom } from '../../utils/socketUrl';
 import CustomerNotificationToast from '../../components/customer/CustomerNotificationToast';
 import { getOrderStatusMessage, mobilesMatch, vibrateCustomerAlert } from '../../utils/orderNotifications';
+import { resolveUploadUrl } from '../../utils/uploadUrl';
 
 export default function CustomerMenu() {
   const { adminId: routeAdminId, tableNumber } = useParams();
@@ -411,7 +412,7 @@ export default function CustomerMenu() {
             >
               <div style={{ position: 'relative' }}>
                 {item.image ? (
-                  <img src={item.image} alt={item.name} style={{ width: '85px', height: '85px', borderRadius: '10px', objectFit: 'cover' }} />
+                  <img src={resolveUploadUrl(item.image)} alt={item.name} style={{ width: '85px', height: '85px', borderRadius: '10px', objectFit: 'cover' }} />
                 ) : (
                   <div style={{ width: '85px', height: '85px', borderRadius: '10px', background: '#fff0e6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '2rem' }}>
                     🍲

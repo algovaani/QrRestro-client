@@ -3,6 +3,7 @@ import API from '../../services/api';
 import Sidebar from '../../components/common/Sidebar';
 import Header from '../../components/common/Header';
 import { Plus, Search, Edit2, Trash2, Star, ArrowUpDown, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
+import { resolveUploadUrl } from '../../utils/uploadUrl';
 
 export default function MenuPage() {
   const [menuItems, setMenuItems] = useState([]);
@@ -158,7 +159,7 @@ export default function MenuPage() {
       status: item.status
     });
     setImageFile(null);
-    setPreviewImage(item.image || '');
+    setPreviewImage(item.image ? resolveUploadUrl(item.image) : '');
     setModalError('');
     setShowModal(true);
   };
@@ -185,13 +186,9 @@ export default function MenuPage() {
 
     try {
       if (editingItem) {
-        await API.put(`/menu/${editingItem._id}`, data, {
-          headers: { 'Content-Type': 'multipart/form-data' }
-        });
+        await API.put(`/menu/${editingItem._id}`, data);
       } else {
-        await API.post('/menu', data, {
-          headers: { 'Content-Type': 'multipart/form-data' }
-        });
+        await API.post('/menu', data);
       }
       setShowModal(false);
       fetchMenuItems();
@@ -319,7 +316,7 @@ export default function MenuPage() {
                     <td style={{ padding: '0.85rem 1rem' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                         {item.image ? (
-                          <img src={item.image} alt={item.name} style={{ width: '42px', height: '42px', borderRadius: '8px', objectFit: 'cover' }} />
+                          <img src={resolveUploadUrl(item.image)} alt={item.name} style={{ width: '42px', height: '42px', borderRadius: '8px', objectFit: 'cover' }} />
                         ) : (
                           <div style={{ width: '42px', height: '42px', borderRadius: '8px', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem' }}>
                             🍲
@@ -599,7 +596,7 @@ export default function MenuPage() {
                 <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', marginBottom: '0.3rem' }}>Item Image</label>
                 <input type="file" accept="image/*" onChange={handleImageChange} style={{ width: '100%' }} />
                 {previewImage && (
-                  <img src={previewImage} alt="Preview" style={{ width: '80px', height: '80px', objectFit: 'cover', borderRadius: '8px', marginTop: '0.5rem' }} />
+                  <img src={previewImage.startsWith('blob:') ? previewImage : resolveUploadUrl(previewImage)} alt="Preview" style={{ width: '80px', height: '80px', objectFit: 'cover', borderRadius: '8px', marginTop: '0.5rem' }} />
                 )}
               </div>
 

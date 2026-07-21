@@ -1,6 +1,13 @@
 const MenuItem = require('../models/MenuItem');
 const { getTenantAdminId } = require('../middleware/tenantMiddleware');
 
+const parseBool = (val, defaultVal = false) => {
+  if (val === undefined || val === null || val === '') return defaultVal;
+  if (val === true || val === 'true') return true;
+  if (val === false || val === 'false') return false;
+  return defaultVal;
+};
+
 // @desc Get all menu items (filtered strictly by logged-in adminId)
 // @route GET /api/menu
 exports.getMenuItems = async (req, res, next) => {
@@ -64,8 +71,8 @@ exports.createMenuItem = async (req, res, next) => {
       fullPrice: fullPrice || 0,
       fixedPrice: fixedPrice || 0,
       preparationTime: preparationTime || 15,
-      isAvailable: isAvailable !== undefined ? isAvailable : true,
-      isFeatured: isFeatured !== undefined ? isFeatured : false,
+      isAvailable: parseBool(isAvailable, true),
+      isFeatured: parseBool(isFeatured, false),
       status: status || 'Active',
       image
     });
@@ -102,7 +109,11 @@ exports.updateMenuItem = async (req, res, next) => {
 
     fieldsToUpdate.forEach(field => {
       if (req.body[field] !== undefined) {
-        item[field] = req.body[field];
+        if (field === 'isAvailable' || field === 'isFeatured') {
+          item[field] = parseBool(req.body[field], item[field]);
+        } else {
+          item[field] = req.body[field];
+        }
       }
     });
 

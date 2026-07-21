@@ -203,9 +203,7 @@ export default function AdminMembershipPage({ standalone = false }) {
       formData.append('planName', selectedPlan.name);
       formData.append('paymentProof', paymentProofFile);
 
-      const res = await API.post('/super-admin/request-renewal', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
+      const res = await API.post('/super-admin/request-renewal', formData);
       if (res.data.success) {
         const u = res.data.user;
         setRequested(true);

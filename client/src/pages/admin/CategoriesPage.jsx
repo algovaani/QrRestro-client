@@ -3,6 +3,7 @@ import API from '../../services/api';
 import Sidebar from '../../components/common/Sidebar';
 import Header from '../../components/common/Header';
 import { Plus, Edit2, Trash2, Image, Layers } from 'lucide-react';
+import { resolveUploadUrl } from '../../utils/uploadUrl';
 
 export default function CategoriesPage() {
   const [categories, setCategories] = useState([]);
@@ -61,7 +62,7 @@ export default function CategoriesPage() {
       status: cat.status
     });
     setImageFile(null);
-    setPreviewImage(cat.image || '');
+    setPreviewImage(cat.image ? resolveUploadUrl(cat.image) : '');
     setModalError('');
     setShowModal(true);
   };
@@ -89,13 +90,9 @@ export default function CategoriesPage() {
 
     try {
       if (editingCategory) {
-        await API.put(`/categories/${editingCategory._id}`, data, {
-          headers: { 'Content-Type': 'multipart/form-data' }
-        });
+        await API.put(`/categories/${editingCategory._id}`, data);
       } else {
-        await API.post('/categories', data, {
-          headers: { 'Content-Type': 'multipart/form-data' }
-        });
+        await API.post('/categories', data);
       }
       setShowModal(false);
       fetchCategories();
@@ -146,6 +143,13 @@ export default function CategoriesPage() {
                   </div>
 
                   <h3 style={{ fontSize: '1.1rem', fontWeight: '700', color: 'var(--secondary)' }}>{cat.name}</h3>
+                  {cat.image && (
+                    <img
+                      src={resolveUploadUrl(cat.image)}
+                      alt={cat.name}
+                      style={{ width: '100%', height: '120px', objectFit: 'cover', borderRadius: '10px', marginBottom: '0.65rem' }}
+                    />
+                  )}
                   <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', margin: '0.3rem 0 1rem 0' }}>
                     {cat.description || 'No description added'}
                   </p>
@@ -238,7 +242,7 @@ export default function CategoriesPage() {
                 <input type="file" accept="image/*" onChange={handleImageChange} style={{ width: '100%' }} />
                 {previewImage && (
                   <img
-                    src={previewImage}
+                    src={previewImage.startsWith('blob:') ? previewImage : resolveUploadUrl(previewImage)}
                     alt="Preview"
                     style={{ width: '80px', height: '80px', objectFit: 'cover', borderRadius: '8px', marginTop: '0.5rem' }}
                   />
