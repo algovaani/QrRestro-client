@@ -63,9 +63,24 @@ const emitMembershipRenewalRequest = (admin) => {
     email: admin.email,
     planName: admin.planName,
     requestedPlanName: admin.requestedPlanName || '',
-    renewalRequestDate: admin.renewalRequestDate
+    renewalRequestDate: admin.renewalRequestDate,
+    renewalPaymentProof: admin.renewalPaymentProof || ''
   };
+  console.log(`Emitting membership_renewal_request for ${payload.restaurantName} to super_admin room`);
   ioInstance.to('super_admin').emit('membership_renewal_request', payload);
+};
+
+const emitMembershipRenewalRejected = (admin, reason) => {
+  if (!ioInstance || !admin?._id) return;
+  const payload = {
+    adminId: String(admin._id),
+    renewalRequested: false,
+    requestedPlanName: '',
+    renewalRejectionReason: reason || '',
+    renewalRejectedAt: admin.renewalRejectedAt,
+    message: reason || 'Aapki membership request reject ho gayi. Sahi payment screenshot ke saath dubara try karein.'
+  };
+  ioInstance.to(getAdminRoom(String(admin._id))).emit('membership_renewal_rejected', payload);
 };
 
 const emitMembershipActivated = (admin) => {
@@ -128,5 +143,6 @@ module.exports = {
   emitMembershipRenewalRequest,
   emitMembershipActivated,
   emitMembershipOfferSent,
+  emitMembershipRenewalRejected,
   emitAdminStatusChanged
 };

@@ -1,5 +1,5 @@
 const User = require('../models/User');
-const { emitMembershipRenewalRequest, emitMembershipActivated, emitMembershipOfferSent, emitAdminStatusChanged } = require('../socket/socketHandler');
+const { emitMembershipRenewalRequest, emitMembershipActivated, emitMembershipOfferSent, emitMembershipRenewalRejected, emitAdminStatusChanged } = require('../socket/socketHandler');
 const Setting = require('../models/Setting');
 const Table = require('../models/Table');
 const Category = require('../models/Category');
@@ -260,6 +260,9 @@ exports.renewAdminMembership = async (req, res, next) => {
     admin.renewalRequested = false;
     admin.renewalRequestDate = null;
     admin.requestedPlanName = '';
+    admin.renewalPaymentProof = '';
+    admin.renewalRejectionReason = '';
+    admin.renewalRejectedAt = null;
     admin.membershipOfferSent = false;
     admin.membershipOfferPlanName = '';
     admin.membershipOfferSentAt = null;
@@ -359,27 +362,87 @@ exports.requestRenewal = async (req, res, next) => {
       return res.status(404).json({ success: false, message: 'User not found' });
     }
 
-    const { planName } = req.body;
+    const planName = req.body?.planName;
+
+    if (!planName) {
+      return res.status(400).json({ success: false, message: 'Please select a membership plan.' });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: 'Payment screenshot upload karein — UPI payment ka proof zaroori hai.'
+      });
+    }
 
     user.renewalRequested = true;
     user.renewalRequestDate = new Date();
-    if (planName) user.requestedPlanName = String(planName).trim();
+    user.requestedPlanName = String(planName).trim();
+    user.renewalPaymentProof = `/uploads/${req.file.filename}`;
+    user.renewalRejectionReason = '';
+    user.renewalRejectedAt = null;
+
+    if (!user.isActive && !user.membershipOfferSent) {
+      user.membershipOfferSent = true;
+      user.membershipOfferPlanName = user.requestedPlanName || user.planName || 'Monthly Plan';
+      user.membershipOfferSentAt = new Date();
+    }
+
     await user.save();
 
     emitMembershipRenewalRequest(user);
 
     res.json({
       success: true,
-      message: `Membership renewal request submitted${planName ? ` for ${planName}` : ''}! Super Admin will reactivate after payment verification.`,
+      message: `Membership renewal request submitted for ${planName}! Super Admin payment verify karke activate karenge.`,
       user: {
         _id: user._id,
         renewalRequested: user.renewalRequested,
         renewalRequestDate: user.renewalRequestDate,
         requestedPlanName: user.requestedPlanName,
+        renewalPaymentProof: user.renewalPaymentProof,
         planName: user.planName,
         planStatus: user.planStatus,
         subscriptionEndsAt: user.subscriptionEndsAt
       }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc Super Admin rejects membership renewal request
+// @route PATCH /api/super-admin/admins/:id/reject-renewal
+exports.rejectRenewal = async (req, res, next) => {
+  try {
+    const { reason } = req.body;
+
+    const admin = await User.findById(req.params.id);
+    if (!admin || admin.role !== 'Admin') {
+      return res.status(404).json({ success: false, message: 'Admin account not found' });
+    }
+
+    if (!admin.renewalRequested) {
+      return res.status(400).json({ success: false, message: 'Is admin ki koi pending renewal request nahi hai.' });
+    }
+
+    const rejectionReason = reason ? String(reason).trim() : 'Payment verify nahi hua. Sahi screenshot ke saath dubara try karein.';
+
+    admin.renewalRequested = false;
+    admin.renewalRequestDate = null;
+    admin.requestedPlanName = '';
+    admin.renewalPaymentProof = '';
+    admin.renewalRejectionReason = rejectionReason;
+    admin.renewalRejectedAt = new Date();
+
+    await admin.save();
+
+    emitMembershipRenewalRejected(admin, rejectionReason);
+
+    res.json({
+      success: true,
+      message: `Renewal request reject ho gayi — ${admin.restaurantName} ko notify kar diya gaya.`,
+      admin
     });
   } catch (error) {
     next(error);

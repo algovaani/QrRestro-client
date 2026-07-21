@@ -27,16 +27,19 @@ import {
   Key,
   Sparkles,
   QrCode,
-  Send
+  Send,
+  XCircle
 } from 'lucide-react';
 import { useSocket } from '../../context/SocketContext';
 import NotificationToasts from '../../components/common/NotificationToasts';
+import AdminNotificationBell from '../../components/common/AdminNotificationBell';
 import UpiQrDisplay from '../../components/common/UpiQrDisplay';
+import { resolveUploadUrl } from '../../utils/uploadUrl';
 
 export default function SuperAdminDashboard() {
   const { user, logout, updateUser } = useAuth();
   const navigate = useNavigate();
-  const { socket, notifications, removeNotification } = useSocket();
+  const { socket, notifications, removeNotification, isConnected } = useSocket();
 
   const [stats, setStats] = useState({
     totalAdmins: 0,
@@ -81,6 +84,8 @@ export default function SuperAdminDashboard() {
   const [renewingAdmin, setRenewingAdmin] = useState(null);
   const [renewPlanName, setRenewPlanName] = useState('Monthly Plan');
   const [renewDays, setRenewDays] = useState(30);
+  const [rejectingAdmin, setRejectingAdmin] = useState(null);
+  const [rejectReason, setRejectReason] = useState('');
 
   // Plan Management Modal State
   const [showPlanModal, setShowPlanModal] = useState(false);
@@ -124,11 +129,23 @@ export default function SuperAdminDashboard() {
   }, []);
 
   useEffect(() => {
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        fetchSuperAdminData(true);
+      }
+    }, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
     if (!socket) return;
 
-    const onRenewalRequest = () => {
+    const onRenewalRequest = (data) => {
       fetchSuperAdminData();
       setActiveTab('renewals');
+      const name = data?.restaurantName || data?.adminName || 'Restaurant admin';
+      const plan = data?.requestedPlanName ? ` (${data.requestedPlanName})` : '';
+      showToast('success', `📋 ${name} ne membership renewal request bheji${plan} — payment screenshot attached!`);
     };
 
     socket.on('membership_renewal_request', onRenewalRequest);
@@ -140,8 +157,8 @@ export default function SuperAdminDashboard() {
     setTimeout(() => setToast({ type: '', message: '' }), 4000);
   };
 
-  const fetchSuperAdminData = async () => {
-    setLoading(true);
+  const fetchSuperAdminData = async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const [statsRes, adminsRes, plansRes] = await Promise.all([
         API.get('/super-admin/stats'),
@@ -154,9 +171,11 @@ export default function SuperAdminDashboard() {
       if (plansRes.data.success) setPlans(plansRes.data.plans);
     } catch (err) {
       console.error('Super Admin fetch error:', err);
-      showToast('error', err.response?.data?.message || 'Failed to load Super Admin data');
+      if (!silent) {
+        showToast('error', err.response?.data?.message || 'Failed to load Super Admin data');
+      }
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
@@ -264,6 +283,27 @@ export default function SuperAdminDashboard() {
       }
     } catch (err) {
       showToast('error', err.response?.data?.message || 'Error renewing membership');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleRejectRenew = async () => {
+    if (!rejectingAdmin) return;
+    setActionLoading(true);
+    try {
+      const res = await API.patch(`/super-admin/admins/${rejectingAdmin._id}/reject-renewal`, {
+        reason: rejectReason.trim() || undefined
+      });
+      if (res.data.success) {
+        setRejectingAdmin(null);
+        setRejectReason('');
+        setRenewingAdmin(null);
+        showToast('success', res.data.message || 'Renewal request reject ho gayi.');
+        fetchSuperAdminData();
+      }
+    } catch (err) {
+      showToast('error', err.response?.data?.message || 'Error rejecting renewal request');
     } finally {
       setActionLoading(false);
     }
@@ -590,7 +630,21 @@ export default function SuperAdminDashboard() {
           </h2>
 
           <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
-            <button onClick={fetchSuperAdminData} disabled={loading || actionLoading} className="btn btn-secondary btn-sm" title="Refresh Data">
+            <div
+              className={`admin-header-sync${isConnected ? ' is-connected' : ' is-disconnected'}`}
+              title={isConnected ? 'Live notifications connected' : 'Reconnecting…'}
+            >
+              <BellRing size={16} />
+              <span>{isConnected ? 'Live' : 'Offline'}</span>
+            </div>
+
+            <AdminNotificationBell
+              onNavigate={(path) => {
+                if (path.includes('super-admin')) setActiveTab('renewals');
+              }}
+            />
+
+            <button onClick={() => fetchSuperAdminData()} disabled={loading || actionLoading} className="btn btn-secondary btn-sm" title="Refresh Data">
               <RefreshCw size={16} className={loading ? 'spin-icon' : ''} /> Refresh
             </button>
 
@@ -607,6 +661,29 @@ export default function SuperAdminDashboard() {
         </header>
 
         <div className="admin-content">
+
+          {stats.renewalRequestsCount > 0 && (
+            <div
+              role="alert"
+              onClick={() => setActiveTab('renewals')}
+              style={{
+                marginBottom: '1rem',
+                padding: '0.85rem 1rem',
+                borderRadius: '12px',
+                background: '#fff7ed',
+                border: '1px solid #fdba74',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.65rem',
+                fontWeight: '700',
+                color: '#9a3412'
+              }}
+            >
+              <BellRing size={20} />
+              {stats.renewalRequestsCount} admin ne membership renewal request bheji hai — click karke dekhein
+            </div>
+          )}
 
           {toast.message && (
             <div style={{
@@ -943,6 +1020,23 @@ export default function SuperAdminDashboard() {
                             ))}
                           </div>
                         )}
+
+                        {admin.renewalPaymentProof && (
+                          <div className="membership-sa-payment-proof">
+                            <span className="membership-sa-proof-label">Payment Screenshot:</span>
+                            <a
+                              href={resolveUploadUrl(admin.renewalPaymentProof)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                            >
+                              <img
+                                src={resolveUploadUrl(admin.renewalPaymentProof)}
+                                alt="Payment proof"
+                                className="membership-sa-proof-thumb"
+                              />
+                            </a>
+                          </div>
+                        )}
                       </div>
 
                       <div className="membership-sa-request-actions">
@@ -957,10 +1051,23 @@ export default function SuperAdminDashboard() {
                           }}
                           disabled={actionLoading}
                           className="btn btn-primary"
-                          style={{ background: '#10b981', width: '100%' }}
+                          style={{ background: '#10b981', flex: 1 }}
                         >
                           <CheckCircle2 size={16} />
-                          Review & Activate Membership
+                          Approve & Activate
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setRejectingAdmin(admin);
+                            setRejectReason('');
+                          }}
+                          disabled={actionLoading}
+                          className="btn btn-secondary"
+                          style={{ color: 'var(--danger)', borderColor: '#fecaca', flex: 1 }}
+                        >
+                          <XCircle size={16} />
+                          Reject
                         </button>
                       </div>
                     </div>
@@ -1339,6 +1446,25 @@ export default function SuperAdminDashboard() {
               )}
             </p>
 
+            {renewingAdmin?.renewalPaymentProof && (
+              <div className="membership-sa-modal-proof">
+                <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '700', marginBottom: '0.4rem' }}>
+                  Payment Screenshot
+                </label>
+                <a
+                  href={resolveUploadUrl(renewingAdmin.renewalPaymentProof)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <img
+                    src={resolveUploadUrl(renewingAdmin.renewalPaymentProof)}
+                    alt="Payment proof"
+                    className="membership-sa-proof-full"
+                  />
+                </a>
+              </div>
+            )}
+
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem', marginBottom: '1.25rem' }}>
               <div>
                 <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '700', marginBottom: '0.3rem' }}>Select Membership Plan</label>
@@ -1371,10 +1497,24 @@ export default function SuperAdminDashboard() {
               </div>
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', flexWrap: 'wrap' }}>
               <button type="button" onClick={() => setRenewingAdmin(null)} className="btn btn-secondary">
                 Cancel
               </button>
+              {renewingAdmin?.renewalRequested && (
+                <button
+                  type="button"
+                  disabled={actionLoading}
+                  onClick={() => {
+                    setRejectingAdmin(renewingAdmin);
+                    setRejectReason('');
+                  }}
+                  className="btn btn-secondary"
+                  style={{ color: 'var(--danger)' }}
+                >
+                  <XCircle size={16} /> Reject
+                </button>
+              )}
               <button
                 type="button"
                 disabled={actionLoading || !renewDays || Number(renewDays) <= 0}
@@ -1386,6 +1526,49 @@ export default function SuperAdminDashboard() {
                   : renewingAdmin?.planStatus === 'Expired' || renewingAdmin?.daysRemaining <= 0
                     ? 'Confirm Recharge & Reactivate'
                     : 'Confirm Membership Renewal'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* REJECT RENEWAL MODAL */}
+      {rejectingAdmin && (
+        <div className="modal-overlay" onClick={() => setRejectingAdmin(null)}>
+          <div className="modal-card" style={{ maxWidth: '440px' }} onClick={(e) => e.stopPropagation()}>
+            <h3 style={{ fontSize: '1.15rem', fontWeight: '800', marginBottom: '0.5rem', color: 'var(--danger)' }}>
+              Reject Renewal Request
+            </h3>
+            <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>
+              <strong>{rejectingAdmin.restaurantName}</strong> ki membership request reject karein?
+              Admin ko reason dikhega aur woh dubara screenshot upload kar sakta hai.
+            </p>
+
+            <div style={{ marginBottom: '1.25rem' }}>
+              <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '700', marginBottom: '0.3rem' }}>
+                Rejection Reason (optional)
+              </label>
+              <textarea
+                value={rejectReason}
+                onChange={(e) => setRejectReason(e.target.value)}
+                placeholder="e.g. Payment amount galat hai, screenshot clear nahi hai..."
+                rows={3}
+                style={{ width: '100%', resize: 'vertical' }}
+              />
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
+              <button type="button" onClick={() => setRejectingAdmin(null)} className="btn btn-secondary">
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={actionLoading}
+                onClick={handleRejectRenew}
+                className="btn btn-primary"
+                style={{ background: 'var(--danger)' }}
+              >
+                {actionLoading ? 'Rejecting...' : 'Confirm Reject'}
               </button>
             </div>
           </div>

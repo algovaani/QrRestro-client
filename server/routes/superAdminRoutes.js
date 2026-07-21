@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const upload = require('../middleware/uploadMiddleware');
 const { protect, protectAllowExpired, isSuperAdmin } = require('../middleware/authMiddleware');
 const {
   getSuperAdminStats,
@@ -10,6 +11,7 @@ const {
   renewAdminMembership,
   reactivateAdminMembership,
   sendMembershipOffer,
+  rejectRenewal,
   deleteAdmin,
   requestRenewal
 } = require('../controllers/superAdminController');
@@ -21,8 +23,8 @@ const {
   deletePlan
 } = require('../controllers/membershipPlanController');
 
-// Restaurant Admin — renewal even when plan expired
-router.post('/request-renewal', protectAllowExpired, requestRenewal);
+// Restaurant Admin — renewal even when plan expired (with optional payment screenshot)
+router.post('/request-renewal', protectAllowExpired, upload.single('paymentProof'), requestRenewal);
 
 // Super Admin Only Protected Routes
 router.use(protect, isSuperAdmin);
@@ -34,6 +36,7 @@ router.post('/admins', createAdmin);
 router.put('/admins/:id', updateAdmin);
 router.patch('/admins/:id/toggle-status', toggleAdminStatus);
 router.patch('/admins/:id/renew', renewAdminMembership);
+router.patch('/admins/:id/reject-renewal', rejectRenewal);
 router.patch('/admins/:id/reactivate', reactivateAdminMembership);
 router.patch('/admins/:id/send-membership-offer', sendMembershipOffer);
 router.delete('/admins/:id', deleteAdmin);

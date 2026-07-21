@@ -1,8 +1,9 @@
 import React from 'react';
-import { Bell, Wifi } from 'lucide-react';
+import { Wifi } from 'lucide-react';
 import { useSocket } from '../../context/SocketContext';
 import { useNavigate } from 'react-router-dom';
 import NotificationToasts from './NotificationToasts';
+import AdminNotificationBell from './AdminNotificationBell';
 
 export default function Header({ title }) {
   const { notifications, removeNotification, isConnected } = useSocket();
@@ -22,12 +23,10 @@ export default function Header({ title }) {
             <span>{isConnected ? 'Live Sync' : 'Offline'}</span>
           </div>
 
-          <div className={`admin-header-bell${notifications.length > 0 ? ' has-notifications' : ''}`}>
-            <Bell size={18} />
-            {notifications.length > 0 && (
-              <span className="admin-header-badge">{notifications.length}</span>
-            )}
-          </div>
+          <AdminNotificationBell
+            onViewOrder={() => navigate('/admin/orders')}
+            onNavigate={(path) => navigate(path)}
+          />
         </div>
       </header>
 

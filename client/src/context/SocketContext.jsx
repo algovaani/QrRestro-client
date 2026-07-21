@@ -91,9 +91,6 @@ export const SocketProvider = ({ children }) => {
         }
         return [newNotif, ...prev];
       });
-      setTimeout(() => {
-        setNotifications((prev) => prev.filter((n) => n.id !== newNotif.id));
-      }, 8000);
     };
 
     const handlePaymentPending = (order) => {
@@ -114,9 +111,6 @@ export const SocketProvider = ({ children }) => {
         }
         return [newNotif, ...prev];
       });
-      setTimeout(() => {
-        setNotifications((prev) => prev.filter((n) => n.id !== newNotif.id));
-      }, 12000);
     };
 
     const handlePaymentSuccess = (order) => {
@@ -141,9 +135,6 @@ export const SocketProvider = ({ children }) => {
         if (recent) return prev;
         return [newNotif, ...prev];
       });
-      setTimeout(() => {
-        setNotifications((prev) => prev.filter((n) => n.id !== newNotif.id));
-      }, 8000);
     };
 
     const handleMembershipOfferSent = (data) => {
@@ -165,9 +156,6 @@ export const SocketProvider = ({ children }) => {
         actionPath: '/admin/membership'
       };
       setNotifications((prev) => [newNotif, ...prev]);
-      setTimeout(() => {
-        setNotifications((prev) => prev.filter((n) => n.id !== newNotif.id));
-      }, 15000);
     };
 
     const handleMembershipActivated = (data) => {
@@ -196,9 +184,6 @@ export const SocketProvider = ({ children }) => {
         actionPath: '/admin/dashboard'
       };
       setNotifications((prev) => [newNotif, ...prev]);
-      setTimeout(() => {
-        setNotifications((prev) => prev.filter((n) => n.id !== newNotif.id));
-      }, 15000);
     };
 
     const handleMembershipRenewalRequest = (data) => {
@@ -206,19 +191,40 @@ export const SocketProvider = ({ children }) => {
       if (currentUser?.role !== 'SuperAdmin') return;
       playOrderChime();
       vibrateAlert();
+      const proofNote = data.renewalPaymentProof ? ' (payment screenshot attached)' : '';
       const newNotif = {
         id: `membership_req_${data.adminId}_${Date.now()}`,
         type: 'membership_renewal_request',
         title: '📋 NEW MEMBERSHIP REQUEST',
-        message: `${data.restaurantName} requested ${data.requestedPlanName || 'membership renewal'}`,
+        message: `${data.restaurantName} requested ${data.requestedPlanName || 'membership renewal'}${proofNote}`,
         timestamp: new Date(),
         adminData: data,
         actionPath: '/super-admin/dashboard'
       };
       setNotifications((prev) => [newNotif, ...prev]);
-      setTimeout(() => {
-        setNotifications((prev) => prev.filter((n) => n.id !== newNotif.id));
-      }, 12000);
+    };
+
+    const handleMembershipRenewalRejected = (data) => {
+      const { user: currentUser, tenantId: tid, updateUser: patchUser } = authRef.current;
+      if (currentUser?.role !== 'Admin' || !tid || String(data.adminId) !== String(tid)) return;
+      playOrderChime();
+      vibrateAlert();
+      patchUser?.({
+        renewalRequested: false,
+        requestedPlanName: '',
+        renewalPaymentProof: '',
+        renewalRejectionReason: data.renewalRejectionReason || data.message || '',
+        renewalRejectedAt: data.renewalRejectedAt
+      });
+      const newNotif = {
+        id: `membership_rejected_${Date.now()}`,
+        type: 'membership_renewal_rejected',
+        title: '❌ MEMBERSHIP REQUEST REJECTED',
+        message: data.message || data.renewalRejectionReason || 'Aapki request reject ho gayi. Dubara screenshot upload karein.',
+        timestamp: new Date(),
+        actionPath: '/subscription-expired'
+      };
+      setNotifications((prev) => [newNotif, ...prev]);
     };
 
     const handleAdminStatusChanged = (data) => {
@@ -245,9 +251,6 @@ export const SocketProvider = ({ children }) => {
           actionPath: '/subscription-expired'
         };
         setNotifications((prev) => [newNotif, ...prev]);
-        setTimeout(() => {
-          setNotifications((prev) => prev.filter((n) => n.id !== newNotif.id));
-        }, 15000);
 
         if (
           window.location.pathname.startsWith('/admin') &&
@@ -272,6 +275,7 @@ export const SocketProvider = ({ children }) => {
     newSocket.on('payment_success', handlePaymentSuccess);
     newSocket.on('membership_activated', handleMembershipActivated);
     newSocket.on('membership_renewal_request', handleMembershipRenewalRequest);
+    newSocket.on('membership_renewal_rejected', handleMembershipRenewalRejected);
     newSocket.on('membership_offer_sent', handleMembershipOfferSent);
     newSocket.on('admin_status_changed', handleAdminStatusChanged);
 
@@ -283,6 +287,7 @@ export const SocketProvider = ({ children }) => {
       newSocket.off('payment_success', handlePaymentSuccess);
       newSocket.off('membership_activated', handleMembershipActivated);
       newSocket.off('membership_renewal_request', handleMembershipRenewalRequest);
+      newSocket.off('membership_renewal_rejected', handleMembershipRenewalRejected);
       newSocket.off('membership_offer_sent', handleMembershipOfferSent);
       newSocket.off('admin_status_changed', handleAdminStatusChanged);
       newSocket.disconnect();

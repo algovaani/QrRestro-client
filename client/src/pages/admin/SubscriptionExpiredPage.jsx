@@ -1,31 +1,58 @@
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useSocket } from '../../context/SocketContext';
-import AdminMembershipRoute from './AdminMembershipRoute';
-import MembershipWaitingPage from './MembershipWaitingPage';
+import AdminMembershipPage from './AdminMembershipPage';
 import NotificationToasts from '../../components/common/NotificationToasts';
-import { canAccessMembershipPage } from '../../utils/membershipAccess';
+import AdminNotificationBell from '../../components/common/AdminNotificationBell';
+import { isAdminAccountLocked } from '../../utils/membershipAccess';
+import { getPostLoginPath } from '../../utils/adminAccess';
+import API from '../../services/api';
 import { UserX, LogOut } from 'lucide-react';
 
 export default function SubscriptionExpiredPage() {
-  const { user, logout } = useAuth();
+  const { user, token, authReady, logout, updateUser } = useAuth();
   const navigate = useNavigate();
   const { notifications, removeNotification } = useSocket();
+  const [ready, setReady] = useState(false);
 
-  if (canAccessMembershipPage(user)) {
+  useEffect(() => {
+    if (!authReady) return;
+
+    if (!token || !user) {
+      navigate('/admin/login', { replace: true });
+      return;
+    }
+
+    if (user.role !== 'Admin') {
+      navigate(getPostLoginPath(user), { replace: true });
+      return;
+    }
+
+    let cancelled = false;
+    API.get('/auth/subscription-status')
+      .then((res) => {
+        if (!cancelled && res.data.success && res.data.user) {
+          updateUser(res.data.user);
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setReady(true);
+      });
+
+    return () => { cancelled = true; };
+  }, [authReady, token, user, navigate, updateUser]);
+
+  if (!authReady || !ready || !user) {
     return (
-      <>
-        <AdminMembershipRoute standalone />
-        <NotificationToasts
-          notifications={notifications}
-          removeNotification={removeNotification}
-          onNavigate={(path) => navigate(path)}
-        />
-      </>
+      <div className="membership-standalone-wrap" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <p style={{ color: 'var(--text-muted)' }}>Loading membership...</p>
+      </div>
     );
   }
 
-  if (user?.isActive === false) {
+  if (isAdminAccountLocked(user)) {
     return (
       <div className="membership-standalone-wrap">
         <div className="membership-waiting">
@@ -36,7 +63,7 @@ export default function SubscriptionExpiredPage() {
           <p>
             Super Admin ne aapka account band kar diya hai.
             <br />
-            Membership renew ka offer aane ka wait karein ya Super Admin se contact karein.
+            Unse membership offer ya reactivate karne ko kahein.
           </p>
           <button
             type="button"
@@ -54,5 +81,20 @@ export default function SubscriptionExpiredPage() {
     );
   }
 
-  return <MembershipWaitingPage standalone />;
+  return (
+    <>
+      <div className="membership-standalone-topbar">
+        <AdminNotificationBell
+          onViewOrder={() => navigate('/admin/orders')}
+          onNavigate={(path) => navigate(path)}
+        />
+      </div>
+      <AdminMembershipPage standalone />
+      <NotificationToasts
+        notifications={notifications}
+        removeNotification={removeNotification}
+        onNavigate={(path) => navigate(path)}
+      />
+    </>
+  );
 }

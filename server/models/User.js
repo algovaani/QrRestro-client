@@ -83,6 +83,20 @@ const userSchema = new mongoose.Schema({
   membershipOfferSentAt: {
     type: Date,
     default: null
+  },
+  /** Payment screenshot uploaded with renewal request */
+  renewalPaymentProof: {
+    type: String,
+    default: ''
+  },
+  /** Super Admin rejection reason (cleared on new request) */
+  renewalRejectionReason: {
+    type: String,
+    default: ''
+  },
+  renewalRejectedAt: {
+    type: Date,
+    default: null
   }
 }, {
   timestamps: true

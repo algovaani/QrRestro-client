@@ -24,6 +24,24 @@ API.interceptors.response.use(
         window.location.href = '/admin/login';
       }
     }
+    if (error.response?.status === 403 && error.response?.data?.code === 'MEMBERSHIP_EXPIRED') {
+      const saved = localStorage.getItem('user');
+      const data = error.response.data;
+      if (saved) {
+        try {
+          const u = JSON.parse(saved);
+          u.planStatus = 'Expired';
+          u.isExpired = true;
+          u.renewalRequested = Boolean(data.renewalRequested);
+          localStorage.setItem('user', JSON.stringify(u));
+          window.dispatchEvent(new CustomEvent('membership-expired', { detail: data }));
+          const path = window.location.pathname;
+          if (!path.includes('subscription-expired') && !path.includes('/admin/membership')) {
+            window.location.href = '/subscription-expired';
+          }
+        } catch { /* ignore */ }
+      }
+    }
     if (error.response?.status === 403 && error.response?.data?.code === 'ACCOUNT_DEACTIVATED') {
       const saved = localStorage.getItem('user');
       const data = error.response.data;

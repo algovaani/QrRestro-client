@@ -22,7 +22,10 @@ import {
   Clock,
   Crown,
   Hourglass,
-  BadgeCheck
+  BadgeCheck,
+  Upload,
+  Image as ImageIcon,
+  XCircle
 } from 'lucide-react';
 import { getDaysRemaining, formatExpiryDate, getMembershipDaysLabel, resolveMembershipDisplay } from '../../utils/membershipDays';
 
@@ -43,6 +46,10 @@ export default function AdminMembershipPage({ standalone = false }) {
   const [msg, setMsg] = useState('');
   const [copiedUpi, setCopiedUpi] = useState('');
   const [showPlans, setShowPlans] = useState(!user?.renewalRequested);
+  const [paymentProofFile, setPaymentProofFile] = useState(null);
+  const [paymentProofPreview, setPaymentProofPreview] = useState('');
+  const [rejectionReason, setRejectionReason] = useState(user?.renewalRejectionReason || '');
+  const [paymentProofUrl, setPaymentProofUrl] = useState(user?.renewalPaymentProof || '');
 
   const loadData = async () => {
     setLoading(true);
@@ -74,6 +81,8 @@ export default function AdminMembershipPage({ standalone = false }) {
         setRequestDate(u.renewalRequestDate);
         setRequestedPlanName(u.requestedPlanName || '');
         setShowPlans(!u.renewalRequested);
+        setPaymentProofUrl(u.renewalPaymentProof || '');
+        setRejectionReason(u.renewalRejectionReason || '');
         if (u.requestedPlanName) {
           const match = (plansRes.data.plans || []).find((p) => p.name === u.requestedPlanName);
           if (match) setSelectedPlan(match);
@@ -98,14 +107,42 @@ export default function AdminMembershipPage({ standalone = false }) {
       setShowPlans(false);
       setRequestDate(null);
       setRequestedPlanName('');
+      setPaymentProofFile(null);
+      setPaymentProofPreview('');
+      setPaymentProofUrl('');
+      setRejectionReason('');
       setSubscription((prev) => ({ ...prev, ...data, isExpired: false }));
       setMsg('🎉 Membership activate ho gayi! Dashboard khul raha hai...');
       setTimeout(() => navigate('/admin/dashboard'), 1500);
     };
 
+    const onRejected = (data) => {
+      setRequested(false);
+      setShowPlans(true);
+      setRequestDate(null);
+      setRequestedPlanName('');
+      setPaymentProofFile(null);
+      setPaymentProofPreview('');
+      setPaymentProofUrl('');
+      const reason = data?.renewalRejectionReason || data?.message || 'Request reject ho gayi.';
+      setRejectionReason(reason);
+      updateUser({
+        renewalRequested: false,
+        requestedPlanName: '',
+        renewalPaymentProof: '',
+        renewalRejectionReason: reason,
+        renewalRejectedAt: data?.renewalRejectedAt
+      });
+      setMsg(`❌ Request reject: ${reason}`);
+    };
+
     socket.on('membership_activated', onActivated);
-    return () => socket.off('membership_activated', onActivated);
-  }, [socket, navigate]);
+    socket.on('membership_renewal_rejected', onRejected);
+    return () => {
+      socket.off('membership_activated', onActivated);
+      socket.off('membership_renewal_rejected', onRejected);
+    };
+  }, [socket, navigate, updateUser]);
 
   const isExpired =
     subscription?.isExpired ||
@@ -129,16 +166,45 @@ export default function AdminMembershipPage({ standalone = false }) {
     setTimeout(() => setCopiedUpi(''), 2000);
   };
 
+  const handlePaymentProofChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      setMsg('Sirf image file upload karein (JPG, PNG, etc.)');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setMsg('Image 5MB se chhoti honi chahiye.');
+      return;
+    }
+    setPaymentProofFile(file);
+    setPaymentProofPreview(URL.createObjectURL(file));
+    setMsg('');
+  };
+
+  const clearPaymentProof = () => {
+    setPaymentProofFile(null);
+    setPaymentProofPreview('');
+  };
+
   const handleRequestRenewal = async () => {
     if (!selectedPlan) {
       setMsg('Please select a membership plan first.');
       return;
     }
+    if (!paymentProofFile) {
+      setMsg('Payment ka screenshot upload karein — bina proof ke request submit nahi hogi.');
+      return;
+    }
     setSubmitting(true);
     setMsg('');
     try {
-      const res = await API.post('/super-admin/request-renewal', {
-        planName: selectedPlan.name
+      const formData = new FormData();
+      formData.append('planName', selectedPlan.name);
+      formData.append('paymentProof', paymentProofFile);
+
+      const res = await API.post('/super-admin/request-renewal', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
       });
       if (res.data.success) {
         const u = res.data.user;
@@ -146,10 +212,17 @@ export default function AdminMembershipPage({ standalone = false }) {
         setShowPlans(false);
         setRequestDate(u.renewalRequestDate);
         setRequestedPlanName(u.requestedPlanName || selectedPlan.name);
+        setPaymentProofUrl(u.renewalPaymentProof || '');
+        setRejectionReason('');
+        setPaymentProofFile(null);
+        setPaymentProofPreview('');
         updateUser({
           renewalRequested: true,
           renewalRequestDate: u.renewalRequestDate,
-          requestedPlanName: u.requestedPlanName || selectedPlan.name
+          requestedPlanName: u.requestedPlanName || selectedPlan.name,
+          renewalPaymentProof: u.renewalPaymentProof || '',
+          renewalRejectionReason: '',
+          renewalRejectedAt: null
         });
         setMsg(`Request bhej di gayi — "${selectedPlan.name}" ke liye Super Admin review karenge.`);
       }
@@ -233,8 +306,18 @@ export default function AdminMembershipPage({ standalone = false }) {
       </div>
 
       {msg && (
-        <div className={`membership-alert ${msg.includes('active') || msg.includes('activate') ? 'membership-alert--success' : ''}`}>
+        <div className={`membership-alert ${msg.includes('active') || msg.includes('activate') ? 'membership-alert--success' : msg.includes('reject') ? 'membership-alert--danger' : ''}`}>
           {msg}
+        </div>
+      )}
+
+      {rejectionReason && !requested && (
+        <div className="membership-rejection-banner">
+          <XCircle size={18} />
+          <div>
+            <strong>Pehli request reject ho gayi</strong>
+            <p>{rejectionReason}</p>
+          </div>
         </div>
       )}
 
@@ -279,6 +362,12 @@ export default function AdminMembershipPage({ standalone = false }) {
               <div className="membership-request-meta">
                 <Clock size={14} />
                 Request date: {new Date(requestDate).toLocaleString('en-IN')}
+              </div>
+            )}
+
+            {paymentProofUrl && (
+              <div className="membership-proof-sent">
+                <ImageIcon size={14} /> Payment screenshot submit ho chuka hai — Super Admin verify kar rahe hain
               </div>
             )}
           </div>
@@ -342,7 +431,7 @@ export default function AdminMembershipPage({ standalone = false }) {
               {[
                 { n: 1, t: 'Plan Choose Karein', d: 'Neeche se apna plan select karein' },
                 { n: 2, t: 'QR Scan karke Pay Karein', d: 'PhonePe / GPay / Paytm se payment karein' },
-                { n: 3, t: 'Request Submit Karein', d: 'Payment ke baad renewal request bhejein' },
+                { n: 3, t: 'Screenshot Upload karein', d: 'Payment ka screenshot upload karke request bhejein' },
                 { n: 4, t: 'Activate Check Karein', d: 'Super Admin approve ke baad dashboard khulega' }
               ].map((s) => (
                 <div key={s.n} className="membership-step-row">
@@ -422,10 +511,37 @@ export default function AdminMembershipPage({ standalone = false }) {
 
           {!requested && (
             <div className="membership-submit-card">
-              <h3>Payment ke baad Request Submit karein</h3>
+              <h3>Payment ke baad Screenshot upload karein & Request Submit karein</h3>
+              <p className="membership-submit-hint">
+                UPI payment ka screenshot yahan upload karein — Super Admin isse verify karke plan activate karenge.
+              </p>
+
+              <div className="membership-proof-upload">
+                {paymentProofPreview ? (
+                  <div className="membership-proof-preview">
+                    <img src={paymentProofPreview} alt="Payment proof preview" />
+                    <button type="button" className="btn btn-secondary btn-sm" onClick={clearPaymentProof}>
+                      Change Screenshot
+                    </button>
+                  </div>
+                ) : (
+                  <label className="membership-proof-dropzone">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handlePaymentProofChange}
+                      hidden
+                    />
+                    <Upload size={28} />
+                    <span>Payment Screenshot Upload karein</span>
+                    <small>JPG, PNG — max 5MB</small>
+                  </label>
+                )}
+              </div>
+
               <button
                 onClick={handleRequestRenewal}
-                disabled={submitting || !selectedPlan}
+                disabled={submitting || !selectedPlan || !paymentProofFile}
                 className="btn btn-primary pulse-button membership-submit-btn"
               >
                 <Send size={18} />

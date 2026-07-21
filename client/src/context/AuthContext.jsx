@@ -45,8 +45,26 @@ export const AuthProvider = ({ children }) => {
         return updated;
       });
     };
+    const onExpired = (e) => {
+      setUser((prev) => {
+        if (!prev) return prev;
+        const detail = e.detail || {};
+        const updated = {
+          ...prev,
+          planStatus: 'Expired',
+          isExpired: true,
+          renewalRequested: Boolean(detail.renewalRequested ?? prev.renewalRequested)
+        };
+        localStorage.setItem('user', JSON.stringify(updated));
+        return updated;
+      });
+    };
     window.addEventListener('account-deactivated', onDeactivated);
-    return () => window.removeEventListener('account-deactivated', onDeactivated);
+    window.addEventListener('membership-expired', onExpired);
+    return () => {
+      window.removeEventListener('account-deactivated', onDeactivated);
+      window.removeEventListener('membership-expired', onExpired);
+    };
   }, []);
 
   useEffect(() => {
