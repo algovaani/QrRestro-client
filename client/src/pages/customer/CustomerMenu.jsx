@@ -138,8 +138,8 @@ export default function CustomerMenu() {
           tableNumber: res.data.tableNumber || tableNumber,
           settings: setting
         });
-        setCategories(res.data.categories);
-        setMenuItems(res.data.menuItems);
+        setCategories(res.data.categories || []);
+        setMenuItems(res.data.menuItems || []);
       }
     } catch (err) {
       setErrorMsg(err.response?.data?.message || 'Invalid Table QR Code. Please scan a valid restaurant table QR.');
@@ -242,8 +242,10 @@ export default function CustomerMenu() {
   };
 
   // Filter menu items
-  const filteredItems = menuItems.filter(item => {
-    const matchesCategory = activeCategory === 'all' || item.category?._id === activeCategory;
+  const filteredItems = (menuItems || []).filter(item => {
+    const categoryId = item.category?._id ?? item.category;
+    const matchesCategory =
+      activeCategory === 'all' || String(categoryId) === String(activeCategory);
     const matchesSearch = item.name.toLowerCase().includes(search.toLowerCase()) ||
                           (item.description && item.description.toLowerCase().includes(search.toLowerCase()));
     const matchesFoodType = foodTypeFilter === 'all' || item.foodType === foodTypeFilter;
@@ -375,15 +377,15 @@ export default function CustomerMenu() {
           {categories.map(cat => (
             <button
               key={cat._id}
-              onClick={() => setActiveCategory(cat._id)}
+              onClick={() => setActiveCategory(String(cat._id))}
               style={{
                 padding: '0.4rem 0.85rem',
                 borderRadius: '99px',
                 fontSize: '0.8rem',
                 fontWeight: '600',
                 whiteSpace: 'nowrap',
-                background: activeCategory === cat._id ? 'var(--primary)' : '#f1f5f9',
-                color: activeCategory === cat._id ? '#fff' : 'var(--secondary)'
+                background: String(activeCategory) === String(cat._id) ? 'var(--primary)' : '#f1f5f9',
+                color: String(activeCategory) === String(cat._id) ? '#fff' : 'var(--secondary)'
               }}
             >
               {cat.name}

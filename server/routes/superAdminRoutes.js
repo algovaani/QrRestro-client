@@ -23,6 +23,11 @@ const {
   deletePlan
 } = require('../controllers/membershipPlanController');
 
+const {
+  getPlatformSettings,
+  updatePlatformSettings
+} = require('../controllers/platformSettingsController');
+
 // Restaurant Admin — renewal even when plan expired (with optional payment screenshot)
 router.post('/request-renewal', protectAllowExpired, handleUpload('paymentProof'), requestRenewal);
 
@@ -46,5 +51,9 @@ router.get('/plans', getAllPlans);
 router.post('/plans', createPlan);
 router.put('/plans/:id', updatePlan);
 router.delete('/plans/:id', deletePlan);
+
+// Platform settings
+router.get('/platform-settings', getPlatformSettings);
+router.put('/platform-settings', updatePlatformSettings);
 
 module.exports = router;

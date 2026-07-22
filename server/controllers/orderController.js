@@ -1,13 +1,13 @@
 const Order = require('../models/Order');
-const { getTenantAdminId } = require('../middleware/tenantMiddleware');
+const { getTenantAdminId, buildTenantFilter, assertTenantOwnership } = require('../middleware/tenantMiddleware');
 const { emitOrderStatusUpdate, emitPaymentSuccess } = require('../socket/socketHandler');
 
 // @desc Get all orders (filtered strictly by logged in adminId)
 // @route GET /api/orders
 exports.getOrders = async (req, res, next) => {
   try {
-    const adminId = getTenantAdminId(req.user);
-    const filter = adminId ? { adminId } : {};
+    const filter = buildTenantFilter(req.user, res);
+    if (!filter) return;
 
     if (req.query.status) {
       filter.orderStatus = req.query.status;
@@ -36,6 +36,7 @@ exports.getOrderById = async (req, res, next) => {
     if (!order) {
       return res.status(404).json({ success: false, message: 'Order not found' });
     }
+    if (!assertTenantOwnership(order, req.user, res, 'Not authorized to view this order')) return;
     res.json({
       success: true,
       order
@@ -94,8 +95,8 @@ exports.updatePaymentStatus = async (req, res, next) => {
     order.paymentStatus = paymentStatus;
     if (paymentStatus === 'Paid') {
       order.paidAt = new Date();
-      if (order.orderStatus === 'New') {
-        order.orderStatus = 'Confirmed';
+      if (order.orderStatus !== 'Cancelled' && order.orderStatus !== 'Completed') {
+        order.orderStatus = 'Completed';
       }
     } else if (paymentStatus === 'Unpaid') {
       order.transactionId = '';
@@ -148,8 +149,8 @@ exports.deleteOrder = async (req, res, next) => {
 // @route GET /api/orders/kitchen
 exports.getKitchenOrders = async (req, res, next) => {
   try {
-    const adminId = getTenantAdminId(req.user);
-    const filter = adminId ? { adminId } : {};
+    const filter = buildTenantFilter(req.user, res);
+    if (!filter) return;
     filter.orderStatus = { $in: ['New', 'Confirmed', 'Preparing', 'Ready'] };
 
     const orders = await Order.find(filter).sort({ createdAt: 1 });

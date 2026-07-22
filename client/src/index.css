@@ -1291,6 +1291,63 @@ input:focus, select:focus, textarea:focus {
   font-size: 0.85rem;
 }
 
+.membership-support-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  flex-wrap: wrap;
+  margin: 1rem 0;
+  padding: 1rem 1.1rem;
+  border-radius: 14px;
+  border: 1px solid #bfdbfe;
+  background: linear-gradient(135deg, #eff6ff 0%, #f0fdf4 100%);
+}
+
+.membership-support-banner--compact {
+  margin: 0.85rem 0 0;
+}
+
+.membership-support-banner-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: #ffffff;
+  color: #0284c7;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.membership-support-banner-body {
+  flex: 1;
+  min-width: 180px;
+}
+
+.membership-support-banner-body strong {
+  display: block;
+  font-size: 0.9rem;
+  color: var(--secondary);
+  margin-bottom: 0.15rem;
+}
+
+.membership-support-banner-body p {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+.membership-support-banner-body span {
+  font-weight: 700;
+  color: #0284c7;
+}
+
+.membership-support-banner-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
 .membership-submit-card {
   background: #fff;
   border-radius: 16px;

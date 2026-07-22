@@ -159,8 +159,8 @@ exports.approvePayment = async (req, res, next) => {
 
     order.paymentStatus = 'Paid';
     order.paidAt = new Date();
-    if (order.orderStatus === 'New') {
-      order.orderStatus = 'Confirmed';
+    if (order.orderStatus !== 'Cancelled' && order.orderStatus !== 'Completed') {
+      order.orderStatus = 'Completed';
     }
 
     await order.save();
@@ -172,7 +172,7 @@ exports.approvePayment = async (req, res, next) => {
 
     res.json({
       success: true,
-      message: 'Payment approved and order confirmed',
+      message: 'Payment approved and order completed',
       order,
       bill: getBillMeta(settings)
     });

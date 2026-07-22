@@ -1,6 +1,6 @@
 const Table = require('../models/Table');
 const QRCode = require('qrcode');
-const { getTenantAdminId } = require('../middleware/tenantMiddleware');
+const { getTenantAdminId, buildTenantFilter, assertTenantOwnership } = require('../middleware/tenantMiddleware');
 const { buildMenuQrUrl } = require('../utils/tenantUtils');
 
 const { getClientUrl } = require('../utils/clientUrl');
@@ -9,8 +9,8 @@ const { getClientUrl } = require('../utils/clientUrl');
 // @route GET /api/tables
 exports.getTables = async (req, res, next) => {
   try {
-    const adminId = getTenantAdminId(req.user);
-    const filter = adminId ? { adminId } : {};
+    const filter = buildTenantFilter(req.user, res);
+    if (!filter) return;
 
     const tables = await Table.find(filter).sort({ tableNumber: 1 });
     res.json({
@@ -31,6 +31,7 @@ exports.getTableById = async (req, res, next) => {
     if (!table) {
       return res.status(404).json({ success: false, message: 'Table not found' });
     }
+    if (!assertTenantOwnership(table, req.user, res, 'Not authorized to view this table')) return;
     res.json({
       success: true,
       table
@@ -45,6 +46,9 @@ exports.getTableById = async (req, res, next) => {
 exports.createTable = async (req, res, next) => {
   try {
     const adminId = getTenantAdminId(req.user);
+    if (!adminId) {
+      return res.status(403).json({ success: false, message: 'Restaurant tenant access required' });
+    }
     const { tableName, tableNumber, capacity, section } = req.body;
 
     const existingTable = await Table.findOne({ adminId, tableNumber });
@@ -86,6 +90,9 @@ exports.updateTable = async (req, res, next) => {
     }
 
     const adminId = getTenantAdminId(req.user);
+    if (!adminId) {
+      return res.status(403).json({ success: false, message: 'Restaurant tenant access required' });
+    }
     if (adminId && table.adminId.toString() !== adminId.toString()) {
       return res.status(403).json({ success: false, message: 'Not authorized to modify another restaurant table' });
     }
@@ -119,6 +126,9 @@ exports.regenerateQR = async (req, res, next) => {
     }
 
     const adminId = getTenantAdminId(req.user);
+    if (!adminId) {
+      return res.status(403).json({ success: false, message: 'Restaurant tenant access required' });
+    }
     if (adminId && table.adminId.toString() !== adminId.toString()) {
       return res.status(403).json({ success: false, message: 'Not authorized' });
     }
@@ -151,6 +161,9 @@ exports.deleteTable = async (req, res, next) => {
     }
 
     const adminId = getTenantAdminId(req.user);
+    if (!adminId) {
+      return res.status(403).json({ success: false, message: 'Restaurant tenant access required' });
+    }
     if (adminId && table.adminId.toString() !== adminId.toString()) {
       return res.status(403).json({ success: false, message: 'Not authorized to delete another restaurant table' });
     }

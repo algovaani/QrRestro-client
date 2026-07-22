@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import API from '../../services/api';
 import Sidebar from '../../components/common/Sidebar';
@@ -8,6 +8,8 @@ import { prependUniqueOrder, upsertOrder } from '../../utils/orderList';
 import { useLivePolling } from '../../hooks/useLivePolling';
 import { useAuth } from '../../context/AuthContext';
 import { sendOrderBillOnWhatsApp } from '../../utils/billShare';
+import { belongsToTenant } from '../../utils/tenant';
+import OrderRatingDisplay from '../../components/admin/OrderRatingDisplay';
 import { Printer, Eye, RefreshCw, MessageSquare, Search, ArrowUpDown, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, CheckCircle2, XCircle, Loader2 } from 'lucide-react';
 
 export default function OrdersPage() {
@@ -32,6 +34,7 @@ export default function OrdersPage() {
 
   // Payment confirm dialog (Paid / Unpaid toggle)
   const [paymentConfirm, setPaymentConfirm] = useState(null);
+  const paymentClickBlockRef = useRef(false);
 
   const { socket, isConnected } = useSocket();
   const { user } = useAuth();
@@ -39,7 +42,7 @@ export default function OrdersPage() {
 
   useEffect(() => {
     fetchOrders();
-  }, [statusFilter, paymentFilter]);
+  }, [statusFilter, paymentFilter, user?._id]);
 
   // Refetch orders when socket reconnects (catch missed events during disconnect)
   useEffect(() => {
@@ -68,10 +71,12 @@ export default function OrdersPage() {
     if (!socket) return;
 
     const handleNewOrder = (newOrder) => {
+      if (!belongsToTenant(newOrder, user?._id)) return;
       setOrders((prev) => prependUniqueOrder(prev, newOrder));
     };
 
     const handleStatusUpdate = (updatedOrder) => {
+      if (!belongsToTenant(updatedOrder, user?._id)) return;
       setOrders((prev) => upsertOrder(prev, updatedOrder));
       if (selectedOrder && selectedOrder._id === updatedOrder._id) {
         setSelectedOrder(updatedOrder);
@@ -79,6 +84,7 @@ export default function OrdersPage() {
     };
 
     const handlePaymentPending = (updatedOrder) => {
+      if (!belongsToTenant(updatedOrder, user?._id)) return;
       setOrders((prev) => upsertOrder(prev, updatedOrder));
       if (selectedOrder && selectedOrder._id === updatedOrder._id) {
         setSelectedOrder(updatedOrder);
@@ -86,6 +92,15 @@ export default function OrdersPage() {
     };
 
     const handlePaymentSuccess = (updatedOrder) => {
+      if (!belongsToTenant(updatedOrder, user?._id)) return;
+      setOrders((prev) => upsertOrder(prev, updatedOrder));
+      if (selectedOrder && selectedOrder._id === updatedOrder._id) {
+        setSelectedOrder(updatedOrder);
+      }
+    };
+
+    const handleOrderRating = (updatedOrder) => {
+      if (!belongsToTenant(updatedOrder, user?._id)) return;
       setOrders((prev) => upsertOrder(prev, updatedOrder));
       if (selectedOrder && selectedOrder._id === updatedOrder._id) {
         setSelectedOrder(updatedOrder);
@@ -96,14 +111,16 @@ export default function OrdersPage() {
     socket.on('order_status_update', handleStatusUpdate);
     socket.on('payment_pending', handlePaymentPending);
     socket.on('payment_success', handlePaymentSuccess);
+    socket.on('order_rating', handleOrderRating);
 
     return () => {
       socket.off('new_order', handleNewOrder);
       socket.off('order_status_update', handleStatusUpdate);
       socket.off('payment_pending', handlePaymentPending);
       socket.off('payment_success', handlePaymentSuccess);
+      socket.off('order_rating', handleOrderRating);
     };
-  }, [socket, selectedOrder]);
+  }, [socket, selectedOrder, user?._id]);
 
   const fetchOrders = async () => {
     try {
@@ -137,6 +154,8 @@ export default function OrdersPage() {
   };
 
   const approvePayment = async (orderId) => {
+    if (!window.confirm('Approve this payment and mark the order as Paid?')) return;
+
     try {
       const res = await API.post(`/payment/approve/${orderId}`);
       if (res.data.success) {
@@ -146,7 +165,7 @@ export default function OrdersPage() {
           setSelectedOrder(order);
         }
 
-        if (order?.customerMobile && window.confirm('Payment approved! Send PDF bill to customer on WhatsApp?')) {
+        if (order?.customerMobile && window.confirm('Payment approved. Send PDF bill to customer on WhatsApp now?')) {
           try {
             const result = await sendOrderBillOnWhatsApp(order, {
               restaurantName: user?.restaurantName || res.data.bill?.restaurantName || 'Royal Spice Restaurant',
@@ -194,20 +213,38 @@ export default function OrdersPage() {
     }
   };
 
+  const blockPaymentBadgeClick = () => {
+    paymentClickBlockRef.current = true;
+    window.setTimeout(() => {
+      paymentClickBlockRef.current = false;
+    }, 400);
+  };
+
   const openPaymentConfirm = (order) => {
+    if (paymentClickBlockRef.current) return;
     const newStatus = order.paymentStatus === 'Paid' ? 'Unpaid' : 'Paid';
     setPaymentConfirm({ order, newStatus });
   };
 
-  const handlePaymentConfirmYes = async () => {
+  const closePaymentConfirm = () => {
+    setPaymentConfirm(null);
+    blockPaymentBadgeClick();
+  };
+
+  const handlePaymentConfirmYes = async (e) => {
+    e?.preventDefault?.();
+    e?.stopPropagation?.();
     if (!paymentConfirm) return;
     const { order, newStatus } = paymentConfirm;
     setPaymentConfirm(null);
+    blockPaymentBadgeClick();
     await updatePayment(order._id, newStatus);
   };
 
-  const handlePaymentConfirmNo = () => {
-    setPaymentConfirm(null);
+  const handlePaymentConfirmNo = (e) => {
+    e?.preventDefault?.();
+    e?.stopPropagation?.();
+    closePaymentConfirm();
   };
 
   // DATATABLE FILTERING, SORTING & PAGINATION LOGIC
@@ -231,7 +268,9 @@ export default function OrdersPage() {
         (order.customerMobile && order.customerMobile.includes(query)) ||
         order.orderStatus.toLowerCase().includes(query) ||
         order.paymentStatus.toLowerCase().includes(query) ||
-        (order.transactionId && order.transactionId.toLowerCase().includes(query))
+        (order.transactionId && order.transactionId.toLowerCase().includes(query)) ||
+        (order.rating && String(order.rating).includes(query)) ||
+        (order.review && order.review.toLowerCase().includes(query))
       );
     });
   }, [orders, searchTerm]);
@@ -280,6 +319,19 @@ export default function OrdersPage() {
     }
   };
 
+  const formatMoney = (value) => {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return '0';
+    return String(Math.round(n));
+  };
+
+  const lineItemTotal = (item) => {
+    const qty = Number(item.quantity) || 1;
+    const total = Number(item.total);
+    if (Number.isFinite(total)) return total;
+    return (Number(item.price) || 0) * qty;
+  };
+
   const handlePrint = (order, type) => {
     const printWindow = window.open('', '_blank');
     const isKitchen = type === 'kitchen';
@@ -308,17 +360,18 @@ export default function OrdersPage() {
 
           ${order.items.map(item => `
             <div class="flex bold">
-              <span>${item.itemName} (${item.size}) x ${item.quantity}</span>
-              ${!isKitchen ? `<span>₹${item.total}</span>` : ''}
+              <span>${item.itemName} (${item.size})</span>
+              ${!isKitchen ? `<span>₹${formatMoney(lineItemTotal(item))}</span>` : `<span>× ${item.quantity}</span>`}
             </div>
+            ${!isKitchen ? `<div style="font-size:11px; color:#444; margin-bottom:4px;">Qty: ${item.quantity} @ ₹${formatMoney(item.price)} each</div>` : ''}
             ${item.instructions ? `<div style="font-size:11px; font-style:italic;">Note: ${item.instructions}</div>` : ''}
           `).join('')}
 
           <div class="divider"></div>
           ${!isKitchen ? `
-            <div class="flex"><span>Subtotal:</span><span>₹${order.subtotal}</span></div>
-            <div class="flex"><span>GST Tax:</span><span>₹${order.tax}</span></div>
-            <div class="flex bold" style="font-size:15px; margin-top:5px;"><span>GRAND TOTAL:</span><span>₹${order.grandTotal}</span></div>
+            <div class="flex"><span>Subtotal:</span><span>₹${formatMoney(order.subtotal)}</span></div>
+            <div class="flex"><span>GST Tax:</span><span>₹${formatMoney(order.tax)}</span></div>
+            <div class="flex bold" style="font-size:15px; margin-top:5px;"><span>GRAND TOTAL:</span><span>₹${formatMoney(order.grandTotal)}</span></div>
             <div class="divider"></div>
             <div>Payment Status: <strong>${order.paymentStatus} (${order.paymentMethod})</strong></div>
             <div>TXN ID: ${order.transactionId || 'N/A'}</div>
@@ -437,6 +490,11 @@ export default function OrdersPage() {
                       PAYMENT <ArrowUpDown size={12} />
                     </div>
                   </th>
+                  <th onClick={() => handleSort('rating')} style={{ padding: '0.8rem 1rem', cursor: 'pointer' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                      RATING <ArrowUpDown size={12} />
+                    </div>
+                  </th>
                   <th style={{ padding: '0.8rem 1rem' }}>TXN ID</th>
                   <th onClick={() => handleSort('createdAt')} style={{ padding: '0.8rem 1rem', cursor: 'pointer' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
@@ -515,6 +573,14 @@ export default function OrdersPage() {
                         >
                           {order.paymentStatus === 'Paid' ? '✓ Paid' : '⏳ Unpaid'}
                         </button>
+                      )}
+                    </td>
+
+                    <td style={{ padding: '0.85rem 1rem', minWidth: '110px' }}>
+                      {order.rating ? (
+                        <OrderRatingDisplay rating={order.rating} review={order.review} compact />
+                      ) : (
+                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>—</span>
                       )}
                     </td>
 
@@ -613,9 +679,18 @@ export default function OrdersPage() {
 
       {/* Payment Yes/No Confirm Dialog */}
       {paymentConfirm && (
-        <div className="modal-overlay" onClick={handlePaymentConfirmNo}>
+        <div
+          className="modal-overlay"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) {
+              e.preventDefault();
+              closePaymentConfirm();
+            }
+          }}
+        >
           <div
             className="modal-card payment-confirm-dialog"
+            onMouseDown={(e) => e.stopPropagation()}
             onClick={(e) => e.stopPropagation()}
             style={{ maxWidth: '400px', textAlign: 'center' }}
           >
@@ -627,12 +702,13 @@ export default function OrdersPage() {
             </p>
             <p style={{ fontSize: '0.95rem', fontWeight: '700', color: 'var(--secondary)', marginBottom: '1.25rem' }}>
               {paymentConfirm.newStatus === 'Paid'
-                ? 'Kya aap is order ko Paid mark karna chahte hain?'
-                : 'Kya aap is order ko Unpaid mark karna chahte hain?'}
+                ? 'Mark this order as Paid?'
+                : 'Mark this order as Unpaid?'}
             </p>
             <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center' }}>
               <button
                 type="button"
+                onMouseDown={(e) => e.preventDefault()}
                 onClick={handlePaymentConfirmYes}
                 className="btn btn-primary"
                 style={{ minWidth: '100px', borderRadius: '10px' }}
@@ -641,6 +717,7 @@ export default function OrdersPage() {
               </button>
               <button
                 type="button"
+                onMouseDown={(e) => e.preventDefault()}
                 onClick={handlePaymentConfirmNo}
                 className="btn btn-secondary"
                 style={{ minWidth: '100px', borderRadius: '10px' }}
@@ -716,6 +793,13 @@ export default function OrdersPage() {
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '1.1rem', fontWeight: '800', marginTop: '0.4rem', color: 'var(--primary)' }}>
                 <span>Grand Total:</span> <span>₹{selectedOrder.grandTotal}</span>
               </div>
+            </div>
+
+            <div style={{ background: selectedOrder.rating ? '#fffbeb' : '#f8fafc', border: `1px solid ${selectedOrder.rating ? '#fcd34d' : 'var(--border)'}`, borderRadius: '12px', padding: '1rem', marginBottom: '1.25rem' }}>
+              <h4 style={{ fontSize: '0.9rem', fontWeight: '800', marginBottom: '0.5rem', color: 'var(--secondary)' }}>
+                Customer Rating & Review
+              </h4>
+              <OrderRatingDisplay rating={selectedOrder.rating} review={selectedOrder.review} />
             </div>
 
             <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>

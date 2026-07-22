@@ -54,6 +54,7 @@ const emitNewOrder = (order) => {
 const emitOrderStatusUpdate = (order) => emitToTenant(order, 'order_status_update');
 const emitPaymentPending = (order) => emitToTenant(order, 'payment_pending');
 const emitPaymentSuccess = (order) => emitToTenant(order, 'payment_success');
+const emitOrderRating = (order) => emitToTenant(order, 'order_rating');
 
 const emitMembershipRenewalRequest = (admin) => {
   if (!ioInstance || !admin?._id) return;
@@ -155,6 +156,7 @@ module.exports = {
   emitOrderStatusUpdate,
   emitPaymentPending,
   emitPaymentSuccess,
+  emitOrderRating,
   emitMembershipRenewalRequest,
   emitMembershipActivated,
   emitMembershipOfferSent,

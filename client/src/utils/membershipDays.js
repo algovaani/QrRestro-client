@@ -26,7 +26,17 @@ export function getDaysRemaining(expiryDate, fromDate = new Date()) {
 }
 
 export function isTrialPlanName(name) {
-  return /free trial|trial/i.test(String(name || ''));
+  return /free trial|trial|free plan/i.test(String(name || ''));
+}
+
+export function isFreePlan(planOrName, price) {
+  if (planOrName && typeof planOrName === 'object') {
+    const p = planOrName;
+    return Number(p.price) === 0 || isTrialPlanName(p.name);
+  }
+  const numericPrice = Number(price);
+  if (Number.isFinite(numericPrice) && numericPrice === 0) return true;
+  return isTrialPlanName(planOrName);
 }
 
 export function inferPlanNameFromDays(days) {

@@ -1,6 +1,7 @@
 const MembershipPlan = require('../models/MembershipPlan');
 const { generateQRCode } = require('../utils/qrGenerator');
 const { buildUpiPayString } = require('../utils/upiHelper');
+const { isFreePlan, adminHasUsedFreeTrial } = require('../utils/membershipDays');
 
 const parseFeatures = (features) => {
   if (Array.isArray(features)) return features;
@@ -9,6 +10,27 @@ const parseFeatures = (features) => {
   }
   return [];
 };
+
+const mapPlansWithOptionalQr = async (plans) =>
+  Promise.all(
+    plans.map(async (plan) => {
+      const obj = plan.toObject ? plan.toObject() : { ...plan };
+      obj.isFree = isFreePlan(obj);
+      if (!obj.isFree && obj.upiId) {
+        const upiString = buildUpiPayString({
+          upiId: obj.upiId,
+          payeeName: obj.name,
+          amount: obj.price,
+          note: `Membership ${obj.name}`
+        });
+        obj.qrCodeDataUrl = await generateQRCode(upiString);
+      } else {
+        obj.qrCodeDataUrl = '';
+        obj.upiId = obj.isFree ? '' : obj.upiId;
+      }
+      return obj;
+    })
+  );
 
 const applyPlanFields = (plan, body) => {
   const { name, price, durationDays, description, features, status, upiId } = body;
@@ -131,25 +153,34 @@ exports.getPublicMembershipPlans = async (req, res, next) => {
       .select('name price durationDays description features upiId')
       .sort({ price: 1 });
 
-    const plansWithQr = await Promise.all(
-      plans.map(async (plan) => {
-        const obj = plan.toObject();
-        if (plan.upiId) {
-          const upiString = buildUpiPayString({
-            upiId: plan.upiId,
-            payeeName: plan.name,
-            amount: plan.price,
-            note: `Membership ${plan.name}`
-          });
-          obj.qrCodeDataUrl = await generateQRCode(upiString);
-        } else {
-          obj.qrCodeDataUrl = '';
-        }
-        return obj;
-      })
-    );
+    const plansWithQr = await mapPlansWithOptionalQr(plans);
 
     res.json({ success: true, plans: plansWithQr });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc Membership plans for logged-in admin (hides free plan if already used)
+// @route GET /api/auth/membership-plans
+exports.getAdminMembershipPlans = async (req, res, next) => {
+  try {
+    const user = req.user;
+    let plans = await MembershipPlan.find({ status: 'Active' })
+      .select('name price durationDays description features upiId')
+      .sort({ price: 1 });
+
+    if (adminHasUsedFreeTrial(user)) {
+      plans = plans.filter((plan) => !isFreePlan(plan));
+    }
+
+    const plansWithQr = await mapPlansWithOptionalQr(plans);
+
+    res.json({
+      success: true,
+      plans: plansWithQr,
+      freeTrialUsed: adminHasUsedFreeTrial(user)
+    });
   } catch (error) {
     next(error);
   }

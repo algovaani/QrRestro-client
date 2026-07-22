@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import API from '../../services/api';
 import Sidebar from '../../components/common/Sidebar';
 import Header from '../../components/common/Header';
 import UpiQrDisplay from '../../components/common/UpiQrDisplay';
-import { Save, Building, QrCode } from 'lucide-react';
+import { Save, Building, QrCode, CheckCircle2, AlertCircle } from 'lucide-react';
 
 export default function SettingsPage() {
   const [formData, setFormData] = useState({
@@ -21,10 +21,22 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
+  const messageRef = useRef(null);
 
   useEffect(() => {
     fetchSettings();
   }, []);
+
+  useEffect(() => {
+    if (!message && !error) return;
+    messageRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    const timer = setTimeout(() => {
+      setMessage('');
+      setError('');
+    }, 5000);
+    return () => clearTimeout(timer);
+  }, [message, error]);
 
   const fetchSettings = async () => {
     try {
@@ -54,6 +66,7 @@ export default function SettingsPage() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setMessage('');
+    setError('');
     setSaving(true);
 
     try {
@@ -80,11 +93,10 @@ export default function SettingsPage() {
             soundNotification: s.soundNotification !== false
           });
         }
-        setMessage('Settings saved! QR code will be generated automatically from your UPI ID.');
-        setTimeout(() => setMessage(''), 4000);
+        setMessage(res.data.message || 'Settings saved successfully!');
       }
     } catch (err) {
-      alert(err.response?.data?.message || err.message || 'Error saving settings');
+      setError(err.response?.data?.message || err.message || 'Error saving settings');
     } finally {
       setSaving(false);
     }
@@ -116,12 +128,6 @@ export default function SettingsPage() {
             <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '1.5rem' }}>
               Enter your UPI ID only — a payment QR code will be generated automatically for customers.
             </p>
-
-            {message && (
-              <div style={{ background: '#dcfce7', color: '#15803d', padding: '0.75rem 1rem', borderRadius: '8px', fontSize: '0.9rem', marginBottom: '1.5rem' }}>
-                {message}
-              </div>
-            )}
 
             <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
@@ -267,8 +273,86 @@ export default function SettingsPage() {
               <button type="submit" className="btn btn-primary" disabled={saving} style={{ marginTop: '0.5rem' }}>
                 <Save size={18} /> {saving ? 'Saving...' : 'Save Settings'}
               </button>
+
+              <div ref={messageRef} style={{ minHeight: message || error ? 'auto' : '0' }}>
+                {message && (
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.5rem',
+                      background: '#dcfce7',
+                      color: '#15803d',
+                      padding: '0.85rem 1rem',
+                      borderRadius: '10px',
+                      fontSize: '0.9rem',
+                      fontWeight: '600',
+                      border: '1px solid #86efac',
+                      marginTop: '0.25rem'
+                    }}
+                  >
+                    <CheckCircle2 size={18} />
+                    {message}
+                  </div>
+                )}
+                {error && (
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.5rem',
+                      background: '#fee2e2',
+                      color: '#991b1b',
+                      padding: '0.85rem 1rem',
+                      borderRadius: '10px',
+                      fontSize: '0.9rem',
+                      fontWeight: '600',
+                      border: '1px solid #fca5a5',
+                      marginTop: '0.25rem'
+                    }}
+                  >
+                    <AlertCircle size={18} />
+                    {error}
+                  </div>
+                )}
+              </div>
             </form>
           </div>
+
+          {(message || error) && (
+            <div
+              style={{
+                position: 'fixed',
+                bottom: '1.25rem',
+                left: '50%',
+                transform: 'translateX(-50%)',
+                zIndex: 1000,
+                maxWidth: 'min(520px, calc(100vw - 2rem))',
+                width: '100%',
+                padding: '0 1rem',
+                pointerEvents: 'none'
+              }}
+            >
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem',
+                  padding: '0.9rem 1.1rem',
+                  borderRadius: '12px',
+                  fontSize: '0.9rem',
+                  fontWeight: '600',
+                  boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
+                  background: message ? '#dcfce7' : '#fee2e2',
+                  color: message ? '#15803d' : '#991b1b',
+                  border: message ? '1px solid #86efac' : '1px solid #fca5a5'
+                }}
+              >
+                {message ? <CheckCircle2 size={18} /> : <AlertCircle size={18} />}
+                {message || error}
+              </div>
+            </div>
+          )}
 
         </div>
       </div>

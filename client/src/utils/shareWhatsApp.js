@@ -14,17 +14,24 @@ export function isAndroid() {
   return /Android/i.test(navigator.userAgent);
 }
 
-export function getWhatsAppLink(phone) {
+export function normalizeIndianPhone(phone) {
   const clean = phone ? String(phone).replace(/\D/g, '').slice(-10) : '';
+  return clean.length === 10 ? clean : '';
+}
+
+export function getWhatsAppLink(phone) {
+  const clean = normalizeIndianPhone(phone);
   if (isMobileDevice()) {
     return clean ? `https://wa.me/91${clean}` : 'https://wa.me/';
   }
-  return 'https://web.whatsapp.com/';
+  return clean
+    ? `https://web.whatsapp.com/send?phone=91${clean}`
+    : 'https://web.whatsapp.com/';
 }
 
 /** Open WhatsApp app on mobile */
 export function openWhatsAppMobile(phone, text) {
-  const clean = phone ? String(phone).replace(/\D/g, '').slice(-10) : '';
+  const clean = normalizeIndianPhone(phone);
   const waBase = clean ? `https://wa.me/91${clean}` : 'https://wa.me/';
   const waUrl = text ? `${waBase}?text=${encodeURIComponent(text)}` : waBase;
 
@@ -55,10 +62,23 @@ export function openWhatsAppUrl(url) {
 }
 
 export function openWhatsApp(phone, text) {
-  const clean = phone ? String(phone).replace(/\D/g, '').slice(-10) : '';
-  const waBase = clean ? `https://wa.me/91${clean}` : 'https://wa.me/';
-  const waUrl = text ? `${waBase}?text=${encodeURIComponent(text)}` : waBase;
-  openWhatsAppUrl(waUrl);
+  const clean = normalizeIndianPhone(phone);
+
+  if (!clean) {
+    openWhatsAppUrl(isMobileDevice() ? 'https://wa.me/' : 'https://web.whatsapp.com/');
+    return;
+  }
+
+  if (isMobileDevice()) {
+    openWhatsAppMobile(clean, text);
+    return;
+  }
+
+  const encodedText = text ? encodeURIComponent(text) : '';
+  const webUrl = encodedText
+    ? `https://web.whatsapp.com/send?phone=91${clean}&text=${encodedText}`
+    : `https://web.whatsapp.com/send?phone=91${clean}`;
+  window.open(webUrl, '_blank', 'noopener,noreferrer');
 }
 
 /** Open WhatsApp chat without pre-filled message (for PDF attach flow) */

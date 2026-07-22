@@ -1,5 +1,5 @@
 const MenuItem = require('../models/MenuItem');
-const { getTenantAdminId } = require('../middleware/tenantMiddleware');
+const { getTenantAdminId, buildTenantFilter, assertTenantOwnership } = require('../middleware/tenantMiddleware');
 
 const parseBool = (val, defaultVal = false) => {
   if (val === undefined || val === null || val === '') return defaultVal;
@@ -12,8 +12,8 @@ const parseBool = (val, defaultVal = false) => {
 // @route GET /api/menu
 exports.getMenuItems = async (req, res, next) => {
   try {
-    const adminId = getTenantAdminId(req.user);
-    const filter = adminId ? { adminId } : {};
+    const filter = buildTenantFilter(req.user, res);
+    if (!filter) return;
     
     if (req.query.category) {
       filter.category = req.query.category;
@@ -53,6 +53,9 @@ exports.getMenuItemById = async (req, res, next) => {
 exports.createMenuItem = async (req, res, next) => {
   try {
     const adminId = getTenantAdminId(req.user);
+    if (!adminId) {
+      return res.status(403).json({ success: false, message: 'Restaurant tenant access required' });
+    }
     const { name, category, description, foodType, priceType, halfPrice, fullPrice, fixedPrice, preparationTime, isAvailable, isFeatured, status } = req.body;
 
     let image = '';

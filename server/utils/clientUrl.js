@@ -14,7 +14,12 @@ function getUrlSources() {
 
 /** Primary public URL for QR links (first entry if comma-separated) */
 function getClientUrl() {
-  return getUrlSources()[0];
+  let url = getUrlSources()[0];
+  // Dev: customer UI runs on Vite (:5173), not the API server (:5000)
+  if (process.env.NODE_ENV !== 'production' && /:5000(\/|$)/.test(url)) {
+    url = url.replace(':5000', ':5173');
+  }
+  return url;
 }
 
 /** CORS allowed origins — CLIENT_URL can be comma-separated */

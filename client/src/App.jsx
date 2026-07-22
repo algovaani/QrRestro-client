@@ -27,6 +27,30 @@ import CartPage from './pages/customer/CartPage';
 import OrderSuccessPage from './pages/customer/OrderSuccessPage';
 import OrderStatusPage from './pages/customer/OrderStatusPage';
 
+function PublicNotFound() {
+  return (
+    <div className="customer-mobile-wrap" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2rem', minHeight: '100vh' }}>
+      <div style={{ textAlign: 'center', background: '#fff', padding: '2rem', borderRadius: '16px', border: '1px solid var(--border)', maxWidth: '360px' }}>
+        <h2 style={{ fontSize: '1.25rem', fontWeight: '800', marginBottom: '0.5rem' }}>Page Not Found</h2>
+        <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>Scan your table QR code to open the digital menu.</p>
+      </div>
+    </div>
+  );
+}
+
+function AppFallback() {
+  const path = window.location.pathname;
+  if (path.startsWith('/menu/') || path.startsWith('/cart') || path.startsWith('/order-')) {
+    return <PublicNotFound />;
+  }
+  return <Navigate to="/admin/login" replace />;
+}
+
+function TenantScope({ children }) {
+  const { user } = useAuth();
+  return <React.Fragment key={user?._id || 'guest'}>{children}</React.Fragment>;
+}
+
 // Protected Route Wrapper
 const ProtectedRoute = ({ children, allowedRoles, allowExpired = false }) => {
   const { user, token, authReady } = useAuth();
@@ -95,7 +119,9 @@ export default function App() {
                 path="/admin/dashboard"
                 element={
                   <ProtectedRoute allowedRoles={['Admin']}>
-                    <AdminDashboard />
+                    <TenantScope>
+                      <AdminDashboard />
+                    </TenantScope>
                   </ProtectedRoute>
                 }
               />
@@ -103,7 +129,9 @@ export default function App() {
                 path="/admin/orders"
                 element={
                   <ProtectedRoute allowedRoles={['Admin']}>
-                    <OrdersPage />
+                    <TenantScope>
+                      <OrdersPage />
+                    </TenantScope>
                   </ProtectedRoute>
                 }
               />
@@ -111,7 +139,9 @@ export default function App() {
                 path="/admin/kitchen"
                 element={
                   <ProtectedRoute allowedRoles={['Admin', 'Kitchen']}>
-                    <KitchenScreen />
+                    <TenantScope>
+                      <KitchenScreen />
+                    </TenantScope>
                   </ProtectedRoute>
                 }
               />
@@ -119,7 +149,9 @@ export default function App() {
                 path="/admin/tables"
                 element={
                   <ProtectedRoute allowedRoles={['Admin']}>
-                    <TablesPage />
+                    <TenantScope>
+                      <TablesPage />
+                    </TenantScope>
                   </ProtectedRoute>
                 }
               />
@@ -127,7 +159,9 @@ export default function App() {
                 path="/admin/categories"
                 element={
                   <ProtectedRoute allowedRoles={['Admin']}>
-                    <CategoriesPage />
+                    <TenantScope>
+                      <CategoriesPage />
+                    </TenantScope>
                   </ProtectedRoute>
                 }
               />
@@ -135,7 +169,9 @@ export default function App() {
                 path="/admin/menu"
                 element={
                   <ProtectedRoute allowedRoles={['Admin']}>
-                    <MenuPage />
+                    <TenantScope>
+                      <MenuPage />
+                    </TenantScope>
                   </ProtectedRoute>
                 }
               />
@@ -143,7 +179,9 @@ export default function App() {
                 path="/admin/reports"
                 element={
                   <ProtectedRoute allowedRoles={['Admin']}>
-                    <ReportsPage />
+                    <TenantScope>
+                      <ReportsPage />
+                    </TenantScope>
                   </ProtectedRoute>
                 }
               />
@@ -151,7 +189,9 @@ export default function App() {
                 path="/admin/settings"
                 element={
                   <ProtectedRoute allowedRoles={['Admin']}>
-                    <SettingsPage />
+                    <TenantScope>
+                      <SettingsPage />
+                    </TenantScope>
                   </ProtectedRoute>
                 }
               />
@@ -166,7 +206,7 @@ export default function App() {
 
               {/* Default Fallback */}
               <Route path="/" element={<Navigate to="/admin/login" replace />} />
-              <Route path="*" element={<Navigate to="/admin/login" replace />} />
+              <Route path="*" element={<AppFallback />} />
             </Routes>
           </BrowserRouter>
         </SocketProvider>

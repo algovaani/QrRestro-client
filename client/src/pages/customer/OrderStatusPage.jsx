@@ -159,6 +159,9 @@ export default function OrderStatusPage() {
       });
       if (res.data.success) {
         setRatingSubmitted(true);
+        if (res.data.order) {
+          setOrder(res.data.order);
+        }
       }
     } catch (err) {
       alert('Failed to submit rating. Please try again.');

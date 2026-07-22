@@ -6,7 +6,7 @@ const Category = require('../models/Category');
 const MenuItem = require('../models/MenuItem');
 const Order = require('../models/Order');
 const MembershipPlan = require('../models/MembershipPlan');
-const { getDaysRemaining, formatExpiryDate, formatRenewalMessage, withMembershipDays, isTrialPlanName, inferPlanNameFromDays, addMembershipDays } = require('../utils/membershipDays');
+const { getDaysRemaining, formatExpiryDate, formatRenewalMessage, withMembershipDays, isTrialPlanName, isFreePlan, adminHasUsedFreeTrial, inferPlanNameFromDays, addMembershipDays } = require('../utils/membershipDays');
 
 const getPlanConfig = async (planName) => {
   const plan = await MembershipPlan.findOne({ name: planName });
@@ -79,6 +79,8 @@ exports.createAdmin = async (req, res, next) => {
 
     const selectedPlan = planName || '5-Day Free Trial';
     const { durationDays, planStatus } = await getPlanConfig(selectedPlan);
+    const planDoc = await MembershipPlan.findOne({ name: selectedPlan });
+    const usedFreeTrial = isFreePlan(planDoc || selectedPlan);
 
     const now = new Date();
     const expiryDate = addMembershipDays(now, durationDays);
@@ -95,7 +97,8 @@ exports.createAdmin = async (req, res, next) => {
       planStatus,
       trialEndsAt: expiryDate,
       subscriptionEndsAt: expiryDate,
-      renewalRequested: false
+      renewalRequested: false,
+      freeTrialUsed: usedFreeTrial
     });
 
     await Setting.create({
@@ -266,6 +269,9 @@ exports.renewAdminMembership = async (req, res, next) => {
     admin.membershipOfferSent = false;
     admin.membershipOfferPlanName = '';
     admin.membershipOfferSentAt = null;
+    if (isFreePlan(selectedPlan)) {
+      admin.freeTrialUsed = true;
+    }
 
     await admin.save();
 
@@ -366,6 +372,50 @@ exports.requestRenewal = async (req, res, next) => {
 
     if (!planName) {
       return res.status(400).json({ success: false, message: 'Please select a membership plan.' });
+    }
+
+    const planDoc = await MembershipPlan.findOne({ name: String(planName).trim() });
+    const selectedIsFree = isFreePlan(planDoc || planName);
+
+    if (selectedIsFree && adminHasUsedFreeTrial(user)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Free trial already used. Please choose a paid membership plan.'
+      });
+    }
+
+    if (selectedIsFree) {
+      const config = await getPlanConfig(planName);
+      const now = new Date();
+      const expiryDate = addMembershipDays(now, config.durationDays);
+
+      user.planName = String(planName).trim();
+      user.planStatus = config.planStatus;
+      user.subscriptionEndsAt = expiryDate;
+      user.trialEndsAt = expiryDate;
+      user.isActive = true;
+      user.freeTrialUsed = true;
+      user.renewalRequested = false;
+      user.renewalRequestDate = null;
+      user.requestedPlanName = '';
+      user.renewalPaymentProof = '';
+      user.renewalRejectionReason = '';
+      user.renewalRejectedAt = null;
+      user.membershipOfferSent = false;
+      user.membershipOfferPlanName = '';
+      user.membershipOfferSentAt = null;
+
+      await user.save();
+      emitMembershipActivated(user);
+
+      return res.json({
+        success: true,
+        message: `${planName} activated — no payment required.`,
+        user: withMembershipDays({
+          ...user.toObject(),
+          isExpired: false
+        })
+      });
     }
 
     if (!req.file) {

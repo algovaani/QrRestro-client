@@ -8,7 +8,7 @@ const path = require('path');
 const mongoose = require('mongoose');
 const connectDB = require('./config/db');
 const { initSocket } = require('./socket/socketHandler');
-const { getAllowedOrigins } = require('./utils/clientUrl');
+const { getAllowedOrigins, getClientUrl } = require('./utils/clientUrl');
 
 dotenv.config();
 
@@ -106,6 +106,27 @@ app.get('/api/health', (req, res) => {
 app.use('/api', (req, res) => {
   res.status(404).json({ success: false, message: 'API route not found' });
 });
+
+// Development — API server (:5000) does not host the React app; redirect menu links to Vite (:5173)
+if (!isProduction) {
+  const clientDevBase = getClientUrl();
+  const customerPathPattern = /^\/(menu|cart|order-success|order-status)(\/|$)/;
+
+  app.get(customerPathPattern, (req, res) => {
+    const host = req.get('host') || '';
+    let targetOrigin = clientDevBase;
+
+    if (host && !clientDevBase.includes('localhost')) {
+      const clientUrl = new URL(clientDevBase);
+      const port = clientUrl.port || '5173';
+      targetOrigin = `${req.protocol}://${host.split(':')[0]}:${port}`;
+    } else if (host.includes(':5000')) {
+      targetOrigin = `${req.protocol}://${host.replace(':5000', ':5173')}`;
+    }
+
+    res.redirect(302, `${targetOrigin.replace(/\/$/, '')}${req.originalUrl}`);
+  });
+}
 
 // Production — serve React build (single-server live deploy)
 if (isProduction) {

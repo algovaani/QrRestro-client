@@ -4,25 +4,30 @@ import Sidebar from '../../components/common/Sidebar';
 import Header from '../../components/common/Header';
 import { useSocket } from '../../context/SocketContext';
 import { prependUniqueOrder, upsertOrder } from '../../utils/orderList';
+import { belongsToTenant } from '../../utils/tenant';
 import { ChefHat, CheckCircle2, Clock, PlayCircle } from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
 
 export default function KitchenScreen() {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const { socket } = useSocket();
+  const { user } = useAuth();
 
   useEffect(() => {
     fetchKitchenOrders();
-  }, []);
+  }, [user?._id]);
 
   useEffect(() => {
     if (!socket) return;
 
     const handleNewOrder = (newOrder) => {
+      if (!belongsToTenant(newOrder, user?._id)) return;
       setOrders((prev) => prependUniqueOrder(prev, newOrder));
     };
 
     const handleStatusUpdate = (updatedOrder) => {
+      if (!belongsToTenant(updatedOrder, user?._id)) return;
       // If completed or cancelled, remove from kitchen screen
       if (['Served', 'Completed', 'Cancelled'].includes(updatedOrder.orderStatus)) {
         setOrders((prev) => prev.filter((o) => o._id !== updatedOrder._id));
@@ -38,7 +43,7 @@ export default function KitchenScreen() {
       socket.off('new_order', handleNewOrder);
       socket.off('order_status_update', handleStatusUpdate);
     };
-  }, [socket]);
+  }, [socket, user?._id]);
 
   const fetchKitchenOrders = async () => {
     try {

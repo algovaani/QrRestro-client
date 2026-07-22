@@ -26,7 +26,24 @@ function getDaysRemaining(expiryDate, fromDate = new Date()) {
 }
 
 function isTrialPlanName(name) {
-  return /free trial|trial/i.test(String(name || ''));
+  return /free trial|trial|free plan/i.test(String(name || ''));
+}
+
+function isFreePlan(planOrName, price) {
+  if (planOrName && typeof planOrName === 'object') {
+    const p = planOrName;
+    return Number(p.price) === 0 || isTrialPlanName(p.name);
+  }
+  const name = planOrName;
+  const numericPrice = Number(price);
+  if (Number.isFinite(numericPrice) && numericPrice === 0) return true;
+  return isTrialPlanName(name);
+}
+
+function adminHasUsedFreeTrial(user) {
+  if (!user) return false;
+  if (user.freeTrialUsed) return true;
+  return isTrialPlanName(user.planName) || user.planStatus === 'Trialing';
 }
 
 function inferPlanNameFromDays(days) {
@@ -86,6 +103,8 @@ module.exports = {
   formatRenewalMessage,
   withMembershipDays,
   isTrialPlanName,
+  isFreePlan,
+  adminHasUsedFreeTrial,
   inferPlanNameFromDays,
   resolveMembershipDisplay
 };

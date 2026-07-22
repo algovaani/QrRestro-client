@@ -1,6 +1,5 @@
-import API from '../services/api';
 import { generateOrderBillPdfBlob, buildBillWhatsAppMessage } from './billPdf';
-import { isMobileDevice, openWhatsApp, openWhatsAppChat } from './shareWhatsApp';
+import { normalizeIndianPhone, openWhatsApp } from './shareWhatsApp';
 
 function downloadBlob(blob, filename) {
   const url = URL.createObjectURL(blob);
@@ -13,95 +12,47 @@ function downloadBlob(blob, filename) {
   URL.revokeObjectURL(url);
 }
 
-async function trySharePdf(file, message) {
-  if (!navigator.share) return null;
-
-  const payloads = [
-    { files: [file], text: message, title: `Bill ${file.name}` },
-    { files: [file], text: message },
-    { files: [file] }
-  ];
-
-  for (const payload of payloads) {
-    try {
-      if (navigator.canShare && !navigator.canShare(payload)) continue;
-      await navigator.share(payload);
-      return 'share';
-    } catch (err) {
-      if (err?.name === 'AbortError') return 'cancelled';
-    }
-  }
-
-  return null;
-}
-
-async function fetchBillPdfFromServer(orderNumber) {
-  const res = await API.get(`/public/orders/${orderNumber}/bill.pdf`, {
-    responseType: 'blob'
-  });
-  return res.data;
-}
-
-async function resolveBillPdfBlob(order, options = {}) {
-  try {
-    return generateOrderBillPdfBlob(order, options);
-  } catch {
-    return fetchBillPdfFromServer(order.orderNumber);
-  }
+/** Public bill PDF link — customer opens this URL on their phone */
+export function getPublicBillPdfUrl(orderNumber) {
+  const configured = import.meta.env.VITE_PUBLIC_APP_URL?.trim();
+  const base = (configured || window.location.origin).replace(/\/$/, '');
+  return `${base}/api/public/orders/${encodeURIComponent(orderNumber)}/bill.pdf`;
 }
 
 /**
- * Admin / customer — generate PDF bill and share on WhatsApp
+ * Admin / customer — open WhatsApp for order customer with bill PDF link (no file download)
  */
 export async function sendOrderBillOnWhatsApp(order, options = {}) {
   if (!order?.orderNumber) {
     throw new Error('Invalid order');
   }
 
+  const phone = normalizeIndianPhone(order.customerMobile);
+  if (!phone) {
+    throw new Error('Customer mobile number is missing — cannot send bill on WhatsApp.');
+  }
+
   const restaurantName = options.restaurantName || 'Royal Spice Restaurant';
-  const phone = order.customerMobile ? String(order.customerMobile).replace(/\D/g, '').slice(-10) : '';
-  const message = buildBillWhatsAppMessage(order, restaurantName);
-  const filename = `Bill-${order.orderNumber}.pdf`;
+  const billUrl = getPublicBillPdfUrl(order.orderNumber);
+  const message = buildBillWhatsAppMessage(order, restaurantName, billUrl);
 
-  const blob = await resolveBillPdfBlob(order, {
-    restaurantName,
-    taxLabel: options.taxLabel || 'GST Tax'
-  });
-  const file = new File([blob], filename, { type: 'application/pdf' });
-
-  const shared = await trySharePdf(file, message);
-  if (shared === 'share') {
-    return { success: true, method: 'share' };
-  }
-  if (shared === 'cancelled') {
-    return { success: false, cancelled: true };
-  }
-
-  downloadBlob(blob, filename);
-
-  if (phone) {
-    openWhatsAppChat(phone);
-  } else if (isMobileDevice()) {
-    openWhatsApp(null, message);
-  } else {
-    openWhatsApp(null, '');
-  }
+  openWhatsApp(phone, message);
 
   return {
     success: true,
-    method: 'download',
-    hint: phone
-      ? `PDF "${filename}" downloaded. WhatsApp chat opened — attach the PDF with 📎 and send.`
-      : `PDF "${filename}" downloaded. Attach it in WhatsApp and send.`
+    method: 'whatsapp-link',
+    phone,
+    billUrl,
+    hint: `WhatsApp opened for +91 ${phone}. Tap Send — customer will get the bill link directly.`
   };
 }
 
 /**
- * Download bill PDF only (no WhatsApp)
+ * Download bill PDF to this device (no WhatsApp)
  */
 export async function downloadOrderBillPdf(order, options = {}) {
   const filename = `Bill-${order.orderNumber}.pdf`;
-  const blob = await resolveBillPdfBlob(order, options);
+  const blob = await generateOrderBillPdfBlob(order, options);
   downloadBlob(blob, filename);
   return { success: true, filename };
 }

@@ -28,7 +28,9 @@ import {
   Sparkles,
   QrCode,
   Send,
-  XCircle
+  XCircle,
+  Phone,
+  Settings
 } from 'lucide-react';
 import { useSocket } from '../../context/SocketContext';
 import NotificationToasts from '../../components/common/NotificationToasts';
@@ -104,6 +106,9 @@ export default function SuperAdminDashboard() {
   const [sendingOfferAdmin, setSendingOfferAdmin] = useState(null);
   const [offerPlanName, setOfferPlanName] = useState('Monthly Plan');
 
+  const [supportNumber, setSupportNumber] = useState('');
+  const [supportSaving, setSupportSaving] = useState(false);
+
   const [showAccountModal, setShowAccountModal] = useState(false);
   const [accountTab, setAccountTab] = useState('email');
   const [emailForm, setEmailForm] = useState({
@@ -160,15 +165,19 @@ export default function SuperAdminDashboard() {
   const fetchSuperAdminData = async (silent = false) => {
     if (!silent) setLoading(true);
     try {
-      const [statsRes, adminsRes, plansRes] = await Promise.all([
+      const [statsRes, adminsRes, plansRes, platformRes] = await Promise.all([
         API.get('/super-admin/stats'),
         API.get('/super-admin/admins'),
-        API.get('/super-admin/plans')
+        API.get('/super-admin/plans'),
+        API.get('/super-admin/platform-settings').catch(() => null)
       ]);
 
       if (statsRes.data.success) setStats(statsRes.data.stats);
       if (adminsRes.data.success) setAdmins(adminsRes.data.admins);
       if (plansRes.data.success) setPlans(plansRes.data.plans);
+      if (platformRes?.data?.success) {
+        setSupportNumber(platformRes.data.settings?.supportNumber || '');
+      }
     } catch (err) {
       console.error('Super Admin fetch error:', err);
       if (!silent) {
@@ -189,6 +198,22 @@ export default function SuperAdminDashboard() {
   const copyToClipboard = (text, label) => {
     navigator.clipboard.writeText(text);
     alert(`${label} copied to clipboard!`);
+  };
+
+  const handleSaveSupportNumber = async (e) => {
+    e.preventDefault();
+    setSupportSaving(true);
+    try {
+      const res = await API.put('/super-admin/platform-settings', { supportNumber });
+      if (res.data.success) {
+        setSupportNumber(res.data.settings?.supportNumber || '');
+        showToast('success', res.data.message || 'Support number saved');
+      }
+    } catch (err) {
+      showToast('error', err.response?.data?.message || 'Failed to save support number');
+    } finally {
+      setSupportSaving(false);
+    }
   };
 
   // --- ADMIN ACCOUNT ACTIONS ---
@@ -592,6 +617,15 @@ export default function SuperAdminDashboard() {
             <Layers size={18} />
             <span>Membership Plans ({plans.length})</span>
           </button>
+
+          <button
+            onClick={() => setActiveTab('settings')}
+            className={`sidebar-link ${activeTab === 'settings' ? 'active' : ''}`}
+            style={{ width: '100%', textAlign: 'left' }}
+          >
+            <Settings size={18} />
+            <span>Platform Settings</span>
+          </button>
         </nav>
 
         <div style={{ padding: '1rem', borderTop: '1px solid var(--border)' }}>
@@ -907,7 +941,7 @@ export default function SuperAdminDashboard() {
                             title={admin.isActive ? 'Deactivate admin — membership popup will appear' : 'Reactivate admin account'}
                           >
                             {admin.isActive ? <UserX size={14} color="var(--danger)" /> : <UserCheck size={14} />}
-                            <span>{admin.isActive ? 'Band Karo' : 'Activate'}</span>
+                            <span>{admin.isActive ? 'deactivate' : 'Activate'}</span>
                           </button>
                         </td>
 
@@ -1192,6 +1226,55 @@ export default function SuperAdminDashboard() {
                   </div>
                 ))}
               </div>
+            </div>
+          )}
+
+          {/* TAB 4: PLATFORM SETTINGS */}
+          {activeTab === 'settings' && (
+            <div style={{ maxWidth: '560px' }}>
+              <div style={{ marginBottom: '1.25rem' }}>
+                <h3 style={{ fontSize: '1.2rem', fontWeight: '800', color: 'var(--secondary)' }}>Platform Settings</h3>
+                <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                  Support number shown to restaurant admins on the membership purchase page
+                </span>
+              </div>
+
+              <form
+                onSubmit={handleSaveSupportNumber}
+                style={{
+                  background: '#ffffff',
+                  borderRadius: '18px',
+                  border: '1px solid var(--border)',
+                  padding: '1.5rem',
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.03)'
+                }}
+              >
+                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '700', marginBottom: '0.5rem' }}>
+                  <Phone size={14} style={{ verticalAlign: 'middle', marginRight: '0.35rem' }} />
+                  Support Mobile Number
+                </label>
+                <input
+                  type="tel"
+                  value={supportNumber}
+                  onChange={(e) => setSupportNumber(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                  placeholder="10-digit mobile number"
+                  maxLength={10}
+                  style={{
+                    width: '100%',
+                    padding: '0.75rem 1rem',
+                    borderRadius: '10px',
+                    border: '1px solid var(--border)',
+                    fontSize: '1rem',
+                    marginBottom: '0.5rem'
+                  }}
+                />
+                <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>
+                  Admins will see this number when buying or renewing membership. They can call or WhatsApp for help.
+                </p>
+                <button type="submit" className="btn btn-primary" disabled={supportSaving}>
+                  {supportSaving ? 'Saving...' : 'Save Support Number'}
+                </button>
+              </form>
             </div>
           )}
 

@@ -7,6 +7,7 @@ const Category = require('../models/Category');
 const MenuItem = require('../models/MenuItem');
 const Setting = require('../models/Setting');
 const MembershipPlan = require('../models/MembershipPlan');
+const PlatformSettings = require('../models/PlatformSettings');
 
 dotenv.config();
 
@@ -29,6 +30,7 @@ const seedData = async () => {
     await MenuItem.deleteMany();
     await Setting.deleteMany();
     await MembershipPlan.deleteMany();
+    await PlatformSettings.deleteMany();
 
     console.log('Seeding Default Membership Plans...');
     const defaultPlans = [
@@ -68,6 +70,12 @@ const seedData = async () => {
 
     await MembershipPlan.insertMany(defaultPlans);
     console.log('Seeded Default Membership Plans successfully!');
+
+    await PlatformSettings.create({
+      key: 'global',
+      supportNumber: '9876543210'
+    });
+    console.log('Seeded Platform Settings (support number)');
 
     console.log('Seeding Users...');
     

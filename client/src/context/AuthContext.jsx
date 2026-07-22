@@ -146,6 +146,7 @@ export const AuthProvider = ({ children }) => {
     setToken(null);
     localStorage.removeItem('token');
     localStorage.removeItem('user');
+    setAuthReady(true);
   };
 
   const updateUser = (partial) => {

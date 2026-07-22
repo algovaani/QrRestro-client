@@ -97,6 +97,11 @@ const userSchema = new mongoose.Schema({
   renewalRejectedAt: {
     type: Date,
     default: null
+  },
+  /** One-time free trial consumed — hide free plan on renewal */
+  freeTrialUsed: {
+    type: Boolean,
+    default: false
   }
 }, {
   timestamps: true

@@ -25,9 +25,10 @@ import {
   BadgeCheck,
   Upload,
   Image as ImageIcon,
-  XCircle
+  XCircle,
+  Phone
 } from 'lucide-react';
-import { getDaysRemaining, formatExpiryDate, getMembershipDaysLabel, resolveMembershipDisplay } from '../../utils/membershipDays';
+import { getDaysRemaining, formatExpiryDate, getMembershipDaysLabel, resolveMembershipDisplay, isFreePlan } from '../../utils/membershipDays';
 
 export default function AdminMembershipPage({ standalone = false }) {
   const { user, logout, updateUser } = useAuth();
@@ -50,27 +51,39 @@ export default function AdminMembershipPage({ standalone = false }) {
   const [paymentProofPreview, setPaymentProofPreview] = useState('');
   const [rejectionReason, setRejectionReason] = useState(user?.renewalRejectionReason || '');
   const [paymentProofUrl, setPaymentProofUrl] = useState(user?.renewalPaymentProof || '');
+  const [supportNumber, setSupportNumber] = useState('');
 
   const loadData = async () => {
     setLoading(true);
     try {
-      const [plansRes, statusRes] = await Promise.all([
-        API.get('/public/membership-plans'),
-        API.get('/auth/subscription-status').catch(() => null)
+      const [plansRes, statusRes, platformRes] = await Promise.all([
+        API.get('/auth/membership-plans'),
+        API.get('/auth/subscription-status').catch(() => null),
+        API.get('/auth/platform-settings').catch(() => null)
       ]);
 
       if (plansRes.data.success) {
         const list = plansRes.data.plans || [];
         setPlans(list);
         if (list.length > 0) {
+          const preferredNames = [
+            statusRes?.data?.user?.membershipOfferPlanName,
+            statusRes?.data?.user?.requestedPlanName,
+            user?.membershipOfferPlanName,
+            user?.requestedPlanName,
+            user?.planName
+          ].filter(Boolean);
+
           const preferred =
-            list.find((p) => p.name === statusRes?.data?.user?.membershipOfferPlanName) ||
-            list.find((p) => p.name === statusRes?.data?.user?.requestedPlanName) ||
-            list.find((p) => p.name === user?.membershipOfferPlanName) ||
-            list.find((p) => p.name === user?.requestedPlanName) ||
-            list.find((p) => p.name === user?.planName) ||
+            list.find((p) => preferredNames.includes(p.name)) ||
             list[0];
-          setSelectedPlan((prev) => prev || preferred);
+
+          setSelectedPlan((prev) => {
+            if (prev && list.some((p) => p._id === prev._id)) return prev;
+            return preferred;
+          });
+        } else {
+          setSelectedPlan(null);
         }
       }
 
@@ -87,6 +100,10 @@ export default function AdminMembershipPage({ standalone = false }) {
           const match = (plansRes.data.plans || []).find((p) => p.name === u.requestedPlanName);
           if (match) setSelectedPlan(match);
         }
+      }
+
+      if (platformRes?.data?.success) {
+        setSupportNumber(platformRes.data.supportNumber || '');
       }
     } catch (err) {
       console.error(err);
@@ -159,6 +176,48 @@ export default function AdminMembershipPage({ standalone = false }) {
     return plans.find((p) => p.name === name) || selectedPlan;
   }, [plans, requestedPlanName, selectedPlan]);
 
+  const selectedIsFree = useMemo(
+    () => isFreePlan(selectedPlan),
+    [selectedPlan]
+  );
+
+  const formattedSupportNumber = useMemo(() => {
+    const digits = String(supportNumber || '').replace(/\D/g, '').slice(-10);
+    if (digits.length !== 10) return '';
+    return `${digits.slice(0, 5)} ${digits.slice(5)}`;
+  }, [supportNumber]);
+
+  const supportDigits = String(supportNumber || '').replace(/\D/g, '').slice(-10);
+
+  const renderSupportBanner = (compact = false) => {
+    if (supportDigits.length !== 10) return null;
+
+    return (
+      <div className={`membership-support-banner${compact ? ' membership-support-banner--compact' : ''}`}>
+        <div className="membership-support-banner-icon">
+          <Phone size={18} />
+        </div>
+        <div className="membership-support-banner-body">
+          <strong>Need help with membership?</strong>
+          <p>Call or WhatsApp our support team at <span>+91 {formattedSupportNumber}</span></p>
+        </div>
+        <div className="membership-support-banner-actions">
+          <a href={`tel:+91${supportDigits}`} className="btn btn-secondary btn-sm">
+            Call
+          </a>
+          <a
+            href={`https://wa.me/91${supportDigits}?text=${encodeURIComponent('Hi, I need help with restaurant membership.')}`}
+            target="_blank"
+            rel="noreferrer"
+            className="btn btn-primary btn-sm"
+          >
+            WhatsApp
+          </a>
+        </div>
+      </div>
+    );
+  };
+
   const copyUpi = (upi) => {
     if (!upi) return;
     navigator.clipboard.writeText(upi);
@@ -192,13 +251,29 @@ export default function AdminMembershipPage({ standalone = false }) {
       setMsg('Please select a membership plan first.');
       return;
     }
-    if (!paymentProofFile) {
+    if (!selectedIsFree && !paymentProofFile) {
       setMsg('Upload a payment screenshot — request cannot be submitted without proof.');
       return;
     }
     setSubmitting(true);
     setMsg('');
     try {
+      if (selectedIsFree) {
+        const res = await API.post('/super-admin/request-renewal', { planName: selectedPlan.name });
+        if (res.data.success) {
+          const u = res.data.user;
+          updateUser({
+            ...u,
+            isExpired: false,
+            renewalRequested: false,
+            freeTrialUsed: true
+          });
+          setMsg('Free trial activated! Opening dashboard...');
+          setTimeout(() => navigate('/admin/dashboard'), 1500);
+        }
+        return;
+      }
+
       const formData = new FormData();
       formData.append('planName', selectedPlan.name);
       formData.append('paymentProof', paymentProofFile);
@@ -303,6 +378,8 @@ export default function AdminMembershipPage({ standalone = false }) {
         </div>
       </div>
 
+      {renderSupportBanner()}
+
       {msg && (
         <div className={`membership-alert ${msg.includes('active') || msg.includes('activate') ? 'membership-alert--success' : msg.includes('reject') ? 'membership-alert--danger' : ''}`}>
           {msg}
@@ -384,6 +461,8 @@ export default function AdminMembershipPage({ standalone = false }) {
             ))}
           </div>
 
+          {renderSupportBanner(true)}
+
           <div className="membership-pending-actions">
             <button
               onClick={handleCheckReactivation}
@@ -426,12 +505,19 @@ export default function AdminMembershipPage({ standalone = false }) {
           <div className="membership-steps-card">
             <h3><Sparkles size={18} /> How to Get Membership</h3>
             <div className="membership-steps-list">
-              {[
-                { n: 1, t: 'Choose a Plan', d: 'Select your plan below' },
-                { n: 2, t: 'Scan QR & Pay', d: 'Pay with PhonePe / GPay / Paytm' },
-                { n: 3, t: 'Upload Screenshot', d: 'Upload payment screenshot and submit request' },
-                { n: 4, t: 'Check Activation', d: 'Dashboard opens after Super Admin approval' }
-              ].map((s) => (
+              {(selectedIsFree
+                ? [
+                    { n: 1, t: 'Choose Free Plan', d: 'Select the free trial plan below' },
+                    { n: 2, t: 'Activate', d: 'Click activate — no payment needed' },
+                    { n: 3, t: 'Start Using', d: 'Dashboard opens immediately' }
+                  ]
+                : [
+                    { n: 1, t: 'Choose a Plan', d: 'Select your plan below' },
+                    { n: 2, t: 'Scan QR & Pay', d: 'Pay with PhonePe / GPay / Paytm' },
+                    { n: 3, t: 'Upload Screenshot', d: 'Upload payment screenshot and submit request' },
+                    { n: 4, t: 'Check Activation', d: 'Dashboard opens after Super Admin approval' }
+                  ]
+              ).map((s) => (
                 <div key={s.n} className="membership-step-row">
                   <span className="membership-step-num">{s.n}</span>
                   <div>
@@ -443,16 +529,23 @@ export default function AdminMembershipPage({ standalone = false }) {
             </div>
           </div>
 
-          <h3 className="membership-section-title">Select Plan & Pay via QR</h3>
+          <h3 className="membership-section-title">
+            {selectedIsFree ? 'Select Free Plan' : 'Select Plan & Pay via QR'}
+          </h3>
 
           {loading ? (
             <div className="membership-loading">Loading plans...</div>
           ) : plans.length === 0 ? (
-            <div className="membership-empty">No plans available right now. Contact Super Admin.</div>
+            <div className="membership-empty">
+              {user?.freeTrialUsed
+                ? 'Free trial already used. No paid plans are available right now — contact Super Admin.'
+                : 'No plans available right now. Contact Super Admin.'}
+            </div>
           ) : (
             <div className="membership-plans-grid">
               {plans.map((plan) => {
                 const isSelected = selectedPlan?._id === plan._id;
+                const planIsFree = isFreePlan(plan);
                 return (
                   <div
                     key={plan._id}
@@ -478,6 +571,14 @@ export default function AdminMembershipPage({ standalone = false }) {
                     )}
 
                     {isSelected && (
+                      planIsFree ? (
+                        <div className="membership-qr-box" style={{ textAlign: 'center', padding: '1rem' }}>
+                          <CheckCircle2 size={28} color="var(--success)" />
+                          <p style={{ fontSize: '0.9rem', fontWeight: '700', color: 'var(--secondary)', marginTop: '0.65rem' }}>
+                            No payment required — activate free trial below
+                          </p>
+                        </div>
+                      ) : (
                       <div className="membership-qr-box">
                         <UpiQrDisplay
                           upiId={plan.upiId}
@@ -500,6 +601,7 @@ export default function AdminMembershipPage({ standalone = false }) {
                           </>
                         )}
                       </div>
+                      )
                     )}
                   </div>
                 );
@@ -509,11 +611,20 @@ export default function AdminMembershipPage({ standalone = false }) {
 
           {!requested && (
             <div className="membership-submit-card">
-              <h3>Upload Screenshot After Payment & Submit Request</h3>
+              <h3>
+                {selectedIsFree
+                  ? 'Activate Free Trial'
+                  : 'Upload Screenshot After Payment & Submit Request'}
+              </h3>
               <p className="membership-submit-hint">
-                Upload your UPI payment screenshot here — Super Admin will verify it and activate your plan.
+                {selectedIsFree
+                  ? 'This plan is free — no UPI payment or screenshot needed. Click activate to start immediately.'
+                  : 'Upload your UPI payment screenshot here — Super Admin will verify it and activate your plan.'}
               </p>
 
+              {renderSupportBanner(true)}
+
+              {!selectedIsFree && (
               <div className="membership-proof-upload">
                 {paymentProofPreview ? (
                   <div className="membership-proof-preview">
@@ -536,17 +647,20 @@ export default function AdminMembershipPage({ standalone = false }) {
                   </label>
                 )}
               </div>
+              )}
 
               <button
                 onClick={handleRequestRenewal}
-                disabled={submitting || !selectedPlan || !paymentProofFile}
+                disabled={submitting || !selectedPlan || (!selectedIsFree && !paymentProofFile)}
                 className="btn btn-primary pulse-button membership-submit-btn"
               >
                 <Send size={18} />
                 {submitting
                   ? 'Submitting...'
                   : selectedPlan
-                    ? `Submit Request — ${selectedPlan.name} (₹${selectedPlan.price})`
+                    ? selectedIsFree
+                      ? `Activate Free — ${selectedPlan.name}`
+                      : `Submit Request — ${selectedPlan.name} (₹${selectedPlan.price})`
                     : 'Select a plan first'}
               </button>
             </div>

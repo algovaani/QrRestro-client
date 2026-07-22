@@ -9,6 +9,14 @@ const formatDate = (date) =>
     minute: '2-digit'
   });
 
+const formatMoney = (value) => {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return 0;
+  return Math.round(n);
+};
+
+const formatMoneyForPdf = (value) => `Rs. ${formatMoney(value)}`;
+
 /**
  * Generate order bill PDF buffer (A5 receipt style)
  */
@@ -57,8 +65,10 @@ function generateOrderBillPdfBuffer(order, options = {}) {
     doc.font('Helvetica');
 
     (order.items || []).forEach((item) => {
-      const title = `${item.itemName || 'Item'} (${item.size || 'Full'}) x${item.quantity ?? 1}`;
-      doc.text(`${title} — ₹${item.total ?? 0}`);
+      const qty = item.quantity ?? 1;
+      const lineTotal = item.total ?? Number(item.price) * qty;
+      const title = `${item.itemName || 'Item'} (${item.size || 'Full'}) x${qty}`;
+      doc.text(`${title} — ${formatMoneyForPdf(lineTotal)}`);
       if (item.instructions) {
         doc.fontSize(8).fillColor('#666666').text(`  Note: ${item.instructions}`);
         doc.fontSize(9).fillColor('#000000');
@@ -70,9 +80,9 @@ function generateOrderBillPdfBuffer(order, options = {}) {
     doc.moveTo(36, totalLineY).lineTo(doc.page.width - 36, totalLineY).stroke();
     doc.moveDown(0.4);
 
-    doc.text(`Subtotal: ₹${order.subtotal ?? 0}`, { align: 'right' });
-    doc.text(`${taxLabel}: ₹${order.tax ?? 0}`, { align: 'right' });
-    doc.font('Helvetica-Bold').text(`GRAND TOTAL: ₹${order.grandTotal ?? 0}`, { align: 'right' });
+    doc.text(`Subtotal: ${formatMoneyForPdf(order.subtotal)}`, { align: 'right' });
+    doc.text(`${taxLabel}: ${formatMoneyForPdf(order.tax)}`, { align: 'right' });
+    doc.font('Helvetica-Bold').text(`GRAND TOTAL: ${formatMoneyForPdf(order.grandTotal)}`, { align: 'right' });
     doc.moveDown(0.3);
     doc.font('Helvetica');
     doc.text(`Payment: ${order.paymentStatus || 'Unpaid'} (${order.paymentMethod || 'UPI'})`, { align: 'right' });

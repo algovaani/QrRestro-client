@@ -1,6 +1,6 @@
 const User = require('../models/User');
 const jwt = require('jsonwebtoken');
-const { getDaysRemaining, withMembershipDays } = require('../utils/membershipDays');
+const { getDaysRemaining, withMembershipDays, adminHasUsedFreeTrial } = require('../utils/membershipDays');
 
 const generateToken = (id) => {
   return jwt.sign({ id }, process.env.JWT_SECRET || 'super_secret_jwt_key_restaurant_qr_2026_safe', {
@@ -60,6 +60,7 @@ exports.login = async (req, res, next) => {
         membershipOfferSentAt: user.membershipOfferSentAt,
         subscriptionEndsAt: user.subscriptionEndsAt,
         trialEndsAt: user.trialEndsAt,
+        freeTrialUsed: adminHasUsedFreeTrial(user),
         isExpired: Boolean(isExpired)
       })
     });
@@ -73,6 +74,11 @@ exports.login = async (req, res, next) => {
 exports.getSubscriptionStatus = async (req, res, next) => {
   try {
     const user = await User.findById(req.user._id).select('-password');
+    if (user.role === 'Admin' && adminHasUsedFreeTrial(user) && !user.freeTrialUsed) {
+      user.freeTrialUsed = true;
+      await user.save();
+    }
+
     const expiry = user.subscriptionEndsAt || user.trialEndsAt;
     const isExpired = user.role === 'Admin' && expiry && new Date(expiry) < new Date();
     const daysRemaining = getDaysRemaining(expiry);

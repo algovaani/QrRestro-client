@@ -1,4 +1,5 @@
 import { jsPDF } from 'jspdf';
+import { formatMoney, formatMoneyWithSymbol, formatMoneyForPdf } from './formatMoney';
 
 const formatDate = (date) =>
   new Date(date).toLocaleString('en-IN', {
@@ -70,7 +71,6 @@ export function generateOrderBillPdfBlob(order, options = {}) {
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(9);
   doc.text('Item', margin, y);
-  doc.text('Qty', margin + contentW * 0.62, y, { align: 'center' });
   doc.text('Amount', pageW - margin, y, { align: 'right' });
   y += 5;
   doc.setFont('helvetica', 'normal');
@@ -79,11 +79,12 @@ export function generateOrderBillPdfBlob(order, options = {}) {
 
   (order.items || []).forEach((item) => {
     ensureSpace(12);
-    const title = `${item.itemName || 'Item'} (${item.size || 'Full'})`;
-    const wrapped = doc.splitTextToSize(title, contentW * 0.58);
+    const qty = item.quantity ?? 1;
+    const lineTotal = item.total ?? Number(item.price) * qty;
+    const title = `${item.itemName || 'Item'} (${item.size || 'Full'}) — Qty ${qty}`;
+    const wrapped = doc.splitTextToSize(title, contentW * 0.68);
     doc.text(wrapped, margin, y);
-    doc.text(String(item.quantity ?? 1), margin + contentW * 0.62, y, { align: 'center' });
-    doc.text(`₹${item.total ?? 0}`, pageW - margin, y, { align: 'right' });
+    doc.text(formatMoneyForPdf(lineTotal), pageW - margin, y, { align: 'right' });
     y += wrapped.length * 4.5;
 
     if (item.instructions) {
@@ -112,9 +113,9 @@ export function generateOrderBillPdfBlob(order, options = {}) {
     y += bold ? 7 : 5;
   };
 
-  totalRow('Subtotal:', `₹${order.subtotal ?? 0}`);
-  totalRow(`${taxLabel}:`, `₹${order.tax ?? 0}`);
-  totalRow('GRAND TOTAL:', `₹${order.grandTotal ?? 0}`, true);
+  totalRow('Subtotal:', formatMoneyForPdf(order.subtotal));
+  totalRow(`${taxLabel}:`, formatMoneyForPdf(order.tax));
+  totalRow('GRAND TOTAL:', formatMoneyForPdf(order.grandTotal), true);
 
   doc.line(margin, y, pageW - margin, y);
   y += 6;
@@ -136,14 +137,20 @@ export function generateOrderBillPdfBlob(order, options = {}) {
   return doc.output('blob');
 }
 
-export function buildBillWhatsAppMessage(order, restaurantName) {
-  return [
+export function buildBillWhatsAppMessage(order, restaurantName, billUrl = '') {
+  const lines = [
     `🧾 *${restaurantName || 'Restaurant'} — Bill*`,
     `Order #: *${order.orderNumber}*`,
     `Table #: *${order.tableNumber}*`,
-    `Amount: *₹${order.grandTotal}*`,
-    `Payment: *${order.paymentStatus}*`,
-    '',
-    'PDF bill attached — please check 📄'
-  ].join('\n');
+    `Amount: *${formatMoneyWithSymbol(order.grandTotal)}*`,
+    `Payment: *${order.paymentStatus}*`
+  ];
+
+  if (billUrl) {
+    lines.push('', '📄 Download your bill PDF:', billUrl);
+  } else {
+    lines.push('', 'PDF bill — please check 📄');
+  }
+
+  return lines.join('\n');
 }

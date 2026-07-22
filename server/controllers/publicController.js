@@ -3,7 +3,7 @@ const Category = require('../models/Category');
 const MenuItem = require('../models/MenuItem');
 const Order = require('../models/Order');
 const Setting = require('../models/Setting');
-const { emitNewOrder } = require('../socket/socketHandler');
+const { emitNewOrder, emitOrderRating } = require('../socket/socketHandler');
 const { generateOrderBillPdfBuffer } = require('../utils/billPdf');
 
 const generateOrderNumber = () => {
@@ -303,8 +303,8 @@ exports.getOrderBillPdf = async (req, res, next) => {
 
     res.set({
       'Content-Type': 'application/pdf',
-      'Content-Disposition': `attachment; filename="Bill-${order.orderNumber}.pdf"`,
-      'Cache-Control': 'no-store'
+      'Content-Disposition': `inline; filename="Bill-${order.orderNumber}.pdf"`,
+      'Cache-Control': 'public, max-age=300'
     });
     res.send(pdfBuffer);
   } catch (error) {
@@ -331,6 +331,8 @@ exports.submitOrderRating = async (req, res, next) => {
     order.rating = rating;
     order.review = review || '';
     await order.save();
+
+    emitOrderRating(order);
 
     res.json({
       success: true,

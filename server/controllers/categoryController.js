@@ -1,12 +1,12 @@
 const Category = require('../models/Category');
-const { getTenantAdminId } = require('../middleware/tenantMiddleware');
+const { getTenantAdminId, buildTenantFilter, assertTenantOwnership } = require('../middleware/tenantMiddleware');
 
 // @desc Get all categories (filtered strictly by logged-in adminId)
 // @route GET /api/categories
 exports.getCategories = async (req, res, next) => {
   try {
-    const adminId = getTenantAdminId(req.user);
-    const filter = adminId ? { adminId } : {};
+    const filter = buildTenantFilter(req.user, res);
+    if (!filter) return;
 
     const categories = await Category.find(filter).sort({ displayOrder: 1 });
     res.json({
@@ -41,6 +41,9 @@ exports.getCategoryById = async (req, res, next) => {
 exports.createCategory = async (req, res, next) => {
   try {
     const adminId = getTenantAdminId(req.user);
+    if (!adminId) {
+      return res.status(403).json({ success: false, message: 'Restaurant tenant access required' });
+    }
     const { name, description, displayOrder, status } = req.body;
     let image = '';
 

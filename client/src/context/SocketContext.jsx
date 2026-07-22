@@ -50,6 +50,7 @@ export const SocketProvider = ({ children }) => {
 
   const tenantId = useMemo(() => getTenantId(user, token), [user, token]);
   const authRef = useRef({ user, tenantId, updateUser });
+  const prevTenantRef = useRef(null);
   authRef.current = { user, tenantId, updateUser };
 
   // Single long-lived socket — do not recreate on every auth/user update
@@ -141,6 +142,23 @@ export const SocketProvider = ({ children }) => {
         if (recent) return prev;
         return [newNotif, ...prev];
       });
+    };
+
+    const handleOrderRating = (order) => {
+      if (!belongsToTenant(order)) return;
+      playOrderChime();
+      vibrateAlert();
+      const reviewNote = order.review ? ` — "${order.review}"` : '';
+      const newNotif = {
+        id: `${order._id || order.orderNumber}_rating_${Date.now()}`,
+        type: 'order_rating',
+        title: '⭐ NEW CUSTOMER RATING',
+        message: `Order #${order.orderNumber} rated ${order.rating}/5${reviewNote}`,
+        order,
+        timestamp: new Date(),
+        actionPath: '/admin/orders'
+      };
+      setNotifications((prev) => [newNotif, ...prev]);
     };
 
     const handleMembershipOfferSent = (data) => {
@@ -279,6 +297,7 @@ export const SocketProvider = ({ children }) => {
     newSocket.on('new_order', handleNewOrder);
     newSocket.on('payment_pending', handlePaymentPending);
     newSocket.on('payment_success', handlePaymentSuccess);
+    newSocket.on('order_rating', handleOrderRating);
     newSocket.on('membership_activated', handleMembershipActivated);
     newSocket.on('membership_renewal_request', handleMembershipRenewalRequest);
     newSocket.on('membership_renewal_rejected', handleMembershipRenewalRejected);
@@ -291,6 +310,7 @@ export const SocketProvider = ({ children }) => {
       newSocket.off('new_order', handleNewOrder);
       newSocket.off('payment_pending', handlePaymentPending);
       newSocket.off('payment_success', handlePaymentSuccess);
+      newSocket.off('order_rating', handleOrderRating);
       newSocket.off('membership_activated', handleMembershipActivated);
       newSocket.off('membership_renewal_request', handleMembershipRenewalRequest);
       newSocket.off('membership_renewal_rejected', handleMembershipRenewalRejected);
@@ -302,14 +322,33 @@ export const SocketProvider = ({ children }) => {
     };
   }, []);
 
-  // Join tenant rooms whenever auth is ready — also re-join after reconnect
+  // Join tenant rooms whenever auth is ready — leave old tenant rooms on account switch
   useEffect(() => {
     if (!socket || !authReady) return;
 
+    const leaveTenantRooms = (id) => {
+      if (!id) return;
+      socket.emit('leave_room', `admin_${id}`);
+      socket.emit('leave_room', `kitchen_${id}`);
+      socket.emit('leave_room', `restaurant_${id}`);
+    };
+
     const joinRooms = () => {
+      const prev = prevTenantRef.current;
+      if (prev && prev !== tenantId) {
+        leaveTenantRooms(prev);
+        setNotifications([]);
+      }
+      if (!tenantId && prev) {
+        leaveTenantRooms(prev);
+        setNotifications([]);
+      }
+      prevTenantRef.current = tenantId || null;
+
       if (tenantId) {
         socket.emit('join_room', `admin_${tenantId}`);
         socket.emit('join_room', `kitchen_${tenantId}`);
+        socket.emit('join_room', `restaurant_${tenantId}`);
       }
       if (user?.role === 'SuperAdmin') {
         socket.emit('join_room', 'super_admin');

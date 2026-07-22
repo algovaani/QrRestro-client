@@ -23,6 +23,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { canShowMembershipOption } from '../../utils/membershipAccess';
 import { formatExpiryDate, getMembershipDaysLabel, resolveMembershipDisplay } from '../../utils/membershipDays';
+import { belongsToTenant } from '../../utils/tenant';
 
 const toLocalDateStr = (date) => {
   const y = date.getFullYear();
@@ -116,6 +117,7 @@ export default function AdminDashboard() {
     if (!socket) return;
 
     const handleNewOrder = (newOrder) => {
+      if (!belongsToTenant(newOrder, user?._id)) return;
       if (!isOrderInDateRange(newOrder, startDate, endDate)) return;
 
       setRecentOrders(prev => {
@@ -132,6 +134,7 @@ export default function AdminDashboard() {
     };
 
     const handleStatusUpdate = (updatedOrder) => {
+      if (!belongsToTenant(updatedOrder, user?._id)) return;
       setRecentOrders(prev => {
         const exists = prev.some(o => String(o._id) === String(updatedOrder._id));
         if (!exists && isOrderInDateRange(updatedOrder, startDate, endDate)) {
@@ -143,6 +146,7 @@ export default function AdminDashboard() {
     };
 
     const handlePaymentPending = (updatedOrder) => {
+      if (!belongsToTenant(updatedOrder, user?._id)) return;
       setRecentOrders((prev) => {
         const exists = prev.some((o) => String(o._id) === String(updatedOrder._id));
         if (!exists && isOrderInDateRange(updatedOrder, startDate, endDate)) {
@@ -153,6 +157,7 @@ export default function AdminDashboard() {
     };
 
     const handlePaymentSuccess = (updatedOrder) => {
+      if (!belongsToTenant(updatedOrder, user?._id)) return;
       setRecentOrders(prev => prev.map(o => String(o._id) === String(updatedOrder._id) ? updatedOrder : o));
       fetchDashboardData(startDate, endDate, true);
     };
@@ -168,7 +173,7 @@ export default function AdminDashboard() {
       socket.off('payment_pending', handlePaymentPending);
       socket.off('payment_success', handlePaymentSuccess);
     };
-  }, [socket, startDate, endDate, fetchDashboardData]);
+  }, [socket, startDate, endDate, fetchDashboardData, user?._id]);
 
   useEffect(() => {
     if (!socket || !isConnected) return;
