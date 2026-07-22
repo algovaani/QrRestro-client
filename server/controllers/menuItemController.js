@@ -1,5 +1,6 @@
 const MenuItem = require('../models/MenuItem');
 const { getTenantAdminId, buildTenantFilter, assertTenantOwnership } = require('../middleware/tenantMiddleware');
+const { persistUploadedImage } = require('../utils/persistUpload');
 
 const parseBool = (val, defaultVal = false) => {
   if (val === undefined || val === null || val === '') return defaultVal;
@@ -60,7 +61,11 @@ exports.createMenuItem = async (req, res, next) => {
 
     let image = '';
     if (req.file) {
-      image = `/uploads/${req.file.filename}`;
+      try {
+        image = persistUploadedImage(req.file);
+      } catch (err) {
+        return res.status(400).json({ success: false, message: err.message || 'Image upload failed' });
+      }
     }
 
     const item = await MenuItem.create({
@@ -121,7 +126,11 @@ exports.updateMenuItem = async (req, res, next) => {
     });
 
     if (req.file) {
-      item.image = `/uploads/${req.file.filename}`;
+      try {
+        item.image = persistUploadedImage(req.file);
+      } catch (err) {
+        return res.status(400).json({ success: false, message: err.message || 'Image upload failed' });
+      }
     }
 
     await item.save();

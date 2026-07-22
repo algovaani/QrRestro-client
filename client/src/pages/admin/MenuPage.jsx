@@ -37,6 +37,7 @@ export default function MenuPage() {
     status: 'Active'
   });
   const [imageFile, setImageFile] = useState(null);
+  const [existingImage, setExistingImage] = useState('');
   const [previewImage, setPreviewImage] = useState('');
   const [modalError, setModalError] = useState('');
 
@@ -137,6 +138,7 @@ export default function MenuPage() {
       status: 'Active'
     });
     setImageFile(null);
+    setExistingImage('');
     setPreviewImage('');
     setModalError('');
     setShowModal(true);
@@ -159,38 +161,59 @@ export default function MenuPage() {
       status: item.status
     });
     setImageFile(null);
+    setExistingImage(item.image || '');
     setPreviewImage(item.image ? resolveUploadUrl(item.image) : '');
     setModalError('');
     setShowModal(true);
   };
 
   const handleImageChange = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      setImageFile(file);
-      setPreviewImage(URL.createObjectURL(file));
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      setModalError('Please select a valid image file (JPG, PNG, WebP).');
+      return;
     }
+    if (file.size > 3 * 1024 * 1024) {
+      setModalError('Image must be 3MB or smaller.');
+      return;
+    }
+    setModalError('');
+    setImageFile(file);
+    setPreviewImage(URL.createObjectURL(file));
   };
+
+  const getItemImageSrc = (image) => (image ? resolveUploadUrl(image) : null);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setModalError('');
 
     const data = new FormData();
-    Object.keys(formData).forEach(key => {
+    Object.keys(formData).forEach((key) => {
       data.append(key, formData[key]);
     });
     if (imageFile) {
       data.append('image', imageFile);
+    } else if (editingItem && existingImage) {
+      data.append('keepExistingImage', 'true');
     }
 
     try {
-      if (editingItem) {
-        await API.put(`/menu/${editingItem._id}`, data);
-      } else {
-        await API.post('/menu', data);
+      const res = editingItem
+        ? await API.put(`/menu/${editingItem._id}`, data)
+        : await API.post('/menu', data);
+
+      const saved = res.data?.item;
+      if (imageFile && saved && !saved.image) {
+        setModalError('Image upload failed — please try again with a JPG/PNG under 3MB.');
+        return;
       }
+
       setShowModal(false);
+      setImageFile(null);
+      setExistingImage('');
+      setPreviewImage('');
       fetchMenuItems();
     } catch (err) {
       setModalError(err.response?.data?.message || 'Error saving menu item');
@@ -317,9 +340,13 @@ export default function MenuPage() {
                     <td style={{ padding: '0.85rem 1rem' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                         {item.image ? (
-                          <img src={resolveUploadUrl(item.image)} alt={item.name} style={{ width: '42px', height: '42px', borderRadius: '8px', objectFit: 'cover' }} />
+                          <img
+                            src={getItemImageSrc(item.image)}
+                            alt={item.name}
+                            style={{ width: '42px', height: '42px', borderRadius: '8px', objectFit: 'cover', flexShrink: 0 }}
+                          />
                         ) : (
-                          <div style={{ width: '42px', height: '42px', borderRadius: '8px', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem' }}>
+                          <div style={{ width: '42px', height: '42px', borderRadius: '8px', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem', flexShrink: 0 }}>
                             🍲
                           </div>
                         )}
@@ -596,9 +623,18 @@ export default function MenuPage() {
 
               <div>
                 <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', marginBottom: '0.3rem' }}>Item Image</label>
-                <input type="file" accept="image/*" onChange={handleImageChange} style={{ width: '100%' }} />
+                <input type="file" accept="image/jpeg,image/png,image/webp,image/gif" onChange={handleImageChange} style={{ width: '100%' }} />
                 {previewImage && (
-                  <img src={previewImage.startsWith('blob:') ? previewImage : resolveUploadUrl(previewImage)} alt="Preview" style={{ width: '80px', height: '80px', objectFit: 'cover', borderRadius: '8px', marginTop: '0.5rem' }} />
+                  <img
+                    src={previewImage}
+                    alt="Preview"
+                    style={{ width: '80px', height: '80px', objectFit: 'cover', borderRadius: '8px', marginTop: '0.5rem', display: 'block' }}
+                  />
+                )}
+                {!previewImage && existingImage && (
+                  <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.35rem' }}>
+                    Current image saved — pick a new file to replace it.
+                  </p>
                 )}
               </div>
 

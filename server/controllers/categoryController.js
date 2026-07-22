@@ -1,5 +1,6 @@
 const Category = require('../models/Category');
 const { getTenantAdminId, buildTenantFilter, assertTenantOwnership } = require('../middleware/tenantMiddleware');
+const { persistUploadedImage } = require('../utils/persistUpload');
 
 // @desc Get all categories (filtered strictly by logged-in adminId)
 // @route GET /api/categories
@@ -48,7 +49,7 @@ exports.createCategory = async (req, res, next) => {
     let image = '';
 
     if (req.file) {
-      image = `/uploads/${req.file.filename}`;
+      image = persistUploadedImage(req.file);
     }
 
     const category = await Category.create({
@@ -92,7 +93,7 @@ exports.updateCategory = async (req, res, next) => {
     if (status) category.status = status;
 
     if (req.file) {
-      category.image = `/uploads/${req.file.filename}`;
+      category.image = persistUploadedImage(req.file);
     }
 
     await category.save();
