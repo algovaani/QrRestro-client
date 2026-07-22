@@ -6,6 +6,7 @@ const Setting = require('../models/Setting');
 const { emitNewOrder, emitOrderRating } = require('../socket/socketHandler');
 const { generateOrderBillPdfBuffer } = require('../utils/billPdf');
 const { getPublicBillPdfUrl, orderBillIsAvailable } = require('../utils/publicApiUrl');
+const { MAX_REVIEW_WORDS, countReviewWords, trimReviewToWordLimit } = require('../utils/reviewText');
 
 const generateOrderNumber = () => {
   const randomNum = Math.floor(1000 + Math.random() * 9000);
@@ -364,8 +365,15 @@ exports.submitOrderRating = async (req, res, next) => {
       return res.status(404).json({ success: false, message: 'Order not found' });
     }
 
+    if (review && countReviewWords(review) > MAX_REVIEW_WORDS) {
+      return res.status(400).json({
+        success: false,
+        message: `Review must be ${MAX_REVIEW_WORDS} words or less`
+      });
+    }
+
     order.rating = rating;
-    order.review = review || '';
+    order.review = trimReviewToWordLimit(review || '');
     await order.save();
 
     emitOrderRating(order);

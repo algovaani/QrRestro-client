@@ -10,6 +10,7 @@ import CustomerNotificationToast from '../../components/customer/CustomerNotific
 import CustomerBottomNav from '../../components/customer/CustomerBottomNav';
 import MyOrdersModal from '../../components/customer/MyOrdersModal';
 import { getOrderStatusMessage, mobilesMatch, vibrateCustomerAlert } from '../../utils/orderNotifications';
+import { countReviewWords, MAX_REVIEW_WORDS, trimReviewToWordLimit } from '../../utils/reviewText';
 import UPIPaymentModal from '../../components/customer/UPIPaymentModal';
 import { ArrowLeft, CheckCircle2, Clock, ChefHat, Sparkles, UtensilsCrossed, QrCode, Star, Send } from 'lucide-react';
 
@@ -149,13 +150,22 @@ export default function OrderStatusPage() {
     setShowPaymentModal(false);
   };
 
+  const handleReviewChange = (e) => {
+    setUserReview(trimReviewToWordLimit(e.target.value));
+  };
+
   const handleRatingSubmit = async (e) => {
     e.preventDefault();
+    const review = trimReviewToWordLimit(userReview);
+    if (countReviewWords(review) > MAX_REVIEW_WORDS) {
+      alert(`Review must be ${MAX_REVIEW_WORDS} words or less.`);
+      return;
+    }
     setSubmittingRating(true);
     try {
       const res = await API.post(`/public/orders/${orderNumber}/rate`, {
         rating: userRating,
-        review: userReview
+        review
       });
       if (res.data.success) {
         setRatingSubmitted(true);
@@ -343,13 +353,16 @@ export default function OrderStatusPage() {
                     ))}
                   </div>
 
-                  <input
-                    type="text"
-                    placeholder="Write a quick comment (Optional)..."
+                  <textarea
+                    placeholder="Write a quick comment (optional, max 50 words)..."
                     value={userReview}
-                    onChange={(e) => setUserReview(e.target.value)}
-                    style={{ width: '100%', fontSize: '0.85rem', textAlign: 'center' }}
+                    onChange={handleReviewChange}
+                    rows={3}
+                    style={{ width: '100%', fontSize: '0.85rem', textAlign: 'center', resize: 'vertical', minHeight: '72px' }}
                   />
+                  <div style={{ fontSize: '0.72rem', color: countReviewWords(userReview) >= MAX_REVIEW_WORDS ? '#dc2626' : 'var(--text-muted)', textAlign: 'right' }}>
+                    {countReviewWords(userReview)}/{MAX_REVIEW_WORDS} words
+                  </div>
 
                   <button
                     type="submit"
