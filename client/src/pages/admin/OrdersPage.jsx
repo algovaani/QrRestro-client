@@ -167,13 +167,11 @@ export default function OrdersPage() {
 
         if (order?.customerMobile && window.confirm('Payment approved. Send PDF bill to customer on WhatsApp now?')) {
           try {
-            const result = await sendOrderBillOnWhatsApp(order, {
+            await sendOrderBillOnWhatsApp(order, {
+              forAdmin: true,
               restaurantName: user?.restaurantName || res.data.bill?.restaurantName || 'Royal Spice Restaurant',
               taxLabel: res.data.bill?.taxLabel || 'GST Tax'
             });
-            if (result.hint) {
-              alert(result.hint);
-            }
           } catch {
             alert('Could not generate PDF bill. Try again from the Orders page.');
           }
@@ -306,12 +304,10 @@ export default function OrdersPage() {
     setBillSendingId(order._id);
     try {
       const result = await sendOrderBillOnWhatsApp(order, {
+        forAdmin: true,
         restaurantName: user?.restaurantName || 'Royal Spice Restaurant'
       });
       if (result.cancelled) return;
-      if (result.hint) {
-        alert(result.hint);
-      }
     } catch {
       alert('Could not generate or share bill PDF. Please try again.');
     } finally {

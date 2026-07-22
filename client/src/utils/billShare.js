@@ -48,7 +48,8 @@ async function resolveBillPdfUrl(orderNumber) {
 }
 
 /**
- * Admin / customer — open WhatsApp for order customer with bill PDF link (no file download)
+ * Admin — open WhatsApp chat with customer (admin taps Send)
+ * Customer — open own WhatsApp to share bill link
  */
 export async function sendOrderBillOnWhatsApp(order, options = {}) {
   if (!order?.orderNumber) {
@@ -71,7 +72,9 @@ export async function sendOrderBillOnWhatsApp(order, options = {}) {
     method: 'whatsapp-link',
     phone,
     billUrl,
-    hint: `WhatsApp opened for +91 ${phone}. Tap Send — customer will get the bill link directly.`
+    hint: options.forAdmin
+      ? null
+      : 'WhatsApp khul gaya hai. Send dabayein — aapko bill link milega.'
   };
 }
 

@@ -102,7 +102,7 @@ export default function UPIPaymentModal({ orderNumber, onClose, onSuccess }) {
     setError('');
 
     try {
-      const result = await sendOrderBillOnWhatsApp(paidOrder, billMeta || {});
+      const result = await sendOrderBillOnWhatsApp(paidOrder, { audience: 'customer', ...billMeta });
       if (result.cancelled) return;
       if (result.hint) {
         setBillHint(result.hint);
