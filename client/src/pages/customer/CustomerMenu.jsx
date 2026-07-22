@@ -211,13 +211,17 @@ export default function CustomerMenu() {
     }
   };
 
+  const formatItemPrice = (item) => {
+    if (item.priceType === 'Full and Half') return `₹${item.halfPrice} / ₹${item.fullPrice}`;
+    if (item.priceType === 'Only Half') return `₹${item.halfPrice}`;
+    if (item.priceType === 'Only Full') return `₹${item.fullPrice}`;
+    return `₹${item.fixedPrice}`;
+  };
+
   const openImagePreview = (item) => {
     if (!item?.image) return;
     setSelectedItem(null);
-    setImagePreview({
-      name: item.name,
-      url: resolveUploadUrl(item.image)
-    });
+    setImagePreview(item);
   };
 
   const handleMenuRowClick = (e, item) => {
@@ -519,41 +523,49 @@ export default function CustomerMenu() {
           onClick={() => setImagePreview(null)}
         >
           <div
+            className="menu-image-preview-card"
             onClick={(e) => e.stopPropagation()}
-            style={{ width: '100%', maxWidth: '420px', position: 'relative' }}
           >
             <button
               type="button"
+              className="menu-image-preview-close"
               onClick={() => setImagePreview(null)}
               aria-label="Close image"
-              style={{
-                position: 'absolute',
-                top: '-0.25rem',
-                right: '-0.25rem',
-                zIndex: 2,
-                background: '#fff',
-                padding: '0.35rem',
-                borderRadius: '50%',
-                boxShadow: 'var(--shadow-md)'
-              }}
             >
               <X size={18} />
             </button>
-            <img
-              src={imagePreview.url}
-              alt={imagePreview.name}
-              style={{
-                width: '100%',
-                maxHeight: '70vh',
-                objectFit: 'contain',
-                borderRadius: '14px',
-                background: '#fff',
-                display: 'block'
-              }}
-            />
-            <p style={{ textAlign: 'center', marginTop: '0.75rem', fontWeight: '700', color: '#fff' }}>
-              {imagePreview.name}
-            </p>
+
+            <div className="menu-image-preview-media">
+              <img
+                src={resolveUploadUrl(imagePreview.image)}
+                alt={imagePreview.name}
+              />
+            </div>
+
+            <div className="menu-image-preview-body">
+              <span className={`badge ${imagePreview.foodType === 'Veg' ? 'badge-veg' : 'badge-nonveg'}`} style={{ fontSize: '0.7rem' }}>
+                ● {imagePreview.foodType}
+              </span>
+              <h3>{imagePreview.name}</h3>
+              {imagePreview.description && (
+                <p className="menu-image-preview-desc">{imagePreview.description}</p>
+              )}
+              <div className="menu-image-preview-footer">
+                <span className="menu-image-preview-price">{formatItemPrice(imagePreview)}</span>
+                <button
+                  type="button"
+                  className="btn btn-primary btn-sm"
+                  onClick={() => {
+                    const item = imagePreview;
+                    setImagePreview(null);
+                    handleOpenItemModal(item);
+                  }}
+                  style={{ padding: '0.45rem 0.85rem', borderRadius: '8px', fontSize: '0.8rem', whiteSpace: 'nowrap' }}
+                >
+                  <Plus size={14} /> Add to order
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
