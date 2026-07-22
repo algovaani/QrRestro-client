@@ -137,11 +137,6 @@ export function generateOrderBillPdfBlob(order, options = {}) {
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(10);
   doc.text('Thank you for dining with us!', pageW / 2, y, { align: 'center' });
-  y += 5;
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8);
-  doc.setTextColor(120);
-  doc.text('Computer generated bill — no signature required', pageW / 2, y, { align: 'center' });
 
   return doc.output('blob');
 }

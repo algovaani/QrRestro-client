@@ -96,8 +96,6 @@ function generateOrderBillPdfBuffer(order, options = {}) {
       doc.moveDown(0.4);
     }
     doc.font('Helvetica-Bold').fontSize(10).fillColor('#000000').text('Thank you for dining with us!', { align: 'center' });
-    doc.moveDown(0.3);
-    doc.font('Helvetica').fontSize(8).fillColor('#777777').text('Computer generated bill — no signature required', { align: 'center' });
 
     doc.end();
   });
