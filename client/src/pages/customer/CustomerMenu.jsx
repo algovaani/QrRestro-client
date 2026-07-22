@@ -37,6 +37,7 @@ export default function CustomerMenu() {
 
   // Modal State for Item Selection
   const [selectedItem, setSelectedItem] = useState(null);
+  const [imagePreview, setImagePreview] = useState(null);
   const [selectedSize, setSelectedSize] = useState('Full');
   const [quantity, setQuantity] = useState(1);
   const [instructions, setInstructions] = useState('');
@@ -208,6 +209,15 @@ export default function CustomerMenu() {
     } else {
       setSelectedSize('Fixed');
     }
+  };
+
+  const handleMenuImageClick = (e, item) => {
+    e.stopPropagation();
+    if (!item?.image) return;
+    setImagePreview({
+      name: item.name,
+      url: resolveUploadUrl(item.image)
+    });
   };
 
   const handleAddToCartConfirm = () => {
@@ -412,9 +422,14 @@ export default function CustomerMenu() {
                 cursor: 'pointer'
               }}
             >
-              <div style={{ position: 'relative' }}>
+              <div style={{ position: 'relative', flexShrink: 0 }}>
                 {item.image ? (
-                  <img src={resolveUploadUrl(item.image)} alt={item.name} style={{ width: '85px', height: '85px', borderRadius: '10px', objectFit: 'cover' }} />
+                  <img
+                    src={resolveUploadUrl(item.image)}
+                    alt={item.name}
+                    onClick={(e) => handleMenuImageClick(e, item)}
+                    style={{ width: '85px', height: '85px', borderRadius: '10px', objectFit: 'cover', cursor: 'zoom-in' }}
+                  />
                 ) : (
                   <div style={{ width: '85px', height: '85px', borderRadius: '10px', background: '#fff0e6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '2rem' }}>
                     🍲
@@ -466,6 +481,53 @@ export default function CustomerMenu() {
         onPay={handleDirectPayClick}
         ordersCount={tableOrders.length}
       />
+
+      {/* Full-size dish image preview */}
+      {imagePreview && (
+        <div
+          className="modal-overlay"
+          onClick={() => setImagePreview(null)}
+          style={{ zIndex: 1100, padding: '1rem' }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{ width: '100%', maxWidth: '420px', position: 'relative' }}
+          >
+            <button
+              type="button"
+              onClick={() => setImagePreview(null)}
+              aria-label="Close image"
+              style={{
+                position: 'absolute',
+                top: '-0.25rem',
+                right: '-0.25rem',
+                zIndex: 2,
+                background: '#fff',
+                padding: '0.35rem',
+                borderRadius: '50%',
+                boxShadow: 'var(--shadow-md)'
+              }}
+            >
+              <X size={18} />
+            </button>
+            <img
+              src={imagePreview.url}
+              alt={imagePreview.name}
+              style={{
+                width: '100%',
+                maxHeight: '70vh',
+                objectFit: 'contain',
+                borderRadius: '14px',
+                background: '#fff',
+                display: 'block'
+              }}
+            />
+            <p style={{ textAlign: 'center', marginTop: '0.75rem', fontWeight: '700', color: '#fff' }}>
+              {imagePreview.name}
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Item Variant / Half vs Full Modal */}
       {selectedItem && (
