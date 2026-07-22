@@ -1,3 +1,5 @@
+import { getApiOrigin } from '../services/api';
+
 export function resolveUploadUrl(src) {
   if (!src) return null;
   if (
@@ -10,12 +12,9 @@ export function resolveUploadUrl(src) {
   }
 
   const path = src.startsWith('/') ? src : `/${src}`;
-  const apiBase = import.meta.env.VITE_API_URL?.trim() || '/api';
-  const origin = apiBase.startsWith('http')
-    ? new URL(apiBase).origin
-    : window.location.origin;
+  const origin = getApiOrigin() || window.location.origin;
 
-  return `${origin}${path}`;
+  return `${origin.replace(/\/$/, '')}${path}`;
 }
 
 /** @deprecated use resolveUploadUrl */

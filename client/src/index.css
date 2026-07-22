@@ -879,6 +879,11 @@ input:focus, select:focus, textarea:focus {
   padding: 1rem;
 }
 
+.image-preview-overlay {
+  z-index: 2000;
+  padding: 1rem;
+}
+
 .modal-card {
   background: var(--bg-surface);
   border-radius: var(--radius);

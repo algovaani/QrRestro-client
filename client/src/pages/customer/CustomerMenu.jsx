@@ -211,13 +211,18 @@ export default function CustomerMenu() {
     }
   };
 
-  const handleMenuImageClick = (e, item) => {
-    e.stopPropagation();
+  const openImagePreview = (item) => {
     if (!item?.image) return;
+    setSelectedItem(null);
     setImagePreview({
       name: item.name,
       url: resolveUploadUrl(item.image)
     });
+  };
+
+  const handleMenuRowClick = (e, item) => {
+    if (e.target.closest('[data-menu-image-trigger]')) return;
+    handleOpenItemModal(item);
   };
 
   const handleAddToCartConfirm = () => {
@@ -410,7 +415,7 @@ export default function CustomerMenu() {
           {filteredItems.map(item => (
             <div
               key={item._id}
-              onClick={() => handleOpenItemModal(item)}
+              onClick={(e) => handleMenuRowClick(e, item)}
               style={{
                 display: 'flex',
                 gap: '0.85rem',
@@ -422,20 +427,37 @@ export default function CustomerMenu() {
                 cursor: 'pointer'
               }}
             >
-              <div style={{ position: 'relative', flexShrink: 0 }}>
-                {item.image ? (
+              {item.image ? (
+                <button
+                  type="button"
+                  data-menu-image-trigger
+                  aria-label={`View full photo of ${item.name}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    openImagePreview(item);
+                  }}
+                  style={{
+                    flexShrink: 0,
+                    padding: 0,
+                    border: 'none',
+                    background: 'transparent',
+                    cursor: 'zoom-in',
+                    borderRadius: '10px',
+                    overflow: 'hidden'
+                  }}
+                >
                   <img
                     src={resolveUploadUrl(item.image)}
                     alt={item.name}
-                    onClick={(e) => handleMenuImageClick(e, item)}
-                    style={{ width: '85px', height: '85px', borderRadius: '10px', objectFit: 'cover', cursor: 'zoom-in' }}
+                    draggable={false}
+                    style={{ width: '85px', height: '85px', borderRadius: '10px', objectFit: 'cover', display: 'block', pointerEvents: 'none' }}
                   />
-                ) : (
-                  <div style={{ width: '85px', height: '85px', borderRadius: '10px', background: '#fff0e6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '2rem' }}>
-                    🍲
-                  </div>
-                )}
-              </div>
+                </button>
+              ) : (
+                <div style={{ width: '85px', height: '85px', borderRadius: '10px', background: '#fff0e6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '2rem', flexShrink: 0 }}>
+                  🍲
+                </div>
+              )}
 
               <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
                 <div>
@@ -459,7 +481,15 @@ export default function CustomerMenu() {
                      item.priceType === 'Only Full' ? `₹${item.fullPrice}` : `₹${item.fixedPrice}`}
                   </div>
 
-                  <button className="btn btn-primary btn-sm" style={{ padding: '0.35rem 0.75rem', borderRadius: '8px', fontSize: '0.75rem' }}>
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-sm"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleOpenItemModal(item);
+                    }}
+                    style={{ padding: '0.35rem 0.75rem', borderRadius: '8px', fontSize: '0.75rem' }}
+                  >
                     <Plus size={14} /> Add
                   </button>
                 </div>
@@ -485,9 +515,8 @@ export default function CustomerMenu() {
       {/* Full-size dish image preview */}
       {imagePreview && (
         <div
-          className="modal-overlay"
+          className="modal-overlay image-preview-overlay"
           onClick={() => setImagePreview(null)}
-          style={{ zIndex: 1100, padding: '1rem' }}
         >
           <div
             onClick={(e) => e.stopPropagation()}
@@ -530,9 +559,34 @@ export default function CustomerMenu() {
       )}
 
       {/* Item Variant / Half vs Full Modal */}
-      {selectedItem && (
+      {selectedItem && !imagePreview && (
         <div className="modal-overlay" onClick={() => setSelectedItem(null)}>
           <div className="modal-card" onClick={(e) => e.stopPropagation()} style={{ borderRadius: '20px' }}>
+            {selectedItem.image && (
+              <button
+                type="button"
+                data-menu-image-trigger
+                aria-label={`View full photo of ${selectedItem.name}`}
+                onClick={() => openImagePreview(selectedItem)}
+                style={{
+                  width: '100%',
+                  padding: 0,
+                  border: 'none',
+                  background: 'transparent',
+                  cursor: 'zoom-in',
+                  marginBottom: '0.85rem',
+                  borderRadius: '12px',
+                  overflow: 'hidden'
+                }}
+              >
+                <img
+                  src={resolveUploadUrl(selectedItem.image)}
+                  alt={selectedItem.name}
+                  draggable={false}
+                  style={{ width: '100%', maxHeight: '220px', objectFit: 'cover', display: 'block', pointerEvents: 'none' }}
+                />
+              </button>
+            )}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem' }}>
               <div>
                 <span className={`badge ${selectedItem.foodType === 'Veg' ? 'badge-veg' : 'badge-nonveg'}`} style={{ fontSize: '0.7rem' }}>
