@@ -26,7 +26,9 @@ export default function UPIPaymentModal({ orderNumber, onClose, onSuccess }) {
         setBillMeta({
           restaurantName: res.data.setting?.restaurantName || qrData?.restaurantName || 'Royal Spice Restaurant',
           taxLabel: `GST Tax (${res.data.setting?.taxPercentage ?? 5}%)`,
-          contactNumber: res.data.setting?.mobile || ''
+          contactNumber: res.data.setting?.mobile || '',
+          address: res.data.setting?.address || '',
+          gstNumber: res.data.setting?.gstNumber || ''
         });
       }
     } catch {

@@ -8,7 +8,9 @@ const { emitPaymentPending, emitPaymentSuccess, emitOrderStatusUpdate } = requir
 const getBillMeta = (settings) => ({
   restaurantName: settings.restaurantName || 'Royal Spice Restaurant',
   taxLabel: `GST Tax (${settings.taxPercentage || 5}%)`,
-  contactNumber: settings.mobile || ''
+  contactNumber: settings.mobile || '',
+  address: settings.address || '',
+  gstNumber: settings.gstNumber || ''
 });
 
 // @desc Generate Dynamic UPI QR Code for Order Grand Total

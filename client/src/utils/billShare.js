@@ -38,6 +38,8 @@ function normalizeBillPdfUrl(url, orderNumber) {
 async function resolveBillContext(orderNumber, options = {}) {
   let billUrl = getPublicBillPdfUrl(orderNumber);
   let contactNumber = options.contactNumber || '';
+  let address = options.address || '';
+  let gstNumber = options.gstNumber || '';
   let restaurantName = options.restaurantName || '';
 
   try {
@@ -49,6 +51,12 @@ async function resolveBillContext(orderNumber, options = {}) {
       if (data.contactNumber) {
         contactNumber = data.contactNumber;
       }
+      if (data.address) {
+        address = data.address;
+      }
+      if (data.gstNumber) {
+        gstNumber = data.gstNumber;
+      }
       if (data.restaurantName && !restaurantName) {
         restaurantName = data.restaurantName;
       }
@@ -57,7 +65,7 @@ async function resolveBillContext(orderNumber, options = {}) {
     /* fall back to detected API origin */
   }
 
-  return { billUrl, contactNumber, restaurantName };
+  return { billUrl, contactNumber, address, gstNumber, restaurantName };
 }
 
 /**
@@ -75,13 +83,17 @@ export async function sendOrderBillOnWhatsApp(order, options = {}) {
   }
 
   const restaurantName = options.restaurantName || 'Royal Spice Restaurant';
-  const { billUrl, contactNumber, restaurantName: resolvedName } = await resolveBillContext(
+  const { billUrl, contactNumber, address, gstNumber, restaurantName: resolvedName } = await resolveBillContext(
     order.orderNumber,
     options
   );
   const finalRestaurantName = restaurantName || resolvedName || 'Royal Spice Restaurant';
-  const finalContact = options.contactNumber || contactNumber || '';
-  const message = buildBillWhatsAppMessage(order, finalRestaurantName, billUrl, finalContact);
+  const restaurantInfo = {
+    contactNumber: options.contactNumber || contactNumber || '',
+    address: options.address || address || '',
+    gstNumber: options.gstNumber || gstNumber || ''
+  };
+  const message = buildBillWhatsAppMessage(order, finalRestaurantName, billUrl, restaurantInfo);
 
   openWhatsApp(phone, message);
 
@@ -90,7 +102,7 @@ export async function sendOrderBillOnWhatsApp(order, options = {}) {
     method: 'whatsapp-link',
     phone,
     billUrl,
-    contactNumber: finalContact,
+    ...restaurantInfo,
     hint: options.forAdmin
       ? null
       : 'WhatsApp khul gaya hai. Send dabayein — aapko bill link milega.'

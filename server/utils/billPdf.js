@@ -24,6 +24,8 @@ function generateOrderBillPdfBuffer(order, options = {}) {
   const restaurantName = options.restaurantName || 'Royal Spice Restaurant';
   const taxLabel = options.taxLabel || 'GST Tax';
   const contactNumber = options.contactNumber || '';
+  const address = options.address || '';
+  const gstNumber = options.gstNumber || '';
 
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ size: 'A5', margin: 36 });
@@ -35,7 +37,19 @@ function generateOrderBillPdfBuffer(order, options = {}) {
 
     doc.fontSize(15).font('Helvetica-Bold').text(restaurantName.toUpperCase(), { align: 'center' });
     doc.moveDown(0.25);
-    doc.fontSize(11).text('TAX INVOICE / RECEIPT', { align: 'center' });
+
+    if (address) {
+      doc.fontSize(8).font('Helvetica').fillColor('#505050').text(address, { align: 'center' });
+      doc.moveDown(0.2);
+      doc.fillColor('#000000');
+    }
+
+    if (gstNumber) {
+      doc.fontSize(9).font('Helvetica').text(`GST No: ${gstNumber}`, { align: 'center' });
+      doc.moveDown(0.25);
+    }
+
+    doc.fontSize(11).font('Helvetica-Bold').text('TAX INVOICE / RECEIPT', { align: 'center' });
     doc.moveDown(0.4);
 
     const lineY = doc.y;

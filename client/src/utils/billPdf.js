@@ -17,6 +17,8 @@ export function generateOrderBillPdfBlob(order, options = {}) {
   const restaurantName = options.restaurantName || 'Royal Spice Restaurant';
   const taxLabel = options.taxLabel || 'GST Tax';
   const contactNumber = options.contactNumber || '';
+  const address = options.address || '';
+  const gstNumber = options.gstNumber || '';
 
   const doc = new jsPDF({ unit: 'mm', format: 'a5', orientation: 'portrait' });
   const pageW = doc.internal.pageSize.getWidth();
@@ -37,6 +39,27 @@ export function generateOrderBillPdfBlob(order, options = {}) {
   doc.text(restaurantName.toUpperCase(), pageW / 2, y, { align: 'center' });
   y += 7;
 
+  if (address) {
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(80);
+    const addressLines = doc.splitTextToSize(address, contentW);
+    addressLines.forEach((line) => {
+      doc.text(line, pageW / 2, y, { align: 'center' });
+      y += 4;
+    });
+    doc.setTextColor(0);
+    y += 1;
+  }
+
+  if (gstNumber) {
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.text(`GST No: ${gstNumber}`, pageW / 2, y, { align: 'center' });
+    y += 5;
+  }
+
+  doc.setFont('helvetica', 'bold');
   doc.setFontSize(11);
   doc.text('TAX INVOICE / RECEIPT', pageW / 2, y, { align: 'center' });
   y += 8;
@@ -141,7 +164,8 @@ export function generateOrderBillPdfBlob(order, options = {}) {
   return doc.output('blob');
 }
 
-export function buildBillWhatsAppMessage(order, restaurantName, billUrl = '', contactNumber = '') {
+export function buildBillWhatsAppMessage(order, restaurantName, billUrl = '', restaurantInfo = {}) {
+  const { contactNumber = '', address = '', gstNumber = '' } = restaurantInfo;
   const lines = [
     `*${restaurantName || 'Restaurant'} - Bill*`,
     `Order #: *${order.orderNumber}*`,
@@ -150,6 +174,12 @@ export function buildBillWhatsAppMessage(order, restaurantName, billUrl = '', co
     `Payment: *${order.paymentStatus}*`
   ];
 
+  if (address) {
+    lines.push(`Address: ${address}`);
+  }
+  if (gstNumber) {
+    lines.push(`GST No: *${gstNumber}*`);
+  }
   if (contactNumber) {
     lines.push(`Contact: *${contactNumber}*`);
   }

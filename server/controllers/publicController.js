@@ -300,7 +300,9 @@ exports.getOrderBillLink = async (req, res, next) => {
       orderNumber: order.orderNumber,
       paymentStatus: order.paymentStatus,
       restaurantName: setting.restaurantName || 'Royal Spice Restaurant',
-      contactNumber: setting.mobile || ''
+      contactNumber: setting.mobile || '',
+      address: setting.address || '',
+      gstNumber: setting.gstNumber || ''
     });
   } catch (error) {
     next(error);
@@ -326,7 +328,9 @@ exports.getOrderBillPdf = async (req, res, next) => {
     const pdfBuffer = await generateOrderBillPdfBuffer(order, {
       restaurantName: setting.restaurantName || 'Royal Spice Restaurant',
       taxLabel: `GST Tax (${setting.taxPercentage || 5}%)`,
-      contactNumber: setting.mobile || ''
+      contactNumber: setting.mobile || '',
+      address: setting.address || '',
+      gstNumber: setting.gstNumber || ''
     });
 
     res.set({
