@@ -23,6 +23,20 @@ const allowedOrigins = getAllowedOrigins();
 
 app.set('trust proxy', 1);
 
+function getPublicApiOriginHeader() {
+  const fromEnv = process.env.PUBLIC_API_URL || process.env.RENDER_EXTERNAL_URL;
+  if (fromEnv) {
+    return fromEnv.trim().replace(/\/$/, '');
+  }
+  return '';
+}
+
+app.use((req, res, next) => {
+  const origin = getPublicApiOriginHeader() || `${req.protocol}://${req.get('host')}`;
+  res.setHeader('X-Api-Origin', origin.replace(/\/$/, ''));
+  next();
+});
+
 // Ensure uploads folder exists
 const uploadDir = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadDir)) {

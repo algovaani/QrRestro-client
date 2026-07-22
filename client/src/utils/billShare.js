@@ -1,6 +1,5 @@
-import API from '../services/api';
+import API, { getApiOrigin } from '../services/api';
 import { generateOrderBillPdfBlob, buildBillWhatsAppMessage } from './billPdf';
-import { getPublicApiOrigin } from './publicApiOrigin';
 import { normalizeIndianPhone, openWhatsApp } from './shareWhatsApp';
 
 function downloadBlob(blob, filename) {
@@ -16,18 +15,34 @@ function downloadBlob(blob, filename) {
 
 /** Public bill PDF link — must target the API server, not the static client host */
 export function getPublicBillPdfUrl(orderNumber) {
-  const base = getPublicApiOrigin();
+  const base = getApiOrigin();
   return `${base}/api/public/orders/${encodeURIComponent(orderNumber)}/bill.pdf`;
+}
+
+function normalizeBillPdfUrl(url, orderNumber) {
+  const fallback = getPublicBillPdfUrl(orderNumber);
+  if (!url) return fallback;
+
+  try {
+    const parsed = new URL(url);
+    const apiOrigin = getApiOrigin();
+    if (apiOrigin !== window.location.origin && parsed.origin === window.location.origin) {
+      return fallback;
+    }
+    return parsed.href;
+  } catch {
+    return fallback;
+  }
 }
 
 async function resolveBillPdfUrl(orderNumber) {
   try {
     const { data } = await API.get(`/public/orders/${encodeURIComponent(orderNumber)}/bill-link`);
     if (data?.success && data?.billUrl) {
-      return data.billUrl;
+      return normalizeBillPdfUrl(data.billUrl, orderNumber);
     }
   } catch {
-    /* fall back to env-based URL */
+    /* fall back to detected API origin */
   }
   return getPublicBillPdfUrl(orderNumber);
 }

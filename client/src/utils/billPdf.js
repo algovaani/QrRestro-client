@@ -1,5 +1,5 @@
 import { jsPDF } from 'jspdf';
-import { formatMoney, formatMoneyWithSymbol, formatMoneyForPdf } from './formatMoney';
+import { formatMoney, formatMoneyForPdf } from './formatMoney';
 
 const formatDate = (date) =>
   new Date(date).toLocaleString('en-IN', {
@@ -139,17 +139,17 @@ export function generateOrderBillPdfBlob(order, options = {}) {
 
 export function buildBillWhatsAppMessage(order, restaurantName, billUrl = '') {
   const lines = [
-    `🧾 *${restaurantName || 'Restaurant'} — Bill*`,
+    `*${restaurantName || 'Restaurant'} - Bill*`,
     `Order #: *${order.orderNumber}*`,
     `Table #: *${order.tableNumber}*`,
-    `Amount: *${formatMoneyWithSymbol(order.grandTotal)}*`,
+    `Amount: *${formatMoneyForPdf(order.grandTotal)}*`,
     `Payment: *${order.paymentStatus}*`
   ];
 
   if (billUrl) {
-    lines.push('', '📄 Download your bill PDF:', billUrl);
+    lines.push('', 'Download your bill PDF:', billUrl);
   } else {
-    lines.push('', 'PDF bill — please check 📄');
+    lines.push('', 'PDF bill attached separately.');
   }
 
   return lines.join('\n');

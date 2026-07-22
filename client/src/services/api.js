@@ -4,6 +4,94 @@ const API = axios.create({
   baseURL: import.meta.env.VITE_API_URL || '/api',
 });
 
+const API_ORIGIN_STORAGE_KEY = 'restaurant_api_origin';
+
+function readStoredApiOrigin() {
+  try {
+    return sessionStorage.getItem(API_ORIGIN_STORAGE_KEY) || '';
+  } catch {
+    return '';
+  }
+}
+
+function storeApiOrigin(origin) {
+  if (!origin) return;
+  try {
+    sessionStorage.setItem(API_ORIGIN_STORAGE_KEY, origin.replace(/\/$/, ''));
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Origin where /api routes are served (backend host in split deploy) */
+export function getApiOrigin() {
+  const stored = readStoredApiOrigin();
+  if (stored) return stored;
+
+  const explicit = import.meta.env.VITE_PUBLIC_APP_URL?.trim();
+  if (explicit) {
+    try {
+      return new URL(explicit.replace(/\/$/, '')).origin;
+    } catch {
+      return explicit.replace(/\/$/, '');
+    }
+  }
+
+  const baseURL = API.defaults.baseURL;
+  if (typeof baseURL === 'string' && (baseURL.startsWith('http://') || baseURL.startsWith('https://'))) {
+    try {
+      return new URL(baseURL).origin;
+    } catch {
+      /* fall through */
+    }
+  }
+
+  const apiUrl = import.meta.env.VITE_API_URL?.trim();
+  if (apiUrl && (apiUrl.startsWith('http://') || apiUrl.startsWith('https://'))) {
+    try {
+      return new URL(apiUrl).origin;
+    } catch {
+      /* fall through */
+    }
+  }
+
+  return window.location.origin;
+}
+
+export function rememberApiOrigin(origin) {
+  if (!origin) return;
+  storeApiOrigin(origin.replace(/\/$, ''));
+}
+
+function captureApiOriginFromResponse(response) {
+  const header =
+    response?.headers?.['x-api-origin'] ||
+    response?.headers?.['X-Api-Origin'];
+  if (header) {
+    rememberApiOrigin(header);
+    return;
+  }
+
+  const configBase = response?.config?.baseURL;
+  if (typeof configBase === 'string' && configBase.startsWith('http')) {
+    try {
+      rememberApiOrigin(new URL(configBase).origin);
+    } catch {
+      /* ignore */
+    }
+    return;
+  }
+
+  const requestUrl = response?.request?.responseURL;
+  if (requestUrl) {
+    try {
+      rememberApiOrigin(new URL(requestUrl).origin);
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
 // Interceptor to add JWT token from localStorage
 API.interceptors.request.use((config) => {
   const token = localStorage.getItem('token');
@@ -19,8 +107,14 @@ API.interceptors.request.use((config) => {
 
 // Response interceptor to handle 401 unauthorized
 API.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    captureApiOriginFromResponse(response);
+    return response;
+  },
   (error) => {
+    if (error.response) {
+      captureApiOriginFromResponse(error.response);
+    }
     if (error.response && error.response.status === 401) {
       localStorage.removeItem('token');
       localStorage.removeItem('user');
