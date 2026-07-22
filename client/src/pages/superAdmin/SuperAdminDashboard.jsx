@@ -1153,7 +1153,7 @@ export default function SuperAdminDashboard() {
           {/* TAB 3: MEMBERSHIP PLANS MANAGEMENT */}
           {activeTab === 'plans' && (
             <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
+              <div className="admin-mobile-stack-header">
                 <div>
                   <h3 style={{ fontSize: '1.2rem', fontWeight: '800', color: 'var(--secondary)' }}>Membership Plans Package Menu</h3>
                   <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Create, edit, or delete SaaS subscription pricing plans for restaurants</span>

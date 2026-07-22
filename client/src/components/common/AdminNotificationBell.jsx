@@ -11,6 +11,8 @@ export default function AdminNotificationBell({ onViewOrder, onNavigate }) {
   useEffect(() => {
     if (!panelOpen) return;
 
+    document.body.classList.add('admin-notifications-panel-open');
+
     const handleClickOutside = (e) => {
       if (wrapRef.current && !wrapRef.current.contains(e.target)) {
         setPanelOpen(false);
@@ -18,7 +20,10 @@ export default function AdminNotificationBell({ onViewOrder, onNavigate }) {
     };
 
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.body.classList.remove('admin-notifications-panel-open');
+    };
   }, [panelOpen]);
 
   return (
@@ -37,19 +42,27 @@ export default function AdminNotificationBell({ onViewOrder, onNavigate }) {
       </button>
 
       {panelOpen && (
-        <NotificationPanel
-          notifications={notifications}
-          removeNotification={removeNotification}
-          onViewOrder={(order) => {
-            setPanelOpen(false);
-            onViewOrder?.(order);
-          }}
-          onNavigate={(path) => {
-            setPanelOpen(false);
-            onNavigate?.(path);
-          }}
-          onClose={() => setPanelOpen(false)}
-        />
+        <>
+          <button
+            type="button"
+            className="admin-notifications-panel-backdrop"
+            onClick={() => setPanelOpen(false)}
+            aria-label="Close notifications"
+          />
+          <NotificationPanel
+            notifications={notifications}
+            removeNotification={removeNotification}
+            onViewOrder={(order) => {
+              setPanelOpen(false);
+              onViewOrder?.(order);
+            }}
+            onNavigate={(path) => {
+              setPanelOpen(false);
+              onNavigate?.(path);
+            }}
+            onClose={() => setPanelOpen(false)}
+          />
+        </>
       )}
     </div>
   );
