@@ -32,7 +32,6 @@ export default function OrdersPage() {
 
   // Selected Order Modal State
   const [selectedOrder, setSelectedOrder] = useState(null);
-  const openedOrderFromUrlRef = useRef('');
 
   // Payment confirm dialog (Paid / Unpaid toggle)
   const [paymentConfirm, setPaymentConfirm] = useState(null);
@@ -86,7 +85,7 @@ export default function OrdersPage() {
     }
   }, [location.search]);
 
-  const clearOrderFromUrl = () => {
+  const stripOrderFromUrl = () => {
     const params = new URLSearchParams(location.search);
     if (!params.has('order')) return;
     params.delete('order');
@@ -95,30 +94,28 @@ export default function OrdersPage() {
       { pathname: location.pathname, search: nextSearch ? `?${nextSearch}` : '' },
       { replace: true }
     );
-    openedOrderFromUrlRef.current = '';
   };
 
   const closeOrderModal = () => {
     setSelectedOrder(null);
-    clearOrderFromUrl();
+    stripOrderFromUrl();
   };
 
   const openOrderModal = (order) => {
     setSelectedOrder(order);
-    clearOrderFromUrl();
+    stripOrderFromUrl();
   };
 
-  // Open order details once when linked from notification (?order=ORD-1163)
+  // Open order from notification link (?order=ORD-1163), then remove param so reload won't reopen
   useEffect(() => {
     const orderParam = new URLSearchParams(location.search).get('order') || '';
     if (!orderParam || loading) return;
-    if (openedOrderFromUrlRef.current === orderParam) return;
 
     const match = orders.find((o) => o.orderNumber === orderParam);
     if (match) {
-      openedOrderFromUrlRef.current = orderParam;
       setSelectedOrder(match);
     }
+    stripOrderFromUrl();
   }, [location.search, orders, loading]);
 
   // Real-time WebSocket handlers - HAND TO HAND SOCKET PROCESS
