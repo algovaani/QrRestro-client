@@ -143,8 +143,9 @@ export default function UsersPage() {
           </div>
 
           {/* Users Table */}
-          <div style={{ background: 'var(--bg-surface)', borderRadius: 'var(--radius)', border: '1px solid var(--border)', overflow: 'hidden' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.9rem' }}>
+          <div className="admin-panel">
+            <div className="admin-table-wrap">
+            <table className="admin-table-compact" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.9rem' }}>
               <thead style={{ background: '#f8fafc', borderBottom: '1px solid var(--border)', color: 'var(--text-muted)', fontSize: '0.8rem' }}>
                 <tr>
                   <th style={{ padding: '0.8rem 1rem' }}>NAME</th>
@@ -196,6 +197,7 @@ export default function UsersPage() {
                 )}
               </tbody>
             </table>
+            </div>
           </div>
 
         </div>
@@ -261,7 +263,7 @@ export default function UsersPage() {
                 />
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+              <div className="admin-form-grid-2">
                 <div>
                   <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', marginBottom: '0.3rem' }}>Role</label>
                   <select

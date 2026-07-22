@@ -34,6 +34,11 @@ body {
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   -webkit-tap-highlight-color: transparent;
+  overflow-x: clip;
+}
+
+body.admin-sidebar-open {
+  overflow: hidden;
 }
 
 a {
@@ -423,6 +428,8 @@ input:focus, select:focus, textarea:focus {
   display: flex;
   min-height: 100vh;
   width: 100%;
+  max-width: 100vw;
+  overflow-x: clip;
 }
 
 .admin-sidebar {
@@ -480,6 +487,8 @@ input:focus, select:focus, textarea:focus {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
   position: sticky;
   top: 0;
   z-index: 90;
@@ -514,7 +523,7 @@ input:focus, select:focus, textarea:focus {
 }
 
 .admin-sidebar-backdrop {
-  display: none;
+  display: block;
   position: fixed;
   inset: 0;
   z-index: 104;
@@ -590,6 +599,7 @@ input:focus, select:focus, textarea:focus {
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
   width: 100%;
+  max-width: 100%;
 }
 
 .admin-table-wrap table {
@@ -597,7 +607,7 @@ input:focus, select:focus, textarea:focus {
 }
 
 .admin-table-wrap table.admin-table-compact {
-  min-width: 560px;
+  min-width: 520px;
 }
 
 .admin-toolbar {
@@ -661,6 +671,54 @@ input:focus, select:focus, textarea:focus {
   display: grid;
   grid-template-columns: 1fr 1fr 1fr;
   gap: 1rem;
+}
+
+.admin-form-grid-split {
+  display: grid;
+  grid-template-columns: 1.5fr 1fr;
+  gap: 1rem;
+}
+
+.admin-grid-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr));
+  gap: 1.25rem;
+}
+
+.admin-filter-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.admin-filter-presets {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.admin-filter-dates {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.admin-action-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.admin-action-bar > div {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
 }
 
 .admin-panel {
@@ -977,12 +1035,13 @@ input:focus, select:focus, textarea:focus {
 
 @media (max-width: 768px) {
   .admin-mobile-menu-btn {
-    display: inline-flex;
+    display: inline-flex !important;
   }
 
   .admin-sidebar {
     width: min(280px, 88vw);
     transform: translateX(-100%);
+    z-index: 110;
   }
 
   .admin-sidebar.is-open {
@@ -993,22 +1052,16 @@ input:focus, select:focus, textarea:focus {
     display: inline-flex;
   }
 
-  .admin-sidebar-brand h3,
-  .admin-sidebar-brand span {
-    color: #ffffff;
-  }
-
   .admin-main {
-    margin-left: 0;
-    width: 100%;
+    margin-left: 0 !important;
+    width: 100% !important;
+    max-width: 100vw;
   }
 
   .admin-header {
     padding: 0.65rem 0.85rem;
     height: auto;
     min-height: 56px;
-    gap: 0.5rem;
-    flex-wrap: wrap;
   }
 
   .admin-header-title {
@@ -1020,33 +1073,31 @@ input:focus, select:focus, textarea:focus {
 
   .admin-header-actions {
     flex-shrink: 1;
-    width: 100%;
-    justify-content: flex-start;
+    width: auto;
+    margin-left: auto;
+    justify-content: flex-end;
   }
 
   .admin-header-sync span {
     display: none;
   }
 
-  .admin-notification-title {
-    font-size: 0.95rem;
-  }
-
-  .admin-notification-message {
-    font-size: 0.875rem;
-  }
-
   .admin-content {
-    padding: 0.85rem;
+    padding: 0.75rem;
   }
 
-  .admin-dashboard-split {
-    grid-template-columns: 1fr;
-  }
-
+  .admin-dashboard-split,
   .admin-form-grid-2,
-  .admin-form-grid-3 {
-    grid-template-columns: 1fr;
+  .admin-form-grid-3,
+  .admin-form-grid-split,
+  .admin-grid-cards,
+  .admin-content div[style*="gridTemplateColumns"],
+  .stats-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .stats-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
   }
 
   .admin-table-wrap table {
@@ -1054,18 +1105,56 @@ input:focus, select:focus, textarea:focus {
     font-size: 0.8rem;
   }
 
+  .admin-table-wrap table.admin-table-compact {
+    min-width: 480px;
+  }
+
   .admin-table-wrap th,
   .admin-table-wrap td {
     padding: 0.55rem 0.65rem !important;
   }
 
-  .stats-grid {
-    grid-template-columns: 1fr 1fr;
-    gap: 0.75rem;
+  .admin-toolbar,
+  .admin-filter-bar,
+  .admin-action-bar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .admin-toolbar-search,
+  .admin-toolbar-filters {
+    width: 100%;
+    flex: 1 1 100%;
+  }
+
+  .admin-toolbar-filters select,
+  .admin-content select,
+  .admin-content input,
+  .admin-content textarea {
+    max-width: 100%;
+    width: 100%;
+  }
+
+  .admin-filter-dates input {
+    flex: 1 1 120px;
+    min-width: 0;
+  }
+
+  .membership-sa-request-actions {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .membership-sa-request-card {
+    flex-direction: column;
   }
 
   .kds-grid {
     grid-template-columns: 1fr;
+  }
+
+  .modal-card {
+    max-width: calc(100vw - 1.5rem);
   }
 
   .customer-mobile-wrap {
@@ -1081,7 +1170,7 @@ input:focus, select:focus, textarea:focus {
 
 @media (max-width: 480px) {
   .stats-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: 1fr !important;
   }
 
   .btn {
@@ -1097,45 +1186,81 @@ input:focus, select:focus, textarea:focus {
   .modal-card {
     padding: 1rem;
     border-radius: 16px;
+    width: calc(100vw - 1rem);
+    max-width: none;
   }
 
   .admin-content {
-    padding: 0.65rem;
+    padding: 0.6rem;
+  }
+
+  .admin-header {
+    padding: 0.55rem 0.65rem;
   }
 
   .admin-header-actions .btn-label {
     display: none;
   }
 
-  .admin-toolbar-filters select {
-    flex: 1 1 100%;
+  .admin-header-actions {
+    width: 100%;
+    justify-content: flex-start;
   }
 
   .admin-datatable-footer {
     padding: 0.75rem;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .admin-datatable-pagination {
+    justify-content: center;
   }
 
   .admin-panel--padded {
-    padding: 0.85rem;
+    padding: 0.75rem;
   }
 
-  .membership-sa-request-actions {
-    min-width: 0;
-    width: 100%;
+  .modal-overlay .btn[style*="minWidth"] {
+    min-width: 0 !important;
+  }
+
+  .stat-card h3,
+  .stat-card h4 {
+    font-size: 1.15rem !important;
+  }
+
+  .admin-table-wrap table {
+    min-width: 560px;
   }
 }
 
 @media (max-width: 360px) {
   .admin-header-title {
-    font-size: 0.88rem;
+    font-size: 0.85rem;
+  }
+
+  .admin-mobile-menu-btn {
+    width: 36px;
+    height: 36px;
+  }
+
+  .admin-content {
+    padding: 0.5rem;
   }
 
   .admin-table-wrap table {
-    min-width: 520px;
+    min-width: 480px;
+    font-size: 0.75rem;
   }
 
   .stat-card {
-    padding: 0.85rem;
+    padding: 0.75rem;
+  }
+
+  .btn-sm {
+    padding: 0.3rem 0.5rem;
+    font-size: 0.7rem;
   }
 }
 

@@ -62,6 +62,21 @@ export default function SuperAdminDashboard() {
   const [actionLoading, setActionLoading] = useState(false);
   const [toast, setToast] = useState({ type: '', message: '' });
 
+  useEffect(() => {
+    document.body.classList.toggle('admin-sidebar-open', sidebarOpen);
+    return () => document.body.classList.remove('admin-sidebar-open');
+  }, [sidebarOpen]);
+
+  useEffect(() => {
+    const onResize = () => {
+      if (window.innerWidth > 768) {
+        setSidebarOpen(false);
+      }
+    };
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
   // State to toggle password visibility per admin ID
   const [visiblePasswords, setVisiblePasswords] = useState({});
 
@@ -674,7 +689,7 @@ export default function SuperAdminDashboard() {
         {/* Header with Prominent Action Buttons */}
         <header className="admin-header">
           <div className="admin-header-start">
-            <button type="button" className="admin-mobile-menu-btn" onClick={() => setSidebarOpen(true)} aria-label="Open menu">
+            <button type="button" className="admin-mobile-menu-btn" onClick={() => setSidebarOpen((v) => !v)} aria-label="Open menu">
               <Menu size={22} />
             </button>
             <h2 className="admin-header-title">Super Admin Control Center</h2>
@@ -750,7 +765,7 @@ export default function SuperAdminDashboard() {
           )}
           
           {/* STATS GRID */}
-          <div className="stats-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', marginBottom: '1.5rem' }}>
+          <div className="stats-grid" style={{ marginBottom: '1.5rem' }}>
             <div className="stat-card" onClick={() => setActiveTab('admins')} style={{ cursor: 'pointer' }}>
               <div>
                 <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: '600' }}>Total Admins</span>
@@ -1149,7 +1164,7 @@ export default function SuperAdminDashboard() {
                 </button>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.25rem' }}>
+              <div className="admin-grid-cards">
                 {plans.length === 0 && (
                   <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '3rem', color: 'var(--text-muted)', background: 'var(--bg-surface)', borderRadius: 'var(--radius)', border: '1px dashed var(--border)' }}>
                     <Layers size={40} style={{ margin: '0 auto 0.75rem', opacity: 0.4 }} />
@@ -1702,7 +1717,7 @@ export default function SuperAdminDashboard() {
                 />
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+              <div className="admin-form-grid-2" style={{ gap: '0.75rem' }}>
                 <div>
                   <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '700', marginBottom: '0.3rem' }}>Price (₹) *</label>
                   <input

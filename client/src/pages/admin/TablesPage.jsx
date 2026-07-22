@@ -186,7 +186,7 @@ export default function TablesPage() {
           </div>
 
           {/* Table Grid Cards */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1.25rem' }}>
+          <div className="admin-grid-cards">
             {tables.map((table) => {
               const qrSrc = table.qrCodeImage || table.qrCode;
 
@@ -223,7 +223,7 @@ export default function TablesPage() {
 
                   {/* Table Actions Toolbar */}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+                    <div className="admin-form-grid-2" style={{ gap: '0.5rem' }}>
                       <button onClick={() => downloadQR(table)} className="btn btn-secondary btn-sm" title="Download QR PNG">
                         <Download size={14} /> Download
                       </button>
@@ -306,7 +306,7 @@ export default function TablesPage() {
                 />
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+              <div className="admin-form-grid-2">
                 <div>
                   <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', marginBottom: '0.3rem' }}>Section / Floor</label>
                   <input

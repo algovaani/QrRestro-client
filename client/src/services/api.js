@@ -60,7 +60,7 @@ export function getApiOrigin() {
 
 export function rememberApiOrigin(origin) {
   if (!origin) return;
-  storeApiOrigin(origin.replace(/\/$, ''));
+  storeApiOrigin(origin.replace(/\/$/, ''));
 }
 
 function captureApiOriginFromResponse(response) {

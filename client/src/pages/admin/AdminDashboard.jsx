@@ -270,8 +270,8 @@ export default function AdminDashboard() {
           )}
 
           {/* DATE FILTER BAR */}
-          <div style={{ background: 'var(--bg-surface)', padding: '1.25rem', borderRadius: 'var(--radius)', border: '1px solid var(--border)', marginBottom: '1.5rem', boxShadow: 'var(--shadow-sm)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+          <div className="admin-panel admin-panel--padded" style={{ marginBottom: '1.5rem', boxShadow: 'var(--shadow-sm)' }}>
+            <div className="admin-filter-bar">
               
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--secondary)', fontWeight: '800', fontSize: '0.95rem' }}>
                 <Calendar size={18} color="var(--primary)" />
@@ -279,7 +279,7 @@ export default function AdminDashboard() {
               </div>
 
               {/* Preset Selector Buttons */}
-              <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+              <div className="admin-filter-presets">
                 <button
                   type="button"
                   onClick={() => handlePresetChange('today')}
@@ -358,7 +358,7 @@ export default function AdminDashboard() {
 
               {/* Custom Date Inputs */}
               {filterPreset === 'custom' && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <div className="admin-filter-dates">
                   <input
                     type="date"
                     value={startDate}
@@ -462,7 +462,7 @@ export default function AdminDashboard() {
               </div>
 
               {/* Secondary Interactive Stats Row */}
-              <div className="stats-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
+              <div className="stats-grid">
                 
                 {/* 5. Total Tables Card */}
                 <div

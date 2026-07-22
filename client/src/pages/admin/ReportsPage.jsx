@@ -75,8 +75,8 @@ export default function ReportsPage() {
         <div className="admin-content">
 
           {/* Action Bar */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
-            <div style={{ display: 'flex', gap: '0.5rem' }}>
+          <div className="admin-action-bar">
+            <div>
               <button
                 onClick={() => setReportType('sales')}
                 className={`btn ${reportType === 'sales' ? 'btn-primary' : 'btn-secondary'}`}
@@ -97,7 +97,7 @@ export default function ReportsPage() {
               </button>
             </div>
 
-            <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <div>
               <button onClick={exportCSV} className="btn btn-secondary">
                 <Download size={16} /> Export CSV
               </button>
@@ -110,7 +110,7 @@ export default function ReportsPage() {
           {/* Report Data Tables */}
           <div className="admin-panel admin-table-wrap">
             {reportType === 'sales' && (
-              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.9rem' }}>
+              <table className="admin-table-compact" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.9rem' }}>
                 <thead style={{ background: '#f8fafc', borderBottom: '1px solid var(--border)', color: 'var(--text-muted)', fontSize: '0.8rem' }}>
                   <tr>
                     <th style={{ padding: '0.8rem 1rem' }}>DATE</th>
@@ -138,7 +138,7 @@ export default function ReportsPage() {
             )}
 
             {reportType === 'items' && (
-              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.9rem' }}>
+              <table className="admin-table-compact" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.9rem' }}>
                 <thead style={{ background: '#f8fafc', borderBottom: '1px solid var(--border)', color: 'var(--text-muted)', fontSize: '0.8rem' }}>
                   <tr>
                     <th style={{ padding: '0.8rem 1rem' }}>ITEM NAME</th>
@@ -162,7 +162,7 @@ export default function ReportsPage() {
             )}
 
             {reportType === 'tables' && (
-              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.9rem' }}>
+              <table className="admin-table-compact" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.9rem' }}>
                 <thead style={{ background: '#f8fafc', borderBottom: '1px solid var(--border)', color: 'var(--text-muted)', fontSize: '0.8rem' }}>
                   <tr>
                     <th style={{ padding: '0.8rem 1rem' }}>TABLE</th>
