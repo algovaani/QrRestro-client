@@ -10,6 +10,7 @@ const {
   getActiveOrdersForTable,
   getActiveOrdersForTableByAdmin,
   submitOrderRating,
+  getOrderBillLink,
   getOrderBillPdf
 } = require('../controllers/publicController');
 
@@ -20,7 +21,9 @@ router.get('/table/:tableNumber', getTableInfo);
 router.get('/menu/:tableNumber', getPublicMenu);
 router.post('/orders', placeOrder);
 router.get('/orders/:orderNumber/status', getOrderStatus);
+router.get('/orders/:orderNumber/bill-link', getOrderBillLink);
 router.get('/orders/:orderNumber/bill.pdf', getOrderBillPdf);
+router.get('/orders/:orderNumber/bill', getOrderBillPdf);
 router.get('/orders/table/:adminId/:tableNumber/active', getActiveOrdersForTableByAdmin);
 router.get('/orders/table/:tableNumber/active', getActiveOrdersForTable);
 router.post('/orders/:orderNumber/rate', submitOrderRating);

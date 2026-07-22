@@ -1,4 +1,6 @@
+import API from '../services/api';
 import { generateOrderBillPdfBlob, buildBillWhatsAppMessage } from './billPdf';
+import { getPublicApiOrigin } from './publicApiOrigin';
 import { normalizeIndianPhone, openWhatsApp } from './shareWhatsApp';
 
 function downloadBlob(blob, filename) {
@@ -12,11 +14,22 @@ function downloadBlob(blob, filename) {
   URL.revokeObjectURL(url);
 }
 
-/** Public bill PDF link — customer opens this URL on their phone */
+/** Public bill PDF link — must target the API server, not the static client host */
 export function getPublicBillPdfUrl(orderNumber) {
-  const configured = import.meta.env.VITE_PUBLIC_APP_URL?.trim();
-  const base = (configured || window.location.origin).replace(/\/$/, '');
+  const base = getPublicApiOrigin();
   return `${base}/api/public/orders/${encodeURIComponent(orderNumber)}/bill.pdf`;
+}
+
+async function resolveBillPdfUrl(orderNumber) {
+  try {
+    const { data } = await API.get(`/public/orders/${encodeURIComponent(orderNumber)}/bill-link`);
+    if (data?.success && data?.billUrl) {
+      return data.billUrl;
+    }
+  } catch {
+    /* fall back to env-based URL */
+  }
+  return getPublicBillPdfUrl(orderNumber);
 }
 
 /**
@@ -33,7 +46,7 @@ export async function sendOrderBillOnWhatsApp(order, options = {}) {
   }
 
   const restaurantName = options.restaurantName || 'Royal Spice Restaurant';
-  const billUrl = getPublicBillPdfUrl(order.orderNumber);
+  const billUrl = await resolveBillPdfUrl(order.orderNumber);
   const message = buildBillWhatsAppMessage(order, restaurantName, billUrl);
 
   openWhatsApp(phone, message);

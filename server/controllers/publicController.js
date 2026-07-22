@@ -5,6 +5,7 @@ const Order = require('../models/Order');
 const Setting = require('../models/Setting');
 const { emitNewOrder, emitOrderRating } = require('../socket/socketHandler');
 const { generateOrderBillPdfBuffer } = require('../utils/billPdf');
+const { getPublicBillPdfUrl } = require('../utils/publicApiUrl');
 
 const generateOrderNumber = () => {
   const randomNum = Math.floor(1000 + Math.random() * 9000);
@@ -279,6 +280,28 @@ exports.getOrderStatus = async (req, res, next) => {
 };
 
 exports.getPublicOrderStatus = exports.getOrderStatus;
+
+// @desc Public bill PDF URL for WhatsApp / share links
+// @route GET /api/public/orders/:orderNumber/bill-link
+exports.getOrderBillLink = async (req, res, next) => {
+  try {
+    const { orderNumber } = req.params;
+
+    const order = await Order.findOne({ orderNumber });
+    if (!order) {
+      return res.status(404).json({ success: false, message: 'Order not found' });
+    }
+
+    res.json({
+      success: true,
+      billUrl: getPublicBillPdfUrl(orderNumber, req),
+      orderNumber: order.orderNumber,
+      paymentStatus: order.paymentStatus
+    });
+  } catch (error) {
+    next(error);
+  }
+};
 
 // @desc Download order bill as PDF (paid orders only)
 // @route GET /api/public/orders/:orderNumber/bill.pdf
