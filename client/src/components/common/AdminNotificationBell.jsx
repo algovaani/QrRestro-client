@@ -40,9 +40,9 @@ export default function AdminNotificationBell({ onViewOrder, onNavigate }) {
         <NotificationPanel
           notifications={notifications}
           removeNotification={removeNotification}
-          onViewOrder={() => {
+          onViewOrder={(order) => {
             setPanelOpen(false);
-            onViewOrder?.();
+            onViewOrder?.(order);
           }}
           onNavigate={(path) => {
             setPanelOpen(false);

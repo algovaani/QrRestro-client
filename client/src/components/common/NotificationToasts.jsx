@@ -1,15 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X, ArrowRight } from 'lucide-react';
-
-const getCardClass = (type) => {
-  if (type === 'payment') return 'payment';
-  if (type === 'payment_pending') return 'payment-pending';
-  if (type === 'membership_activated' || type === 'membership_renewal_request' || type === 'membership_offer_sent' || type === 'membership_renewal_rejected') {
-    return 'membership';
-  }
-  return 'order';
-};
+import { getNotificationActionLabel, getNotificationCardClass } from '../../utils/adminNotifications';
 
 /** Auto popup when new notification arrives (list stays in bell panel until dismissed) */
 export default function NotificationToasts({ notifications, removeNotification, onViewOrder, onNavigate }) {
@@ -35,7 +27,7 @@ export default function NotificationToasts({ notifications, removeNotification, 
   return createPortal(
     <div className="admin-notifications admin-notifications--popup" role="alert" aria-live="polite">
       {popupNotifications.map((n) => (
-        <div key={n.id} className={`admin-notification-card ${getCardClass(n.type)}`}>
+        <div key={n.id} className={`admin-notification-card ${getNotificationCardClass(n.type)}`}>
           <div className="admin-notification-header">
             <span className="admin-notification-title">{n.title}</span>
             <button
@@ -52,21 +44,19 @@ export default function NotificationToasts({ notifications, removeNotification, 
 
           <p className="admin-notification-message">{n.message}</p>
 
-          {n.order && (
+          {n.order ? (
             <button
               type="button"
               className="btn btn-primary btn-sm admin-notification-action"
               onClick={() => {
                 setPopupIds((prev) => prev.filter((id) => id !== n.id));
-                onViewOrder?.();
+                onViewOrder?.(n.order);
               }}
             >
-              <span>View Order Details</span>
+              <span>{getNotificationActionLabel(n)}</span>
               <ArrowRight size={14} />
             </button>
-          )}
-
-          {n.actionPath && (
+          ) : n.actionPath ? (
             <button
               type="button"
               className="btn btn-primary btn-sm admin-notification-action"
@@ -75,18 +65,10 @@ export default function NotificationToasts({ notifications, removeNotification, 
                 onNavigate?.(n.actionPath);
               }}
             >
-              <span>
-                {n.type === 'membership_renewal_request'
-                  ? 'View Requests'
-                  : n.type === 'membership_offer_sent'
-                    ? 'View Membership'
-                    : n.type === 'membership_renewal_rejected'
-                      ? 'Retry Membership'
-                      : 'Open Dashboard'}
-              </span>
+              <span>{getNotificationActionLabel(n)}</span>
               <ArrowRight size={14} />
             </button>
-          )}
+          ) : null}
         </div>
       ))}
     </div>,

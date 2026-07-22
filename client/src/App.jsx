@@ -20,6 +20,7 @@ import SettingsPage from './pages/admin/SettingsPage';
 import SubscriptionExpiredPage from './pages/admin/SubscriptionExpiredPage';
 import AdminMembershipRoute from './pages/admin/AdminMembershipRoute';
 import { isAdminDashboardBlocked, getPostLoginPath } from './utils/adminAccess';
+import { AdminLayoutProvider } from './context/AdminLayoutContext';
 
 // Customer Pages
 import CustomerMenu from './pages/customer/CustomerMenu';
@@ -49,6 +50,14 @@ function AppFallback() {
 function TenantScope({ children }) {
   const { user } = useAuth();
   return <React.Fragment key={user?._id || 'guest'}>{children}</React.Fragment>;
+}
+
+function AdminRoute({ children }) {
+  return (
+    <AdminLayoutProvider>
+      <TenantScope>{children}</TenantScope>
+    </AdminLayoutProvider>
+  );
 }
 
 // Protected Route Wrapper
@@ -119,9 +128,9 @@ export default function App() {
                 path="/admin/dashboard"
                 element={
                   <ProtectedRoute allowedRoles={['Admin']}>
-                    <TenantScope>
+                    <AdminRoute>
                       <AdminDashboard />
-                    </TenantScope>
+                    </AdminRoute>
                   </ProtectedRoute>
                 }
               />
@@ -129,9 +138,9 @@ export default function App() {
                 path="/admin/orders"
                 element={
                   <ProtectedRoute allowedRoles={['Admin']}>
-                    <TenantScope>
+                    <AdminRoute>
                       <OrdersPage />
-                    </TenantScope>
+                    </AdminRoute>
                   </ProtectedRoute>
                 }
               />
@@ -139,9 +148,9 @@ export default function App() {
                 path="/admin/kitchen"
                 element={
                   <ProtectedRoute allowedRoles={['Admin', 'Kitchen']}>
-                    <TenantScope>
+                    <AdminRoute>
                       <KitchenScreen />
-                    </TenantScope>
+                    </AdminRoute>
                   </ProtectedRoute>
                 }
               />
@@ -149,9 +158,9 @@ export default function App() {
                 path="/admin/tables"
                 element={
                   <ProtectedRoute allowedRoles={['Admin']}>
-                    <TenantScope>
+                    <AdminRoute>
                       <TablesPage />
-                    </TenantScope>
+                    </AdminRoute>
                   </ProtectedRoute>
                 }
               />
@@ -159,9 +168,9 @@ export default function App() {
                 path="/admin/categories"
                 element={
                   <ProtectedRoute allowedRoles={['Admin']}>
-                    <TenantScope>
+                    <AdminRoute>
                       <CategoriesPage />
-                    </TenantScope>
+                    </AdminRoute>
                   </ProtectedRoute>
                 }
               />
@@ -169,9 +178,9 @@ export default function App() {
                 path="/admin/menu"
                 element={
                   <ProtectedRoute allowedRoles={['Admin']}>
-                    <TenantScope>
+                    <AdminRoute>
                       <MenuPage />
-                    </TenantScope>
+                    </AdminRoute>
                   </ProtectedRoute>
                 }
               />
@@ -179,9 +188,9 @@ export default function App() {
                 path="/admin/reports"
                 element={
                   <ProtectedRoute allowedRoles={['Admin']}>
-                    <TenantScope>
+                    <AdminRoute>
                       <ReportsPage />
-                    </TenantScope>
+                    </AdminRoute>
                   </ProtectedRoute>
                 }
               />
@@ -189,9 +198,9 @@ export default function App() {
                 path="/admin/settings"
                 element={
                   <ProtectedRoute allowedRoles={['Admin']}>
-                    <TenantScope>
+                    <AdminRoute>
                       <SettingsPage />
-                    </TenantScope>
+                    </AdminRoute>
                   </ProtectedRoute>
                 }
               />

@@ -108,7 +108,7 @@ export default function ReportsPage() {
           </div>
 
           {/* Report Data Tables */}
-          <div style={{ background: 'var(--bg-surface)', borderRadius: 'var(--radius)', border: '1px solid var(--border)', overflow: 'hidden' }}>
+          <div className="admin-panel admin-table-wrap">
             {reportType === 'sales' && (
               <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.9rem' }}>
                 <thead style={{ background: '#f8fafc', borderBottom: '1px solid var(--border)', color: 'var(--text-muted)', fontSize: '0.8rem' }}>

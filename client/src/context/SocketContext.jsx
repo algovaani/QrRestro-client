@@ -152,13 +152,17 @@ export const SocketProvider = ({ children }) => {
       const newNotif = {
         id: `${order._id || order.orderNumber}_rating_${Date.now()}`,
         type: 'order_rating',
-        title: '⭐ NEW CUSTOMER RATING',
+        title: 'NEW CUSTOMER RATING',
         message: `Order #${order.orderNumber} rated ${order.rating}/5${reviewNote}`,
         order,
-        timestamp: new Date(),
-        actionPath: '/admin/orders'
+        timestamp: new Date()
       };
-      setNotifications((prev) => [newNotif, ...prev]);
+      setNotifications((prev) => {
+        if (prev.some((n) => n.type === 'order_rating' && String(n.order?._id) === String(order._id))) {
+          return prev;
+        }
+        return [newNotif, ...prev];
+      });
     };
 
     const handleMembershipOfferSent = (data) => {

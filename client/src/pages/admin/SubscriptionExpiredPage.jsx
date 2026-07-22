@@ -10,6 +10,8 @@ import { getPostLoginPath } from '../../utils/adminAccess';
 import API from '../../services/api';
 import { UserX, LogOut } from 'lucide-react';
 
+import { getAdminOrderDetailsPath } from '../../utils/adminNotifications';
+
 export default function SubscriptionExpiredPage() {
   const { user, token, authReady, logout, updateUser } = useAuth();
   const navigate = useNavigate();
@@ -85,7 +87,7 @@ export default function SubscriptionExpiredPage() {
     <>
       <div className="membership-standalone-topbar">
         <AdminNotificationBell
-          onViewOrder={() => navigate('/admin/orders')}
+          onViewOrder={(order) => navigate(getAdminOrderDetailsPath(order))}
           onNavigate={(path) => navigate(path)}
         />
       </div>
@@ -93,6 +95,7 @@ export default function SubscriptionExpiredPage() {
       <NotificationToasts
         notifications={notifications}
         removeNotification={removeNotification}
+        onViewOrder={(order) => navigate(getAdminOrderDetailsPath(order))}
         onNavigate={(path) => navigate(path)}
       />
     </>

@@ -16,6 +16,7 @@ export default function OrdersPage() {
   const location = useLocation();
   const searchParams = new URLSearchParams(location.search);
   const initialStatusFromUrl = searchParams.get('status') || '';
+  const orderParamFromUrl = searchParams.get('order') || '';
 
   const [orders, setOrders] = useState([]);
   const [statusFilter, setStatusFilter] = useState(initialStatusFromUrl);
@@ -83,6 +84,15 @@ export default function OrdersPage() {
       setStatusFilter(statusParam);
     }
   }, [location.search]);
+
+  // Open order details when linked from notification (?order=ORD-1163)
+  useEffect(() => {
+    if (!orderParamFromUrl || loading) return;
+    const match = orders.find((o) => o.orderNumber === orderParamFromUrl);
+    if (match) {
+      setSelectedOrder(match);
+    }
+  }, [orderParamFromUrl, orders, loading]);
 
   // Real-time WebSocket handlers - HAND TO HAND SOCKET PROCESS
   useEffect(() => {
@@ -414,11 +424,11 @@ export default function OrdersPage() {
         <div className="admin-content">
 
           {/* DATATABLE TOP CONTROLS */}
-          <div style={{ background: 'var(--bg-surface)', padding: '1.25rem', borderRadius: 'var(--radius)', border: '1px solid var(--border)', marginBottom: '1.25rem', boxShadow: 'var(--shadow-sm)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+          <div className="admin-panel admin-panel--padded" style={{ marginBottom: '1.25rem', boxShadow: 'var(--shadow-sm)' }}>
+            <div className="admin-toolbar">
               
               {/* Search Box */}
-              <div style={{ position: 'relative', flex: 1, minWidth: '240px' }}>
+              <div className="admin-toolbar-search">
                 <Search size={18} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
                 <input
                   type="text"
@@ -433,7 +443,7 @@ export default function OrdersPage() {
               </div>
 
               {/* Status & Payment Filters */}
-              <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+              <div className="admin-toolbar-filters">
                 <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
                   <option value="">All Order Statuses</option>
                   <option value="New">New (Pending)</option>
@@ -474,7 +484,8 @@ export default function OrdersPage() {
           </div>
 
           {/* DATATABLE BODY */}
-          <div style={{ background: 'var(--bg-surface)', borderRadius: 'var(--radius)', border: '1px solid var(--border)', overflow: 'hidden' }}>
+          <div className="admin-panel">
+            <div className="admin-table-wrap">
             <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.85rem' }}>
               <thead style={{ background: '#f8fafc', borderBottom: '1px solid var(--border)', color: 'var(--text-muted)', fontSize: '0.75rem' }}>
                 <tr>
@@ -643,14 +654,15 @@ export default function OrdersPage() {
                 )}
               </tbody>
             </table>
+            </div>
 
             {/* DATATABLE FOOTER PAGINATION */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1rem 1.25rem', background: '#f8fafc', borderTop: '1px solid var(--border)' }}>
+            <div className="admin-datatable-footer">
               <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
                 Showing {sortedOrders.length > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0} to {Math.min(currentPage * itemsPerPage, sortedOrders.length)} of {sortedOrders.length} entries
               </div>
 
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+              <div className="admin-datatable-pagination">
                 <button
                   onClick={() => setCurrentPage(1)}
                   disabled={currentPage === 1}

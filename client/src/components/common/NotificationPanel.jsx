@@ -1,14 +1,6 @@
 import React from 'react';
 import { X, ArrowRight, Bell } from 'lucide-react';
-
-const getCardClass = (type) => {
-  if (type === 'payment') return 'payment';
-  if (type === 'payment_pending') return 'payment-pending';
-  if (type === 'membership_activated' || type === 'membership_renewal_request' || type === 'membership_offer_sent' || type === 'membership_renewal_rejected') {
-    return 'membership';
-  }
-  return 'order';
-};
+import { getNotificationActionLabel, getNotificationCardClass } from '../../utils/adminNotifications';
 
 export default function NotificationPanel({
   notifications,
@@ -33,7 +25,7 @@ export default function NotificationPanel({
       ) : (
         <div className="admin-notifications-panel-list">
           {notifications.map((n) => (
-            <div key={n.id} className={`admin-notification-card ${getCardClass(n.type)}`}>
+            <div key={n.id} className={`admin-notification-card ${getNotificationCardClass(n.type)}`}>
               <div className="admin-notification-header">
                 <span className="admin-notification-title">{n.title}</span>
                 <button
@@ -59,21 +51,19 @@ export default function NotificationPanel({
                 </div>
               )}
 
-              {n.order && (
+              {n.order ? (
                 <button
                   type="button"
                   className="btn btn-primary btn-sm admin-notification-action"
                   onClick={() => {
                     removeNotification(n.id);
-                    onViewOrder?.();
+                    onViewOrder?.(n.order);
                   }}
                 >
-                  <span>View Order Details</span>
+                  <span>{getNotificationActionLabel(n)}</span>
                   <ArrowRight size={14} />
                 </button>
-              )}
-
-              {n.actionPath && (
+              ) : n.actionPath ? (
                 <button
                   type="button"
                   className="btn btn-primary btn-sm admin-notification-action"
@@ -82,18 +72,10 @@ export default function NotificationPanel({
                     onNavigate?.(n.actionPath);
                   }}
                 >
-                  <span>
-                    {n.type === 'membership_renewal_request'
-                      ? 'View Requests'
-                      : n.type === 'membership_offer_sent'
-                        ? 'View Membership'
-                        : n.type === 'membership_renewal_rejected'
-                          ? 'Retry Membership'
-                          : 'Open Dashboard'}
-                  </span>
+                  <span>{getNotificationActionLabel(n)}</span>
                   <ArrowRight size={14} />
                 </button>
-              )}
+              ) : null}
             </div>
           ))}
         </div>

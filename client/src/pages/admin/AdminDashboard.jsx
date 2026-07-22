@@ -531,10 +531,10 @@ export default function AdminDashboard() {
               </div>
 
               {/* Main Two Column Tables Section */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: '1.5rem', marginTop: '1rem' }}>
+              <div className="admin-dashboard-split">
                 
                 {/* Clickable Recent Orders List */}
-                <div style={{ background: 'var(--bg-surface)', padding: '1.5rem', borderRadius: 'var(--radius)', border: '1px solid var(--border)' }}>
+                <div className="admin-panel admin-panel--padded">
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
                     <h3 style={{ fontSize: '1.1rem', fontWeight: '700' }}>Recent Orders</h3>
                     <Link to="/admin/orders" style={{ fontSize: '0.85rem', color: 'var(--primary)', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
@@ -542,6 +542,7 @@ export default function AdminDashboard() {
                     </Link>
                   </div>
 
+                  <div className="admin-table-wrap">
                   <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.9rem' }}>
                     <thead>
                       <tr style={{ borderBottom: '1px solid var(--border)', color: 'var(--text-muted)', fontSize: '0.8rem' }}>
@@ -583,10 +584,11 @@ export default function AdminDashboard() {
                       )}
                     </tbody>
                   </table>
+                  </div>
                 </div>
 
                 {/* Clickable Most Ordered Items List */}
-                <div style={{ background: 'var(--bg-surface)', padding: '1.5rem', borderRadius: 'var(--radius)', border: '1px solid var(--border)' }}>
+                <div className="admin-panel admin-panel--padded">
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
                     <h3 style={{ fontSize: '1.1rem', fontWeight: '700' }}>
                       🔥 Top Selling Items

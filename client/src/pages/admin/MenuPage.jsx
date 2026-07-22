@@ -228,7 +228,7 @@ export default function MenuPage() {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
               
               {/* Live Search */}
-              <div style={{ position: 'relative', flex: 1, minWidth: '220px' }}>
+              <div style={{ position: 'relative', flex: 1, minWidth: 0 }} className="admin-toolbar-search">
                 <Search size={18} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
                 <input
                   type="text"
@@ -282,7 +282,8 @@ export default function MenuPage() {
           </div>
 
           {/* DATATABLE BODY */}
-          <div style={{ background: 'var(--bg-surface)', borderRadius: 'var(--radius)', border: '1px solid var(--border)', overflow: 'hidden' }}>
+          <div className="admin-panel">
+            <div className="admin-table-wrap">
             <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.9rem' }}>
               <thead style={{ background: '#f8fafc', borderBottom: '1px solid var(--border)', color: 'var(--text-muted)', fontSize: '0.8rem' }}>
                 <tr>
@@ -386,14 +387,15 @@ export default function MenuPage() {
                 )}
               </tbody>
             </table>
+            </div>
 
             {/* DATATABLE FOOTER PAGINATION */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1rem 1.25rem', background: '#f8fafc', borderTop: '1px solid var(--border)' }}>
+            <div className="admin-datatable-footer">
               <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
                 Showing {sortedMenuItems.length > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0} to {Math.min(currentPage * itemsPerPage, sortedMenuItems.length)} of {sortedMenuItems.length} entries
               </div>
 
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+              <div className="admin-datatable-pagination">
                 <button
                   onClick={() => setCurrentPage(1)}
                   disabled={currentPage === 1}
@@ -493,7 +495,7 @@ export default function MenuPage() {
                 />
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem' }} className="admin-form-grid-3">
                 <div>
                   <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', marginBottom: '0.3rem' }}>Food Type</label>
                   <select

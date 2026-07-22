@@ -30,6 +30,8 @@ import {
   Send,
   XCircle,
   Phone,
+  Menu,
+  X,
   Settings
 } from 'lucide-react';
 import { useSocket } from '../../context/SocketContext';
@@ -43,6 +45,7 @@ export default function SuperAdminDashboard() {
   const navigate = useNavigate();
   const { socket, notifications, removeNotification, isConnected } = useSocket();
 
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [stats, setStats] = useState({
     totalAdmins: 0,
     activeAdmins: 0,
@@ -572,22 +575,33 @@ export default function SuperAdminDashboard() {
 
   return (
     <div className="admin-layout">
-      
+      {sidebarOpen && (
+        <button
+          type="button"
+          className="admin-sidebar-backdrop"
+          onClick={() => setSidebarOpen(false)}
+          aria-label="Close menu"
+        />
+      )}
+
       {/* SUPER ADMIN SIDEBAR */}
-      <div className="admin-sidebar">
-        <div style={{ padding: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.75rem', borderBottom: '1px solid var(--border)' }}>
-          <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: 'var(--primary)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div className={`admin-sidebar${sidebarOpen ? ' is-open' : ''}`}>
+        <div className="admin-sidebar-brand">
+          <div className="admin-sidebar-brand-icon">
             <ShieldCheck size={24} />
           </div>
           <div>
-            <h3 style={{ fontSize: '1.1rem', fontWeight: '800', color: '#ffffff', lineHeight: 1 }}>SaaS Master</h3>
-            <span style={{ fontSize: '0.75rem', color: 'var(--primary)', fontWeight: '600' }}>Super Admin Portal</span>
+            <h3 style={{ color: '#fff' }}>SaaS Master</h3>
+            <span>Super Admin Portal</span>
           </div>
+          <button type="button" className="admin-sidebar-close" onClick={() => setSidebarOpen(false)} aria-label="Close menu">
+            <X size={20} />
+          </button>
         </div>
 
-        <nav style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.35rem', flex: 1 }}>
+        <nav className="admin-sidebar-nav">
           <button
-            onClick={() => setActiveTab('admins')}
+            onClick={() => { setActiveTab('admins'); setSidebarOpen(false); }}
             className={`sidebar-link ${activeTab === 'admins' ? 'active' : ''}`}
             style={{ width: '100%', textAlign: 'left' }}
           >
@@ -596,7 +610,7 @@ export default function SuperAdminDashboard() {
           </button>
 
           <button
-            onClick={() => setActiveTab('renewals')}
+            onClick={() => { setActiveTab('renewals'); setSidebarOpen(false); }}
             className={`sidebar-link ${activeTab === 'renewals' ? 'active' : ''}`}
             style={{ width: '100%', textAlign: 'left', position: 'relative' }}
           >
@@ -610,7 +624,7 @@ export default function SuperAdminDashboard() {
           </button>
 
           <button
-            onClick={() => setActiveTab('plans')}
+            onClick={() => { setActiveTab('plans'); setSidebarOpen(false); }}
             className={`sidebar-link ${activeTab === 'plans' ? 'active' : ''}`}
             style={{ width: '100%', textAlign: 'left' }}
           >
@@ -619,7 +633,7 @@ export default function SuperAdminDashboard() {
           </button>
 
           <button
-            onClick={() => setActiveTab('settings')}
+            onClick={() => { setActiveTab('settings'); setSidebarOpen(false); }}
             className={`sidebar-link ${activeTab === 'settings' ? 'active' : ''}`}
             style={{ width: '100%', textAlign: 'left' }}
           >
@@ -628,7 +642,7 @@ export default function SuperAdminDashboard() {
           </button>
         </nav>
 
-        <div style={{ padding: '1rem', borderTop: '1px solid var(--border)' }}>
+        <div className="admin-sidebar-footer">
           <div style={{ marginBottom: '0.75rem' }}>
             <div style={{ fontWeight: '700', fontSize: '0.85rem' }}>{user?.name || 'Super Admin'}</div>
             <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{user?.email}</div>
@@ -659,11 +673,14 @@ export default function SuperAdminDashboard() {
         
         {/* Header with Prominent Action Buttons */}
         <header className="admin-header">
-          <h2 style={{ fontSize: '1.35rem', fontWeight: '800', color: 'var(--secondary)' }}>
-            Super Admin Control Center
-          </h2>
+          <div className="admin-header-start">
+            <button type="button" className="admin-mobile-menu-btn" onClick={() => setSidebarOpen(true)} aria-label="Open menu">
+              <Menu size={22} />
+            </button>
+            <h2 className="admin-header-title">Super Admin Control Center</h2>
+          </div>
 
-          <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+          <div className="admin-header-actions">
             <div
               className={`admin-header-sync${isConnected ? ' is-connected' : ' is-disconnected'}`}
               title={isConnected ? 'Live notifications connected' : 'Reconnecting…'}
@@ -679,17 +696,15 @@ export default function SuperAdminDashboard() {
             />
 
             <button onClick={() => fetchSuperAdminData()} disabled={loading || actionLoading} className="btn btn-secondary btn-sm" title="Refresh Data">
-              <RefreshCw size={16} className={loading ? 'spin-icon' : ''} /> Refresh
+              <RefreshCw size={16} className={loading ? 'spin-icon' : ''} /> <span className="btn-label">Refresh</span>
             </button>
 
-            {/* DIRECT ADD MEMBERSHIP PLAN BUTTON */}
             <button onClick={handleOpenAddPlan} className="btn btn-secondary btn-sm" style={{ borderColor: 'var(--primary)', color: 'var(--primary)', fontWeight: '700' }}>
-              <Sparkles size={16} /> + Add Membership Plan
+              <Sparkles size={16} /> <span className="btn-label">Add Plan</span>
             </button>
 
-            {/* CREATE ADMIN BUTTON */}
             <button onClick={() => setShowAddModal(true)} className="btn btn-primary btn-sm">
-              <Plus size={16} /> + Create Admin
+              <Plus size={16} /> <span className="btn-label">Create Admin</span>
             </button>
           </div>
         </header>
@@ -799,9 +814,9 @@ export default function SuperAdminDashboard() {
 
           {/* TAB 1: ADMINS DATATABLE WITH PASSWORD CREDENTIALS VISIBILITY */}
           {activeTab === 'admins' && (
-            <div style={{ background: 'var(--bg-surface)', borderRadius: 'var(--radius)', border: '1px solid var(--border)', overflow: 'hidden' }}>
-              <div style={{ padding: '1.25rem', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
-                <div style={{ position: 'relative', flex: 1, minWidth: '260px' }}>
+            <div className="admin-panel">
+              <div className="admin-panel--padded admin-toolbar" style={{ borderBottom: '1px solid var(--border)' }}>
+                <div className="admin-toolbar-search">
                   <Search size={18} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
                   <input
                     type="text"
@@ -816,6 +831,7 @@ export default function SuperAdminDashboard() {
                 </div>
               </div>
 
+              <div className="admin-table-wrap">
               <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.85rem' }}>
                 <thead style={{ background: '#f8fafc', borderBottom: '1px solid var(--border)', color: 'var(--text-muted)', fontSize: '0.75rem' }}>
                   <tr>
@@ -1015,6 +1031,7 @@ export default function SuperAdminDashboard() {
                   })}
                 </tbody>
               </table>
+              </div>
             </div>
           )}
 
