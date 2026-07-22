@@ -5,7 +5,7 @@ const Order = require('../models/Order');
 const Setting = require('../models/Setting');
 const { emitNewOrder, emitOrderRating } = require('../socket/socketHandler');
 const { generateOrderBillPdfBuffer } = require('../utils/billPdf');
-const { getPublicBillPdfUrl } = require('../utils/publicApiUrl');
+const { getPublicBillPdfUrl, orderBillIsAvailable } = require('../utils/publicApiUrl');
 
 const generateOrderNumber = () => {
   const randomNum = Math.floor(1000 + Math.random() * 9000);
@@ -320,8 +320,12 @@ exports.getOrderBillPdf = async (req, res, next) => {
       return res.status(404).json({ success: false, message: 'Order not found' });
     }
 
-    if (order.paymentStatus !== 'Paid') {
-      return res.status(400).json({ success: false, message: 'Bill is available only for paid orders' });
+    if (!orderBillIsAvailable(order)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Bill is available only after payment is confirmed',
+        paymentStatus: order.paymentStatus
+      });
     }
 
     const setting = await Setting.findOne({ adminId: order.adminId }) || {};

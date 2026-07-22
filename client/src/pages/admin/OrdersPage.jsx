@@ -630,7 +630,7 @@ export default function OrdersPage() {
                       )}
                     </td>
 
-                    <td style={{ padding: '0.85rem 1rem', minWidth: '110px' }}>
+                    <td className="order-rating-cell" style={{ padding: '0.85rem 1rem' }}>
                       {order.rating ? (
                         <OrderRatingDisplay rating={order.rating} review={order.review} compact />
                       ) : (
@@ -638,7 +638,7 @@ export default function OrdersPage() {
                       )}
                     </td>
 
-                    <td style={{ padding: '0.85rem 1rem', fontFamily: 'monospace', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                    <td className="admin-table-txn-cell" style={{ padding: '0.85rem 1rem', fontFamily: 'monospace', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
                       {order.transactionId || '-'}
                     </td>
 
@@ -862,7 +862,7 @@ export default function OrdersPage() {
               <OrderRatingDisplay rating={selectedOrder.rating} review={selectedOrder.review} />
             </div>
 
-            <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+            <div className="admin-order-modal-actions">
               <button
                 onClick={() => sendWhatsAppBill(selectedOrder)}
                 disabled={billSendingId === selectedOrder?._id}

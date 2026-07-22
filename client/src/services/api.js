@@ -23,6 +23,29 @@ function storeApiOrigin(origin) {
   }
 }
 
+/** Persist API host at startup so bill PDF links work before the first API response */
+function bootstrapApiOriginFromEnv() {
+  const apiUrl = import.meta.env.VITE_API_URL?.trim();
+  if (apiUrl && (apiUrl.startsWith('http://') || apiUrl.startsWith('https://'))) {
+    try {
+      storeApiOrigin(new URL(apiUrl).origin);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  const publicAppUrl = import.meta.env.VITE_PUBLIC_APP_URL?.trim();
+  if (publicAppUrl && (publicAppUrl.startsWith('http://') || publicAppUrl.startsWith('https://'))) {
+    try {
+      storeApiOrigin(new URL(publicAppUrl.replace(/\/$/, '')).origin);
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
+bootstrapApiOriginFromEnv();
+
 /** Origin where /api routes are served (backend host in split deploy) */
 export function getApiOrigin() {
   const stored = readStoredApiOrigin();

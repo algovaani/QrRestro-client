@@ -25,10 +25,22 @@ function normalizeBillPdfUrl(url, orderNumber) {
 
   try {
     const parsed = new URL(url);
-    const apiOrigin = getApiOrigin();
-    if (apiOrigin !== window.location.origin && parsed.origin === window.location.origin) {
+    const apiOrigin = getApiOrigin()?.replace(/\/$/, '');
+    const clientOrigin = window.location.origin;
+
+    if (!parsed.pathname.includes('/api/public/orders/')) {
       return fallback;
     }
+
+    // Split deploy: never share bill links on the static client host
+    if (apiOrigin && parsed.origin === clientOrigin && apiOrigin !== clientOrigin) {
+      return fallback;
+    }
+
+    if (apiOrigin && parsed.origin !== apiOrigin) {
+      return `${apiOrigin}${parsed.pathname}${parsed.search}`;
+    }
+
     return parsed.href;
   } catch {
     return fallback;
