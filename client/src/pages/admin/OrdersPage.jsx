@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import API from '../../services/api';
 import Sidebar from '../../components/common/Sidebar';
 import Header from '../../components/common/Header';
@@ -14,9 +14,9 @@ import { Printer, Eye, RefreshCw, MessageSquare, Search, ArrowUpDown, ChevronLef
 
 export default function OrdersPage() {
   const location = useLocation();
+  const navigate = useNavigate();
   const searchParams = new URLSearchParams(location.search);
   const initialStatusFromUrl = searchParams.get('status') || '';
-  const orderParamFromUrl = searchParams.get('order') || '';
 
   const [orders, setOrders] = useState([]);
   const [statusFilter, setStatusFilter] = useState(initialStatusFromUrl);
@@ -32,6 +32,7 @@ export default function OrdersPage() {
 
   // Selected Order Modal State
   const [selectedOrder, setSelectedOrder] = useState(null);
+  const openedOrderFromUrlRef = useRef('');
 
   // Payment confirm dialog (Paid / Unpaid toggle)
   const [paymentConfirm, setPaymentConfirm] = useState(null);
@@ -85,14 +86,40 @@ export default function OrdersPage() {
     }
   }, [location.search]);
 
-  // Open order details when linked from notification (?order=ORD-1163)
+  const clearOrderFromUrl = () => {
+    const params = new URLSearchParams(location.search);
+    if (!params.has('order')) return;
+    params.delete('order');
+    const nextSearch = params.toString();
+    navigate(
+      { pathname: location.pathname, search: nextSearch ? `?${nextSearch}` : '' },
+      { replace: true }
+    );
+    openedOrderFromUrlRef.current = '';
+  };
+
+  const closeOrderModal = () => {
+    setSelectedOrder(null);
+    clearOrderFromUrl();
+  };
+
+  const openOrderModal = (order) => {
+    setSelectedOrder(order);
+    clearOrderFromUrl();
+  };
+
+  // Open order details once when linked from notification (?order=ORD-1163)
   useEffect(() => {
-    if (!orderParamFromUrl || loading) return;
-    const match = orders.find((o) => o.orderNumber === orderParamFromUrl);
+    const orderParam = new URLSearchParams(location.search).get('order') || '';
+    if (!orderParam || loading) return;
+    if (openedOrderFromUrlRef.current === orderParam) return;
+
+    const match = orders.find((o) => o.orderNumber === orderParam);
     if (match) {
+      openedOrderFromUrlRef.current = orderParam;
       setSelectedOrder(match);
     }
-  }, [orderParamFromUrl, orders, loading]);
+  }, [location.search, orders, loading]);
 
   // Real-time WebSocket handlers - HAND TO HAND SOCKET PROCESS
   useEffect(() => {
@@ -557,7 +584,8 @@ export default function OrdersPage() {
                       <select
                         value={order.orderStatus}
                         onChange={(e) => updateStatus(order._id, e.target.value)}
-                        className={`badge badge-${order.orderStatus.toLowerCase()}`}
+                        onClick={(e) => e.stopPropagation()}
+                        className={`badge badge-${order.orderStatus.toLowerCase()} admin-order-status-select`}
                         style={{ cursor: 'pointer', outline: 'none' }}
                       >
                         <option value="New">New</option>
@@ -623,7 +651,7 @@ export default function OrdersPage() {
 
                     <td style={{ padding: '0.85rem 1rem', textAlign: 'right' }}>
                       <div style={{ display: 'inline-flex', gap: '0.3rem' }}>
-                        <button onClick={() => setSelectedOrder(order)} className="btn btn-secondary btn-sm" title="View Details">
+                        <button onClick={() => openOrderModal(order)} className="btn btn-secondary btn-sm" title="View Details">
                           <Eye size={14} />
                         </button>
                         <button
@@ -761,16 +789,21 @@ export default function OrdersPage() {
 
       {/* Order Detail Modal */}
       {selectedOrder && (
-        <div className="modal-overlay" onClick={() => setSelectedOrder(null)}>
+        <div className="modal-overlay" onClick={closeOrderModal}>
           <div className="modal-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '540px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
               <div>
                 <h3 style={{ fontSize: '1.25rem', fontWeight: '800' }}>Order #{selectedOrder.orderNumber}</h3>
                 <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Table {selectedOrder.tableNumber} • {new Date(selectedOrder.createdAt).toLocaleTimeString()}</span>
               </div>
-              <span className={`badge badge-${selectedOrder.orderStatus.toLowerCase()}`}>
-                {selectedOrder.orderStatus}
-              </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <span className={`badge badge-${selectedOrder.orderStatus.toLowerCase()}`}>
+                  {selectedOrder.orderStatus}
+                </span>
+                <button type="button" onClick={closeOrderModal} className="btn btn-secondary btn-sm" aria-label="Close order details">
+                  <XCircle size={16} />
+                </button>
+              </div>
             </div>
 
             <div style={{ background: '#f8fafc', padding: '1rem', borderRadius: '10px', marginBottom: '1rem', display: 'flex', justifyContent: 'space-between' }}>
