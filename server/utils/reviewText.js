@@ -5,11 +5,19 @@ function countReviewWords(text) {
   return String(text).trim().split(/\s+/).filter(Boolean).length;
 }
 
-function trimReviewToWordLimit(text, maxWords = MAX_REVIEW_WORDS) {
+function sanitizeReviewForSave(text, maxWords = MAX_REVIEW_WORDS) {
   if (!text) return '';
   const words = String(text).trim().split(/\s+/).filter(Boolean);
-  if (words.length <= maxWords) return String(text).trim();
   return words.slice(0, maxWords).join(' ');
 }
 
-module.exports = { MAX_REVIEW_WORDS, countReviewWords, trimReviewToWordLimit };
+function trimReviewToWordLimit(text, maxWords = MAX_REVIEW_WORDS) {
+  return sanitizeReviewForSave(text, maxWords);
+}
+
+module.exports = {
+  MAX_REVIEW_WORDS,
+  countReviewWords,
+  sanitizeReviewForSave,
+  trimReviewToWordLimit
+};

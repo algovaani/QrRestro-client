@@ -10,7 +10,7 @@ import CustomerNotificationToast from '../../components/customer/CustomerNotific
 import CustomerBottomNav from '../../components/customer/CustomerBottomNav';
 import MyOrdersModal from '../../components/customer/MyOrdersModal';
 import { getOrderStatusMessage, mobilesMatch, vibrateCustomerAlert } from '../../utils/orderNotifications';
-import { countReviewWords, MAX_REVIEW_WORDS, trimReviewToWordLimit } from '../../utils/reviewText';
+import { countReviewWords, MAX_REVIEW_WORDS, sanitizeReviewForSave, isReviewWithinWordLimit } from '../../utils/reviewText';
 import UPIPaymentModal from '../../components/customer/UPIPaymentModal';
 import { ArrowLeft, CheckCircle2, Clock, ChefHat, Sparkles, UtensilsCrossed, QrCode, Star, Send } from 'lucide-react';
 
@@ -151,13 +151,19 @@ export default function OrderStatusPage() {
   };
 
   const handleReviewChange = (e) => {
-    setUserReview(trimReviewToWordLimit(e.target.value));
+    const next = e.target.value;
+    if (isReviewWithinWordLimit(next)) {
+      setUserReview(next);
+      return;
+    }
+    setUserReview(sanitizeReviewForSave(next));
   };
 
   const handleRatingSubmit = async (e) => {
     e.preventDefault();
-    const review = trimReviewToWordLimit(userReview);
-    if (countReviewWords(review) > MAX_REVIEW_WORDS) {
+    const review = sanitizeReviewForSave(userReview);
+    setUserReview(review);
+    if (!isReviewWithinWordLimit(review)) {
       alert(`Review must be ${MAX_REVIEW_WORDS} words or less.`);
       return;
     }
@@ -321,28 +327,30 @@ export default function OrderStatusPage() {
             </div>
 
             {/* CUSTOMER STAR RATING & FEEDBACK CARD */}
-            <div style={{ background: '#ffffff', borderRadius: '16px', border: '1px solid var(--border)', padding: '1.25rem', marginBottom: '1.25rem', textAlign: 'center' }}>
-              <h4 style={{ fontSize: '1rem', fontWeight: '800', color: 'var(--secondary)', marginBottom: '0.4rem' }}>
+            <div className="customer-rating-card">
+              <h4 className="customer-rating-title">
                 ⭐ Rate Your Dining Experience
               </h4>
-              <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>
+              <p className="customer-rating-subtitle">
                 How was the taste, speed, and service?
               </p>
 
               {ratingSubmitted ? (
-                <div style={{ background: '#ecfdf5', color: '#065f46', padding: '0.85rem', borderRadius: '12px', fontSize: '0.85rem', fontWeight: '700' }}>
-                  🎉 Thank you for rating us {userRating} Stars! {userReview && `("${userReview}")`}
+                <div className="customer-rating-success">
+                  🎉 Thank you for rating us {userRating} Stars!
+                  {userReview && (
+                    <p className="customer-rating-success-review">&ldquo;{userReview}&rdquo;</p>
+                  )}
                 </div>
               ) : (
-                <form onSubmit={handleRatingSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
-                  {/* Interactive 5 Stars */}
-                  <div style={{ display: 'flex', justifyContent: 'center', gap: '0.5rem' }}>
+                <form onSubmit={handleRatingSubmit} className="customer-rating-form">
+                  <div className="customer-rating-stars">
                     {[1, 2, 3, 4, 5].map((star) => (
                       <button
                         key={star}
                         type="button"
                         onClick={() => setUserRating(star)}
-                        style={{ padding: '0.2rem', transition: 'transform 0.15s ease' }}
+                        className="customer-rating-star-btn"
                       >
                         <Star
                           size={32}
@@ -354,21 +362,20 @@ export default function OrderStatusPage() {
                   </div>
 
                   <textarea
+                    className="customer-rating-review-input"
                     placeholder="Write a quick comment (optional, max 50 words)..."
                     value={userReview}
                     onChange={handleReviewChange}
                     rows={3}
-                    style={{ width: '100%', fontSize: '0.85rem', textAlign: 'center', resize: 'vertical', minHeight: '72px' }}
                   />
-                  <div style={{ fontSize: '0.72rem', color: countReviewWords(userReview) >= MAX_REVIEW_WORDS ? '#dc2626' : 'var(--text-muted)', textAlign: 'right' }}>
+                  <div className={`customer-rating-word-count${countReviewWords(userReview) >= MAX_REVIEW_WORDS ? ' is-limit' : ''}`}>
                     {countReviewWords(userReview)}/{MAX_REVIEW_WORDS} words
                   </div>
 
                   <button
                     type="submit"
                     disabled={submittingRating}
-                    className="btn btn-primary"
-                    style={{ width: '100%', padding: '0.65rem', borderRadius: '10px', fontSize: '0.85rem', gap: '0.4rem' }}
+                    className="btn btn-primary customer-rating-submit"
                   >
                     <Send size={15} />
                     <span>{submittingRating ? 'Submitting...' : 'Submit Rating & Review'}</span>

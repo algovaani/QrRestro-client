@@ -6,7 +6,7 @@ const Setting = require('../models/Setting');
 const { emitNewOrder, emitOrderRating } = require('../socket/socketHandler');
 const { generateOrderBillPdfBuffer } = require('../utils/billPdf');
 const { getPublicBillPdfUrl, orderBillIsAvailable } = require('../utils/publicApiUrl');
-const { MAX_REVIEW_WORDS, countReviewWords, trimReviewToWordLimit } = require('../utils/reviewText');
+const { MAX_REVIEW_WORDS, countReviewWords, sanitizeReviewForSave } = require('../utils/reviewText');
 
 const generateOrderNumber = () => {
   const randomNum = Math.floor(1000 + Math.random() * 9000);
@@ -373,7 +373,7 @@ exports.submitOrderRating = async (req, res, next) => {
     }
 
     order.rating = rating;
-    order.review = trimReviewToWordLimit(review || '');
+    order.review = sanitizeReviewForSave(review || '');
     await order.save();
 
     emitOrderRating(order);
