@@ -35,16 +35,29 @@ function normalizeBillPdfUrl(url, orderNumber) {
   }
 }
 
-async function resolveBillPdfUrl(orderNumber) {
+async function resolveBillContext(orderNumber, options = {}) {
+  let billUrl = getPublicBillPdfUrl(orderNumber);
+  let contactNumber = options.contactNumber || '';
+  let restaurantName = options.restaurantName || '';
+
   try {
     const { data } = await API.get(`/public/orders/${encodeURIComponent(orderNumber)}/bill-link`);
-    if (data?.success && data?.billUrl) {
-      return normalizeBillPdfUrl(data.billUrl, orderNumber);
+    if (data?.success) {
+      if (data.billUrl) {
+        billUrl = normalizeBillPdfUrl(data.billUrl, orderNumber);
+      }
+      if (data.contactNumber) {
+        contactNumber = data.contactNumber;
+      }
+      if (data.restaurantName && !restaurantName) {
+        restaurantName = data.restaurantName;
+      }
     }
   } catch {
     /* fall back to detected API origin */
   }
-  return getPublicBillPdfUrl(orderNumber);
+
+  return { billUrl, contactNumber, restaurantName };
 }
 
 /**
@@ -62,8 +75,13 @@ export async function sendOrderBillOnWhatsApp(order, options = {}) {
   }
 
   const restaurantName = options.restaurantName || 'Royal Spice Restaurant';
-  const billUrl = await resolveBillPdfUrl(order.orderNumber);
-  const message = buildBillWhatsAppMessage(order, restaurantName, billUrl);
+  const { billUrl, contactNumber, restaurantName: resolvedName } = await resolveBillContext(
+    order.orderNumber,
+    options
+  );
+  const finalRestaurantName = restaurantName || resolvedName || 'Royal Spice Restaurant';
+  const finalContact = options.contactNumber || contactNumber || '';
+  const message = buildBillWhatsAppMessage(order, finalRestaurantName, billUrl, finalContact);
 
   openWhatsApp(phone, message);
 
@@ -72,6 +90,7 @@ export async function sendOrderBillOnWhatsApp(order, options = {}) {
     method: 'whatsapp-link',
     phone,
     billUrl,
+    contactNumber: finalContact,
     hint: options.forAdmin
       ? null
       : 'WhatsApp khul gaya hai. Send dabayein — aapko bill link milega.'

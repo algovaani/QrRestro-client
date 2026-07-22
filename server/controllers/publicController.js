@@ -292,11 +292,15 @@ exports.getOrderBillLink = async (req, res, next) => {
       return res.status(404).json({ success: false, message: 'Order not found' });
     }
 
+    const setting = await Setting.findOne({ adminId: order.adminId }) || {};
+
     res.json({
       success: true,
       billUrl: getPublicBillPdfUrl(orderNumber, req),
       orderNumber: order.orderNumber,
-      paymentStatus: order.paymentStatus
+      paymentStatus: order.paymentStatus,
+      restaurantName: setting.restaurantName || 'Royal Spice Restaurant',
+      contactNumber: setting.mobile || ''
     });
   } catch (error) {
     next(error);
@@ -321,7 +325,8 @@ exports.getOrderBillPdf = async (req, res, next) => {
     const setting = await Setting.findOne({ adminId: order.adminId }) || {};
     const pdfBuffer = await generateOrderBillPdfBuffer(order, {
       restaurantName: setting.restaurantName || 'Royal Spice Restaurant',
-      taxLabel: `GST Tax (${setting.taxPercentage || 5}%)`
+      taxLabel: `GST Tax (${setting.taxPercentage || 5}%)`,
+      contactNumber: setting.mobile || ''
     });
 
     res.set({

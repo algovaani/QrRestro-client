@@ -39,6 +39,16 @@ export default function OrdersPage() {
   const { socket, isConnected } = useSocket();
   const { user } = useAuth();
   const [billSendingId, setBillSendingId] = useState(null);
+  const [restaurantContact, setRestaurantContact] = useState('');
+
+  useEffect(() => {
+    API.get('/settings')
+      .then((res) => {
+        const mobile = res.data?.setting?.mobile || res.data?.settings?.mobile || '';
+        setRestaurantContact(mobile);
+      })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     fetchOrders();
@@ -170,7 +180,8 @@ export default function OrdersPage() {
             await sendOrderBillOnWhatsApp(order, {
               forAdmin: true,
               restaurantName: user?.restaurantName || res.data.bill?.restaurantName || 'Royal Spice Restaurant',
-              taxLabel: res.data.bill?.taxLabel || 'GST Tax'
+              taxLabel: res.data.bill?.taxLabel || 'GST Tax',
+              contactNumber: res.data.bill?.contactNumber || restaurantContact
             });
           } catch {
             alert('Could not generate PDF bill. Try again from the Orders page.');
@@ -305,7 +316,8 @@ export default function OrdersPage() {
     try {
       const result = await sendOrderBillOnWhatsApp(order, {
         forAdmin: true,
-        restaurantName: user?.restaurantName || 'Royal Spice Restaurant'
+        restaurantName: user?.restaurantName || 'Royal Spice Restaurant',
+        contactNumber: restaurantContact
       });
       if (result.cancelled) return;
     } catch {

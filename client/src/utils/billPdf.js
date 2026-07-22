@@ -16,6 +16,7 @@ const formatDate = (date) =>
 export function generateOrderBillPdfBlob(order, options = {}) {
   const restaurantName = options.restaurantName || 'Royal Spice Restaurant';
   const taxLabel = options.taxLabel || 'GST Tax';
+  const contactNumber = options.contactNumber || '';
 
   const doc = new jsPDF({ unit: 'mm', format: 'a5', orientation: 'portrait' });
   const pageW = doc.internal.pageSize.getWidth();
@@ -125,6 +126,14 @@ export function generateOrderBillPdfBlob(order, options = {}) {
 
   y += 4;
   ensureSpace(10);
+  if (contactNumber) {
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.setTextColor(60);
+    doc.text(`Restaurant Contact: ${contactNumber}`, pageW / 2, y, { align: 'center' });
+    y += 6;
+    doc.setTextColor(0);
+  }
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(10);
   doc.text('Thank you for dining with us!', pageW / 2, y, { align: 'center' });
@@ -137,7 +146,7 @@ export function generateOrderBillPdfBlob(order, options = {}) {
   return doc.output('blob');
 }
 
-export function buildBillWhatsAppMessage(order, restaurantName, billUrl = '') {
+export function buildBillWhatsAppMessage(order, restaurantName, billUrl = '', contactNumber = '') {
   const lines = [
     `*${restaurantName || 'Restaurant'} - Bill*`,
     `Order #: *${order.orderNumber}*`,
@@ -145,6 +154,10 @@ export function buildBillWhatsAppMessage(order, restaurantName, billUrl = '') {
     `Amount: *${formatMoneyForPdf(order.grandTotal)}*`,
     `Payment: *${order.paymentStatus}*`
   ];
+
+  if (contactNumber) {
+    lines.push(`Contact: *${contactNumber}*`);
+  }
 
   if (billUrl) {
     lines.push('', 'Download your bill PDF:', billUrl);

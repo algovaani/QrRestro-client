@@ -23,6 +23,7 @@ const formatMoneyForPdf = (value) => `Rs. ${formatMoney(value)}`;
 function generateOrderBillPdfBuffer(order, options = {}) {
   const restaurantName = options.restaurantName || 'Royal Spice Restaurant';
   const taxLabel = options.taxLabel || 'GST Tax';
+  const contactNumber = options.contactNumber || '';
 
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ size: 'A5', margin: 36 });
@@ -89,7 +90,12 @@ function generateOrderBillPdfBuffer(order, options = {}) {
     doc.text(`TXN ID: ${order.transactionId || 'N/A'}`, { align: 'right' });
 
     doc.moveDown(0.8);
-    doc.font('Helvetica-Bold').fontSize(10).text('Thank you for dining with us!', { align: 'center' });
+    if (contactNumber) {
+      doc.font('Helvetica').fontSize(9).fillColor('#333333')
+        .text(`Restaurant Contact: ${contactNumber}`, { align: 'center' });
+      doc.moveDown(0.4);
+    }
+    doc.font('Helvetica-Bold').fontSize(10).fillColor('#000000').text('Thank you for dining with us!', { align: 'center' });
     doc.moveDown(0.3);
     doc.font('Helvetica').fontSize(8).fillColor('#777777').text('Computer generated bill — no signature required', { align: 'center' });
 
