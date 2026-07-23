@@ -13,6 +13,7 @@ import { useSocket } from '../../context/SocketContext';
 import { useTableRoomSocket } from '../../hooks/useTableRoomSocket';
 import { useLivePolling, useSocketReconnectRefetch } from '../../hooks/useLivePolling';
 import { getRestaurantRoom } from '../../utils/socketUrl';
+import CustomerAccountMenu from '../../components/customer/CustomerAccountMenu';
 import CustomerNotificationToast from '../../components/customer/CustomerNotificationToast';
 import { getOrderStatusMessage, mobilesMatch, vibrateCustomerAlert } from '../../utils/orderNotifications';
 import { resolveUploadUrl } from '../../utils/uploadUrl';
@@ -44,7 +45,7 @@ export default function CustomerMenu() {
   const [quantity, setQuantity] = useState(1);
   const [instructions, setInstructions] = useState('');
 
-  const { initTableCart, bindRestaurantAdmin, addToCart, saveCustomerDetails, customerDetailsComplete, customerMobile, restaurantAdminId, applyRestaurantSettings, logoutCustomer } = useCart();
+  const { initTableCart, bindRestaurantAdmin, addToCart, saveCustomerDetails, customerDetailsComplete, customerMobile, restaurantAdminId, applyRestaurantSettings } = useCart();
   const { socket, playOrderChime } = useSocket();
 
   useEffect(() => {
@@ -329,23 +330,11 @@ export default function CustomerMenu() {
             </span>
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.35rem' }}>
-            <div style={{
-              background: 'var(--primary-light)',
-              color: 'var(--primary)',
-              padding: '0.35rem 0.85rem',
-              borderRadius: '99px',
-              fontSize: '0.85rem',
-              fontWeight: '800',
-              border: '1px solid #ffd6bc'
-            }}>
+          <div className="customer-header-actions">
+            <div className="customer-table-badge">
               Table {tableNumber}
             </div>
-            {customerMobile && (
-              <button type="button" className="customer-logout-btn" onClick={logoutCustomer}>
-                Logout ({customerMobile})
-              </button>
-            )}
+            <CustomerAccountMenu tableNumber={tableNumber} />
           </div>
         </div>
 

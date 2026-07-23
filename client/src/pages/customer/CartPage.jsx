@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useCart, getCustomerMenuPath, getCustomerCartPath } from '../../context/CartContext';
 import { getSavedCustomerMobile } from '../../utils/customerSession';
 import API from '../../services/api';
+import CustomerAccountMenu from '../../components/customer/CustomerAccountMenu';
 import CustomerBottomNav from '../../components/customer/CustomerBottomNav';
 import MyOrdersModal from '../../components/customer/MyOrdersModal';
 import UPIPaymentModal from '../../components/customer/UPIPaymentModal';
@@ -27,7 +28,6 @@ export default function CartPage() {
     updateCustomerName,
     customerMobile,
     customerDetailsComplete,
-    logoutCustomer,
     specialNote,
     setSpecialNote,
     restaurantSettings,
@@ -167,17 +167,25 @@ export default function CartPage() {
     <div className="customer-mobile-wrap" style={{ background: '#f8fafc' }}>
       
       {/* Top Bar */}
-      <div style={{ background: '#ffffff', padding: '1rem', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: '1rem', position: 'sticky', top: 0, zIndex: 80 }}>
+      <div style={{ background: '#ffffff', padding: '1rem', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: '0.75rem', position: 'sticky', top: 0, zIndex: 80 }}>
         <button
           onClick={() => (menuPath ? navigate(menuPath) : navigate(-1))}
-          style={{ padding: '0.4rem', borderRadius: '50%', background: '#f1f5f9' }}
+          style={{ padding: '0.4rem', borderRadius: '50%', background: '#f1f5f9', flexShrink: 0 }}
         >
           <ArrowLeft size={18} />
         </button>
-        <div>
+        <div style={{ flex: 1, minWidth: 0 }}>
           <h2 style={{ fontSize: '1.1rem', fontWeight: '800', color: 'var(--secondary)' }}>Cart & Checkout</h2>
-          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Table Number: Table {activeTableNumber || 'N/A'}</span>
+          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Table {activeTableNumber || 'N/A'}</span>
         </div>
+        {customerDetailsComplete && (
+          <CustomerAccountMenu
+            tableNumber={activeTableNumber}
+            onAfterLogout={() => {
+              if (menuPath) navigate(menuPath);
+            }}
+          />
+        )}
       </div>
 
       <div style={{ padding: '1rem' }}>
@@ -194,21 +202,9 @@ export default function CartPage() {
             
             {/* 1. MANDATORY CUSTOMER DETAILS CARD */}
             <div style={{ background: '#ffffff', borderRadius: '16px', border: '2px solid var(--primary)', padding: '1.15rem', marginBottom: '1rem', boxShadow: '0 4px 12px rgba(255,107,0,0.08)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.85rem' }}>
-                <h3 style={{ fontSize: '1rem', fontWeight: '800', color: 'var(--secondary)', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                  <User size={18} color="var(--primary)" /> Customer Information
-                </h3>
-                <button
-                  type="button"
-                  onClick={() => {
-                    logoutCustomer();
-                    if (menuPath) navigate(menuPath);
-                  }}
-                  style={{ fontSize: '0.75rem', color: '#dc2626', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '0.25rem', background: 'transparent', border: 'none' }}
-                >
-                  Logout
-                </button>
-              </div>
+              <h3 style={{ fontSize: '1rem', fontWeight: '800', color: 'var(--secondary)', display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.85rem' }}>
+                <User size={18} color="var(--primary)" /> Customer Information
+              </h3>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                 <div>
