@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Phone, UtensilsCrossed, AlertCircle } from 'lucide-react';
+import { unlockOrderChimeAudio } from '../../utils/orderChime';
 
 export default function CustomerWelcome({ tableNumber, restaurantName, onSubmit }) {
   const [mobile, setMobile] = useState('');
@@ -8,6 +9,7 @@ export default function CustomerWelcome({ tableNumber, restaurantName, onSubmit 
   const handleSubmit = (e) => {
     e.preventDefault();
     setErrorMsg('');
+    unlockOrderChimeAudio();
 
     if (!mobile || mobile.length !== 10) {
       setErrorMsg('Please enter a valid 10-digit mobile number.');

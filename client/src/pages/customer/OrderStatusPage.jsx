@@ -11,7 +11,7 @@ import { useLivePolling, useSocketReconnectRefetch } from '../../hooks/useLivePo
 import CustomerNotificationToast from '../../components/customer/CustomerNotificationToast';
 import CustomerBottomNav from '../../components/customer/CustomerBottomNav';
 import MyOrdersModal from '../../components/customer/MyOrdersModal';
-import { getOrderStatusMessage, mobilesMatch, playCustomerOrderAlert } from '../../utils/orderNotifications';
+import { getOrderStatusMessage, orderMatchesCustomerSession, playCustomerOrderAlert } from '../../utils/orderNotifications';
 import { countReviewWords, MAX_REVIEW_WORDS, sanitizeReviewForSave, isReviewWithinWordLimit } from '../../utils/reviewText';
 import UPIPaymentModal from '../../components/customer/UPIPaymentModal';
 import { ArrowLeft, CheckCircle2, Clock, ChefHat, Sparkles, UtensilsCrossed, QrCode, Star, Send } from 'lucide-react';
@@ -117,6 +117,17 @@ export default function OrderStatusPage() {
             ) {
               return;
             }
+            if (
+              order &&
+              !orderMatchesCustomerSession(
+                updatedOrder,
+                order.adminId,
+                order.tableNumber,
+                customerMobile || order.customerMobile
+              )
+            ) {
+              return;
+            }
             setOrder(updatedOrder);
             setLiveToast(`⏳ Payment submitted for Order #${updatedOrder.orderNumber} — waiting for admin approval`);
           },
@@ -124,6 +135,17 @@ export default function OrderStatusPage() {
             if (
               updatedOrder.orderNumber !== orderNumber &&
               (!order || String(updatedOrder._id) !== String(order._id))
+            ) {
+              return;
+            }
+            if (
+              order &&
+              !orderMatchesCustomerSession(
+                updatedOrder,
+                order.adminId,
+                order.tableNumber,
+                customerMobile || order.customerMobile
+              )
             ) {
               return;
             }
@@ -135,6 +157,17 @@ export default function OrderStatusPage() {
             if (
               updatedOrder.orderNumber !== orderNumber &&
               (!order || String(updatedOrder._id) !== String(order._id))
+            ) {
+              return;
+            }
+            if (
+              order &&
+              !orderMatchesCustomerSession(
+                updatedOrder,
+                order.adminId,
+                order.tableNumber,
+                customerMobile || order.customerMobile
+              )
             ) {
               return;
             }

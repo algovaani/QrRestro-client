@@ -15,7 +15,7 @@ import { useLivePolling, useSocketReconnectRefetch } from '../../hooks/useLivePo
 import { getRestaurantRoom } from '../../utils/socketUrl';
 import CustomerAccountMenu from '../../components/customer/CustomerAccountMenu';
 import CustomerNotificationToast from '../../components/customer/CustomerNotificationToast';
-import { getOrderStatusMessage, mobilesMatch, playCustomerOrderAlert } from '../../utils/orderNotifications';
+import { getOrderStatusMessage, orderMatchesCustomerSession, playCustomerOrderAlert } from '../../utils/orderNotifications';
 import { resolveUploadUrl, resolveMenuItemImageUrl } from '../../utils/uploadUrl';
 
 export default function CustomerMenu() {
@@ -78,14 +78,14 @@ export default function CustomerMenu() {
     customerDetailsComplete
       ? {
           onNewOrder: (newOrder) => {
-            if (!mobilesMatch(newOrder.customerMobile, customerMobile)) return;
+            if (!orderMatchesCustomerSession(newOrder, restaurantAdminId, tableNumber, customerMobile)) return;
             setTableOrders((prev) => {
               if (prev.some((o) => String(o._id) === String(newOrder._id))) return prev;
               return [newOrder, ...prev];
             });
           },
           onStatusUpdate: (updatedOrder) => {
-            if (!mobilesMatch(updatedOrder.customerMobile, customerMobile)) return;
+            if (!orderMatchesCustomerSession(updatedOrder, restaurantAdminId, tableNumber, customerMobile)) return;
             playCustomerOrderAlert(updatedOrder, playOrderChime);
             setStatusToast(getOrderStatusMessage(updatedOrder));
             setTableOrders((prev) => {
@@ -97,7 +97,7 @@ export default function CustomerMenu() {
             });
           },
           onPaymentPending: (updatedOrder) => {
-            if (!mobilesMatch(updatedOrder.customerMobile, customerMobile)) return;
+            if (!orderMatchesCustomerSession(updatedOrder, restaurantAdminId, tableNumber, customerMobile)) return;
             setStatusToast(`⏳ Payment submitted for Order #${updatedOrder.orderNumber} — waiting for admin approval`);
             setTableOrders((prev) =>
               prev.map((o) =>
@@ -106,7 +106,7 @@ export default function CustomerMenu() {
             );
           },
           onPaymentSuccess: (updatedOrder) => {
-            if (!mobilesMatch(updatedOrder.customerMobile, customerMobile)) return;
+            if (!orderMatchesCustomerSession(updatedOrder, restaurantAdminId, tableNumber, customerMobile)) return;
             playCustomerOrderAlert(updatedOrder, playOrderChime);
             setStatusToast(`💳 Payment approved for Order #${updatedOrder.orderNumber}!`);
             setTableOrders((prev) =>

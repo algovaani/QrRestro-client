@@ -4,7 +4,7 @@ import API from '../../services/api';
 import Sidebar from '../../components/common/Sidebar';
 import Header from '../../components/common/Header';
 import { useSocket } from '../../context/SocketContext';
-import { prependUniqueOrder, upsertOrder } from '../../utils/orderList';
+import { prependUniqueOrder, upsertOrder, getOrderId } from '../../utils/orderList';
 import { useLivePolling } from '../../hooks/useLivePolling';
 import { useAuth } from '../../context/AuthContext';
 import { sendOrderBillOnWhatsApp } from '../../utils/billShare';
@@ -130,7 +130,7 @@ export default function OrdersPage() {
     const handleStatusUpdate = (updatedOrder) => {
       if (!belongsToTenant(updatedOrder, user?._id)) return;
       setOrders((prev) => upsertOrder(prev, updatedOrder));
-      if (selectedOrder && selectedOrder._id === updatedOrder._id) {
+      if (selectedOrder && getOrderId(selectedOrder) === getOrderId(updatedOrder)) {
         setSelectedOrder(updatedOrder);
       }
     };
@@ -138,7 +138,7 @@ export default function OrdersPage() {
     const handlePaymentPending = (updatedOrder) => {
       if (!belongsToTenant(updatedOrder, user?._id)) return;
       setOrders((prev) => upsertOrder(prev, updatedOrder));
-      if (selectedOrder && selectedOrder._id === updatedOrder._id) {
+      if (selectedOrder && getOrderId(selectedOrder) === getOrderId(updatedOrder)) {
         setSelectedOrder(updatedOrder);
       }
     };
@@ -146,7 +146,7 @@ export default function OrdersPage() {
     const handlePaymentSuccess = (updatedOrder) => {
       if (!belongsToTenant(updatedOrder, user?._id)) return;
       setOrders((prev) => upsertOrder(prev, updatedOrder));
-      if (selectedOrder && selectedOrder._id === updatedOrder._id) {
+      if (selectedOrder && getOrderId(selectedOrder) === getOrderId(updatedOrder)) {
         setSelectedOrder(updatedOrder);
       }
     };
@@ -154,7 +154,7 @@ export default function OrdersPage() {
     const handleOrderRating = (updatedOrder) => {
       if (!belongsToTenant(updatedOrder, user?._id)) return;
       setOrders((prev) => upsertOrder(prev, updatedOrder));
-      if (selectedOrder && selectedOrder._id === updatedOrder._id) {
+      if (selectedOrder && getOrderId(selectedOrder) === getOrderId(updatedOrder)) {
         setSelectedOrder(updatedOrder);
       }
     };
@@ -192,11 +192,14 @@ export default function OrdersPage() {
   useLivePolling(fetchOrders, 15000, true);
 
   const updateStatus = async (orderId, newStatus) => {
+    const targetId = getOrderId({ _id: orderId });
+    if (!targetId) return;
+
     try {
-      const res = await API.patch(`/orders/${orderId}/status`, { orderStatus: newStatus });
+      const res = await API.patch(`/orders/${targetId}/status`, { orderStatus: newStatus });
       if (res.data.success) {
-        setOrders(prev => prev.map(o => o._id === orderId ? res.data.order : o));
-        if (selectedOrder && selectedOrder._id === orderId) {
+        setOrders((prev) => prev.map((o) => (getOrderId(o) === targetId ? res.data.order : o)));
+        if (selectedOrder && getOrderId(selectedOrder) === targetId) {
           setSelectedOrder(res.data.order);
         }
       }
@@ -206,14 +209,16 @@ export default function OrdersPage() {
   };
 
   const approvePayment = async (orderId) => {
+    const targetId = getOrderId({ _id: orderId });
+    if (!targetId) return;
     if (!window.confirm('Approve this payment and mark the order as Paid?')) return;
 
     try {
-      const res = await API.post(`/payment/approve/${orderId}`);
+      const res = await API.post(`/payment/approve/${targetId}`);
       if (res.data.success) {
         const order = res.data.order;
-        setOrders((prev) => prev.map((o) => (o._id === orderId ? order : o)));
-        if (selectedOrder && selectedOrder._id === orderId) {
+        setOrders((prev) => prev.map((o) => (getOrderId(o) === targetId ? order : o)));
+        if (selectedOrder && getOrderId(selectedOrder) === targetId) {
           setSelectedOrder(order);
         }
 
@@ -238,12 +243,14 @@ export default function OrdersPage() {
   };
 
   const rejectPayment = async (orderId) => {
+    const targetId = getOrderId({ _id: orderId });
+    if (!targetId) return;
     if (!window.confirm('Reject this payment? Customer will need to pay again.')) return;
     try {
-      const res = await API.post(`/payment/reject/${orderId}`);
+      const res = await API.post(`/payment/reject/${targetId}`);
       if (res.data.success) {
-        setOrders((prev) => prev.map((o) => (o._id === orderId ? res.data.order : o)));
-        if (selectedOrder && selectedOrder._id === orderId) {
+        setOrders((prev) => prev.map((o) => (getOrderId(o) === targetId ? res.data.order : o)));
+        if (selectedOrder && getOrderId(selectedOrder) === targetId) {
           setSelectedOrder(res.data.order);
         }
       }
@@ -253,11 +260,13 @@ export default function OrdersPage() {
   };
 
   const updatePayment = async (orderId, paymentStatus, paymentMethod = 'UPI') => {
+    const targetId = getOrderId({ _id: orderId });
+    if (!targetId) return;
     try {
-      const res = await API.patch(`/orders/${orderId}/payment`, { paymentStatus, paymentMethod });
+      const res = await API.patch(`/orders/${targetId}/payment`, { paymentStatus, paymentMethod });
       if (res.data.success) {
-        setOrders(prev => prev.map(o => o._id === orderId ? res.data.order : o));
-        if (selectedOrder && selectedOrder._id === orderId) {
+        setOrders((prev) => prev.map((o) => (getOrderId(o) === targetId ? res.data.order : o)));
+        if (selectedOrder && getOrderId(selectedOrder) === targetId) {
           setSelectedOrder(res.data.order);
         }
       }
@@ -579,8 +588,9 @@ export default function OrdersPage() {
 
                     <td style={{ padding: '0.85rem 1rem' }}>
                       <select
+                        key={`status-${getOrderId(order)}`}
                         value={order.orderStatus}
-                        onChange={(e) => updateStatus(order._id, e.target.value)}
+                        onChange={(e) => updateStatus(getOrderId(order), e.target.value)}
                         onClick={(e) => e.stopPropagation()}
                         className={`badge badge-${order.orderStatus.toLowerCase()} admin-order-status-select`}
                         style={{ cursor: 'pointer', outline: 'none' }}

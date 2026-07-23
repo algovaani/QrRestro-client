@@ -1,12 +1,16 @@
+export const getOrderId = (order) => String(order?._id || order?.id || '');
+
 export const prependUniqueOrder = (orders, order) => {
-  if (!order?._id) return orders;
-  if (orders.some((o) => String(o._id) === String(order._id))) return orders;
+  const orderId = getOrderId(order);
+  if (!orderId) return orders;
+  if (orders.some((o) => getOrderId(o) === orderId)) return orders;
   return [order, ...orders];
 };
 
 export const upsertOrder = (orders, order) => {
-  if (!order?._id) return orders;
-  const idx = orders.findIndex((o) => String(o._id) === String(order._id));
+  const orderId = getOrderId(order);
+  if (!orderId) return orders;
+  const idx = orders.findIndex((o) => getOrderId(o) === orderId);
   if (idx === -1) return [order, ...orders];
-  return orders.map((o) => (String(o._id) === String(order._id) ? order : o));
+  return orders.map((o) => (getOrderId(o) === orderId ? order : o));
 };

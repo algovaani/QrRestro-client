@@ -4,7 +4,7 @@ import API from '../../services/api';
 import { useSocket } from '../../context/SocketContext';
 import { useTableRoomSocket } from '../../hooks/useTableRoomSocket';
 import CustomerNotificationToast from './CustomerNotificationToast';
-import { getOrderStatusMessage, mobilesMatch, playCustomerOrderAlert } from '../../utils/orderNotifications';
+import { getOrderStatusMessage, orderMatchesCustomerSession, playCustomerOrderAlert } from '../../utils/orderNotifications';
 import { sendOrderBillOnWhatsApp } from '../../utils/billShare';
 import UPIPaymentModal from './UPIPaymentModal';
 import { X, ChevronDown, ChevronUp, QrCode, MessageSquare, Utensils, Loader2, ExternalLink } from 'lucide-react';
@@ -61,10 +61,7 @@ export default function MyOrdersModal({ tableNumber, adminId, customerMobile, on
     tableNumber,
     {
       onStatusUpdate: (updatedOrder) => {
-        if (
-          String(updatedOrder.tableNumber) !== String(tableNumber) ||
-          !mobilesMatch(updatedOrder.customerMobile, customerMobile)
-        ) {
+        if (!orderMatchesCustomerSession(updatedOrder, adminId, tableNumber, customerMobile)) {
           return;
         }
         setTableOrders((prev) =>
@@ -74,10 +71,7 @@ export default function MyOrdersModal({ tableNumber, adminId, customerMobile, on
         setStatusToast(getOrderStatusMessage(updatedOrder));
       },
       onPaymentPending: (updatedOrder) => {
-        if (
-          String(updatedOrder.tableNumber) !== String(tableNumber) ||
-          !mobilesMatch(updatedOrder.customerMobile, customerMobile)
-        ) {
+        if (!orderMatchesCustomerSession(updatedOrder, adminId, tableNumber, customerMobile)) {
           return;
         }
         setTableOrders((prev) =>
@@ -86,10 +80,7 @@ export default function MyOrdersModal({ tableNumber, adminId, customerMobile, on
         setStatusToast(`⏳ Payment submitted for Order #${updatedOrder.orderNumber} — waiting for admin approval`);
       },
       onPaymentSuccess: (updatedOrder) => {
-        if (
-          String(updatedOrder.tableNumber) !== String(tableNumber) ||
-          !mobilesMatch(updatedOrder.customerMobile, customerMobile)
-        ) {
+        if (!orderMatchesCustomerSession(updatedOrder, adminId, tableNumber, customerMobile)) {
           return;
         }
         setTableOrders((prev) =>

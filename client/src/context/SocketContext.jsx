@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useMemo, useRef, useState 
 import { io } from 'socket.io-client';
 import { useAuth } from './AuthContext';
 import { getSocketUrl, getRestaurantRoom } from '../utils/socketUrl';
+import { playOrderChime } from '../utils/orderChime';
 
 const SocketContext = createContext();
 
@@ -17,29 +18,6 @@ const getTenantId = (user, token) => {
   if (user.role === 'Admin') return String(user._id);
   if (user.restaurantAdminId) return String(user.restaurantAdminId);
   return null;
-};
-
-const playOrderChime = () => {
-  try {
-    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    const osc = audioCtx.createOscillator();
-    const gain = audioCtx.createGain();
-
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(587.33, audioCtx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(880, audioCtx.currentTime + 0.15);
-
-    gain.gain.setValueAtTime(0.4, audioCtx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.45);
-
-    osc.connect(gain);
-    gain.connect(audioCtx.destination);
-
-    osc.start();
-    osc.stop(audioCtx.currentTime + 0.45);
-  } catch (e) {
-    console.log('Audio playback prevented or unsupported', e);
-  }
 };
 
 export const SocketProvider = ({ children }) => {

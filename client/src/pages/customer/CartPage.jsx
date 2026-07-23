@@ -9,6 +9,7 @@ import MyOrdersModal from '../../components/customer/MyOrdersModal';
 import UPIPaymentModal from '../../components/customer/UPIPaymentModal';
 import { useTableSessionOrders } from '../../hooks/useTableSessionOrders';
 import { startCustomerPayFlow, getUnpaidOrders } from '../../utils/customerPayFlow';
+import { unlockOrderChimeAudio } from '../../utils/orderChime';
 import PayOrderPickerModal from '../../components/customer/PayOrderPickerModal';
 import { ArrowLeft, Trash2, Plus, Minus, CheckCircle, AlertCircle, User, QrCode, Banknote } from 'lucide-react';
 
@@ -42,7 +43,7 @@ export default function CartPage() {
   const [showPayPicker, setShowPayPicker] = useState(false);
 
   const activeAdminId = restaurantAdminId || routeAdminId || '';
-  const activeTableNumber = tableNumber || routeTableNumber || '';
+  const activeTableNumber = routeTableNumber || tableNumber || '';
   const menuPath = getCustomerMenuPath(activeAdminId, activeTableNumber);
   const hasTableContext = Boolean(activeTableNumber);
 
@@ -54,7 +55,7 @@ export default function CartPage() {
 
   useEffect(() => {
     if (!customerDetailsComplete && menuPath && activeAdminId) {
-      const saved = getSavedCustomerMobile(activeAdminId);
+      const saved = getSavedCustomerMobile(activeAdminId, activeTableNumber);
       if (!saved) {
         navigate(menuPath, { replace: true });
       }
@@ -130,6 +131,7 @@ export default function CartPage() {
       return;
     }
 
+    unlockOrderChimeAudio();
     setLoading(true);
 
     try {

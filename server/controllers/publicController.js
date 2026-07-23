@@ -157,10 +157,12 @@ exports.placeOrder = async (req, res, next) => {
 
     const preferredPayment = ['UPI', 'Cash', 'Card'].includes(paymentMethod) ? paymentMethod : 'UPI';
 
+    const resolvedTableNumber = String(table.tableNumber);
+
     const order = await Order.create({
       adminId: tenantAdminId,
       orderNumber,
-      tableNumber,
+      tableNumber: resolvedTableNumber,
       table: table._id,
       customerName: (customerName && customerName.trim()) ? customerName.trim() : 'Guest',
       customerMobile: customerMobile.trim(),
@@ -204,7 +206,7 @@ exports.getActiveOrdersForTableByAdmin = async (req, res, next) => {
 
     const filter = {
       adminId,
-      tableNumber,
+      tableNumber: String(tableNumber),
       createdAt: { $gte: todayStart }
     };
 
@@ -245,7 +247,7 @@ exports.getActiveOrdersForTable = async (req, res, next) => {
     todayStart.setHours(0, 0, 0, 0);
 
     const filter = {
-      tableNumber,
+      tableNumber: String(tableNumber),
       createdAt: { $gte: todayStart }
     };
 
