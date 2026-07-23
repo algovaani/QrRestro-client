@@ -162,7 +162,7 @@ export default function MenuPage() {
     });
     setImageFile(null);
     setExistingImage(item.image || '');
-    setPreviewImage(item.image ? resolveUploadUrl(item.image) : '');
+    setPreviewImage(item.image ? getItemImageSrc(item) : '');
     setModalError('');
     setShowModal(true);
   };
@@ -183,7 +183,15 @@ export default function MenuPage() {
     setPreviewImage(URL.createObjectURL(file));
   };
 
-  const getItemImageSrc = (image) => (image ? resolveUploadUrl(image) : null);
+  const getItemImageSrc = (item) => {
+    if (!item?.image) return null;
+    const base = resolveUploadUrl(item.image);
+    if (!base) return null;
+    const version = item.updatedAt ? new Date(item.updatedAt).getTime() : '';
+    if (!version) return base;
+    const joiner = base.includes('?') ? '&' : '?';
+    return `${base}${joiner}v=${version}`;
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -341,8 +349,12 @@ export default function MenuPage() {
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                         {item.image ? (
                           <img
-                            src={getItemImageSrc(item.image)}
+                            src={getItemImageSrc(item)}
                             alt={item.name}
+                            loading="lazy"
+                            onError={(e) => {
+                              e.currentTarget.style.display = 'none';
+                            }}
                             style={{ width: '42px', height: '42px', borderRadius: '8px', objectFit: 'cover', flexShrink: 0 }}
                           />
                         ) : (

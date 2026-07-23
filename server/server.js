@@ -43,7 +43,11 @@ if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
 }
 
-connectDB();
+connectDB()
+  .then(() => require('./utils/migrateMenuImages').migrateMenuImages({ log: true }))
+  .catch((err) => {
+    if (err?.message) console.error('[startup]', err.message);
+  });
 
 const io = new Server(server, {
   path: '/socket.io',

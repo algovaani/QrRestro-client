@@ -62,9 +62,15 @@ function normalizeMenuItemImage(item) {
   const obj = item?.toObject ? item.toObject() : { ...item };
   if (!obj?._id) return obj;
 
-  if (obj.image?.startsWith('data:')) {
+  const hasStoredImage =
+    Boolean(obj.imageData) ||
+    obj.image?.startsWith('data:') ||
+    obj.image?.startsWith('/uploads/') ||
+    (obj.image && obj.image.includes('/menu-item/') && obj.image.includes('/photo'));
+
+  if (hasStoredImage) {
     obj.image = getMenuItemPhotoPath(obj._id);
-  } else if (obj.imageData && (!obj.image || obj.image.startsWith('/uploads/'))) {
+  } else if (obj.image?.startsWith('data:')) {
     obj.image = getMenuItemPhotoPath(obj._id);
   }
 

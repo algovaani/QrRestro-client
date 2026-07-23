@@ -1,6 +1,5 @@
 const MenuItem = require('../models/MenuItem');
 const { getTenantAdminId, buildTenantFilter, assertTenantOwnership } = require('../middleware/tenantMiddleware');
-const { persistUploadedImage } = require('../utils/persistUpload');
 const {
   parseDataUrl,
   getMenuItemPhotoPath,
@@ -8,6 +7,26 @@ const {
   readUploadedImageData,
   ensureMenuItemImageStored
 } = require('../utils/menuImage');
+
+const hydrateMenuItemImages = async (items) => {
+  const list = Array.isArray(items) ? items : [items];
+  await Promise.all(
+    list.map(async (item) => {
+      if (!item) return;
+      if (
+        item.imageData ||
+        item.image?.startsWith('/uploads/') ||
+        item.image?.startsWith('data:')
+      ) {
+        await ensureMenuItemImageStored(item);
+      } else if (item.imageData && !String(item.image || '').includes('/photo')) {
+        item.image = getMenuItemPhotoPath(item._id);
+        await item.save();
+      }
+    })
+  );
+  return list;
+};
 
 const parseBool = (val, defaultVal = false) => {
   if (val === undefined || val === null || val === '') return defaultVal;
@@ -27,7 +46,8 @@ exports.getMenuItems = async (req, res, next) => {
       filter.category = req.query.category;
     }
 
-    const items = await MenuItem.find(filter).populate('category').sort({ createdAt: -1 });
+    const items = await MenuItem.find(filter).select('+imageData').populate('category').sort({ createdAt: -1 });
+    await hydrateMenuItemImages(items);
 
     res.json({
       success: true,
@@ -43,10 +63,11 @@ exports.getMenuItems = async (req, res, next) => {
 // @route GET /api/menu/:id
 exports.getMenuItemById = async (req, res, next) => {
   try {
-    const item = await MenuItem.findById(req.params.id).populate('category');
+    const item = await MenuItem.findById(req.params.id).select('+imageData').populate('category');
     if (!item) {
       return res.status(404).json({ success: false, message: 'Menu item not found' });
     }
+    await hydrateMenuItemImages(item);
     res.json({
       success: true,
       item: normalizeMenuItemImage(item)
@@ -111,7 +132,7 @@ exports.createMenuItem = async (req, res, next) => {
 // @route PUT /api/menu/:id
 exports.updateMenuItem = async (req, res, next) => {
   try {
-    let item = await MenuItem.findById(req.params.id);
+    let item = await MenuItem.findById(req.params.id).select('+imageData');
 
     if (!item) {
       return res.status(404).json({ success: false, message: 'Menu item not found' });
@@ -144,6 +165,13 @@ exports.updateMenuItem = async (req, res, next) => {
         item.image = getMenuItemPhotoPath(item._id);
       } catch (err) {
         return res.status(400).json({ success: false, message: err.message || 'Image upload failed' });
+      }
+    } else if (parseBool(req.body.removeImage, false)) {
+      item.image = '';
+      item.imageData = '';
+    } else if (req.body.keepExistingImage === 'true' || req.body.keepExistingImage === true) {
+      if (item.imageData && (!item.image || item.image.startsWith('/uploads/') || item.image.startsWith('data:'))) {
+        item.image = getMenuItemPhotoPath(item._id);
       }
     }
 
@@ -199,12 +227,12 @@ exports.toggleAvailability = async (req, res, next) => {
       return res.status(403).json({ success: false, message: 'Not authorized to modify another restaurant item' });
     }
 
-    item.isAvailable = !item.isAvailable;
-    await item.save();
+    const nextAvailable = !item.isAvailable;
+    await MenuItem.updateOne({ _id: item._id }, { $set: { isAvailable: nextAvailable } });
 
     res.json({
       success: true,
-      isAvailable: item.isAvailable
+      isAvailable: nextAvailable
     });
   } catch (error) {
     next(error);
@@ -241,7 +269,8 @@ exports.getMenuItemPhoto = async (req, res, next) => {
 
     res.set({
       'Content-Type': parsed.mime,
-      'Cache-Control': 'public, max-age=604800'
+      'Cache-Control': 'public, max-age=31536000, immutable',
+      ETag: `"menu-photo-${item._id}-${item.updatedAt?.getTime?.() || 0}"`
     });
     res.send(parsed.buffer);
   } catch (error) {

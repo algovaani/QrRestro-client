@@ -7,7 +7,7 @@ const { emitNewOrder, emitOrderRating } = require('../socket/socketHandler');
 const { generateOrderBillPdfBuffer } = require('../utils/billPdf');
 const { getPublicBillPdfUrl, orderBillIsAvailable } = require('../utils/publicApiUrl');
 const { MAX_REVIEW_WORDS, countReviewWords, sanitizeReviewForSave } = require('../utils/reviewText');
-const { normalizeMenuItemImage } = require('../utils/menuImage');
+const { normalizeMenuItemImage, ensureMenuItemImageStored, getMenuItemPhotoPath } = require('../utils/menuImage');
 
 const generateOrderNumber = () => {
   const randomNum = Math.floor(1000 + Math.random() * 9000);
@@ -47,8 +47,24 @@ const findTableForOrder = async (tableNumber, adminId) => {
 const buildMenuResponse = async (table) => {
   const adminId = table.adminId;
   const categories = await Category.find({ adminId, status: 'Active' }).sort({ displayOrder: 1 });
-  const menuItems = await MenuItem.find({ adminId, status: 'Active', isAvailable: true }).populate('category');
-  const setting = await Setting.findOne({ adminId }) || {};
+  const menuItems = await MenuItem.find({ adminId, status: 'Active', isAvailable: true })
+    .select('+imageData')
+    .populate('category');
+
+  await Promise.all(
+    menuItems.map(async (item) => {
+      if (
+        item.imageData ||
+        item.image?.startsWith('/uploads/') ||
+        item.image?.startsWith('data:')
+      ) {
+        await ensureMenuItemImageStored(item);
+      } else if (item.imageData && !String(item.image || '').includes('/photo')) {
+        item.image = getMenuItemPhotoPath(item._id);
+        await item.save();
+      }
+    })
+  );
 
   return {
     success: true,
@@ -57,7 +73,7 @@ const buildMenuResponse = async (table) => {
     adminId,
     categories,
     menuItems: menuItems.map(normalizeMenuItemImage),
-    setting
+    setting: await Setting.findOne({ adminId }) || {}
   };
 };
 
