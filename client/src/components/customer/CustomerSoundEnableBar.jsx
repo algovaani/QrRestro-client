@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { BellRing } from 'lucide-react';
 import {
-  enableOrderChimeWithTestSound,
+  enableOrderChimeSilently,
   isMobileBrowser,
   orderChimeNeedsPrompt,
   subscribeOrderChimeState
@@ -26,7 +26,7 @@ export default function CustomerSoundEnableBar({ aboveNav = true }) {
 
   const handleEnable = async () => {
     setEnabling(true);
-    const ok = await enableOrderChimeWithTestSound();
+    const ok = await enableOrderChimeSilently();
     setEnabling(false);
     if (ok) setVisible(false);
   };
@@ -35,7 +35,7 @@ export default function CustomerSoundEnableBar({ aboveNav = true }) {
     <div className={`customer-sound-bar${aboveNav ? ' customer-sound-bar--above-nav' : ''}`}>
       <button type="button" className="customer-sound-bar__btn" onClick={handleEnable} disabled={enabling}>
         <BellRing size={18} className="customer-sound-bar__icon" />
-        <span>{enabling ? 'Enabling…' : 'Tap to enable order sound alerts'}</span>
+        <span>{enabling ? 'Enabling…' : 'Tap once to allow order alert sounds'}</span>
       </button>
     </div>,
     document.body

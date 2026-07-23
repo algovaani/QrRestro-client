@@ -12,7 +12,7 @@ import CustomerNotificationToast from '../../components/customer/CustomerNotific
 import CustomerSoundEnableBar from '../../components/customer/CustomerSoundEnableBar';
 import CustomerBottomNav from '../../components/customer/CustomerBottomNav';
 import MyOrdersModal from '../../components/customer/MyOrdersModal';
-import { getOrderStatusMessage, orderMatchesCustomerSession, playCustomerOrderAlert } from '../../utils/orderNotifications';
+import { getOrderStatusMessage, orderMatchesCustomerSession, notifyCustomerOrderStatus } from '../../utils/orderNotifications';
 import { countReviewWords, MAX_REVIEW_WORDS, sanitizeReviewForSave, isReviewWithinWordLimit } from '../../utils/reviewText';
 import UPIPaymentModal from '../../components/customer/UPIPaymentModal';
 import { ArrowLeft, CheckCircle2, Clock, ChefHat, Sparkles, UtensilsCrossed, QrCode, Star, Send } from 'lucide-react';
@@ -81,8 +81,7 @@ export default function OrderStatusPage() {
           setRatingSubmitted(true);
         }
         if (prevStatus && prevStatus !== nextOrder.orderStatus) {
-          void playCustomerOrderAlert(nextOrder);
-          setLiveToast(getOrderStatusMessage(nextOrder));
+          notifyCustomerOrderStatus(nextOrder, setLiveToast, prevStatus);
         }
       }
     } catch (err) {
@@ -151,7 +150,6 @@ export default function OrderStatusPage() {
               return;
             }
             setOrder(updatedOrder);
-            void playCustomerOrderAlert(updatedOrder);
             setLiveToast(`💳 Payment approved for Order #${updatedOrder.orderNumber}!`);
           },
           onStatusUpdate: (updatedOrder) => {
@@ -177,8 +175,7 @@ export default function OrderStatusPage() {
               setLiveToast(`Payment for Order #${updatedOrder.orderNumber} was not approved. Please try again.`);
               return;
             }
-            void playCustomerOrderAlert(updatedOrder);
-            setLiveToast(getOrderStatusMessage(updatedOrder));
+            notifyCustomerOrderStatus(updatedOrder, setLiveToast, order?.orderStatus);
           }
         }
       : {}

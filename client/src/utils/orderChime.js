@@ -111,68 +111,55 @@ const getChimeAudio = () => {
   return chimeAudio;
 };
 
-/** Synchronous play call — must run inside touch/click handler (Android Chrome). */
-const primeHtmlAudioSync = () => {
-  const audio = getChimeAudio();
-  if (!audio) return false;
-
-  try {
-    audio.volume = 0.001;
-    audio.currentTime = 0;
-    const playPromise = audio.play();
-    if (playPromise && typeof playPromise.then === 'function') {
-      playPromise
-        .then(() => {
-          audio.pause();
-          audio.currentTime = 0;
-          audio.volume = 1;
-          setPrimed(true);
-        })
-        .catch(() => {
-          markChimeNeedsUnlock();
-        });
-    }
-    return true;
-  } catch {
-    markChimeNeedsUnlock();
-    return false;
-  }
-};
-
-const primeWebAudioSync = () => {
-  const ctx = getAudioContext();
-  if (!ctx) return;
-  if (ctx.state === 'suspended') {
-    ctx.resume().then(() => setPrimed(true)).catch(() => {});
-  } else if (ctx.state === 'running') {
-    setPrimed(true);
-  }
-};
-
-/** Call during a user gesture so later socket chimes work on mobile. */
-export const unlockOrderChimeAudio = async () => {
-  primeHtmlAudioSync();
-  primeWebAudioSync();
-  return audioPrimed;
-};
-
-/** Explicit tap — plays audible test chime (best for Android Chrome). */
-export const enableOrderChimeWithTestSound = async () => {
+/** Silent prime — no audible chime (for taps / enable button). */
+const primeHtmlAudioSilent = async () => {
   const audio = getChimeAudio();
   if (!audio) return false;
 
   try {
     attachAudioElement(audio);
+    audio.muted = true;
     audio.volume = 1;
     audio.currentTime = 0;
     await audio.play();
+    audio.pause();
+    audio.currentTime = 0;
+    audio.muted = false;
     setPrimed(true);
     return true;
   } catch {
-    markChimeNeedsUnlock();
     return false;
   }
 };
+
+const primeWebAudioSilent = async () => {
+  const ctx = getAudioContext();
+  if (!ctx) return false;
+  try {
+    if (ctx.state === 'suspended') {
+      await ctx.resume();
+    }
+    if (ctx.state === 'running') {
+      setPrimed(true);
+      return true;
+    }
+  } catch {
+    /* ignore */
+  }
+  return false;
+};
+
+/** Call during a user gesture — silent, no notification sound. */
+export const unlockOrderChimeAudio = async () => {
+  if (audioPrimed) return true;
+  const htmlOk = await primeHtmlAudioSilent();
+  const webOk = await primeWebAudioSilent();
+  if (!htmlOk && !webOk) markChimeNeedsUnlock();
+  return audioPrimed;
+};
+
+/** Orange bar tap — silent unlock only, no test chime. */
+export const enableOrderChimeSilently = () => unlockOrderChimeAudio();
 
 const playOscillatorChime = (ctx) => {
   const osc = ctx.createOscillator();
@@ -198,6 +185,7 @@ const playHtmlChime = async () => {
 
   const audio = template.cloneNode(true);
   attachAudioElement(audio);
+  audio.muted = false;
   audio.volume = 1;
   audio.currentTime = 0;
 
@@ -214,23 +202,15 @@ const playHtmlChime = async () => {
   }
 };
 
-if (typeof window !== 'undefined') {
-  const unlockFromGesture = () => {
-    unlockOrderChimeAudio();
-  };
-
-  window.addEventListener('pointerdown', unlockFromGesture, true);
-  window.addEventListener('touchstart', unlockFromGesture, true);
-  window.addEventListener('click', unlockFromGesture, true);
-
-  if (isMobileBrowser()) {
-    needsUnlockPrompt = true;
-    notifyPrimedListeners();
-  }
+if (typeof window !== 'undefined' && isMobileBrowser()) {
+  needsUnlockPrompt = true;
+  notifyPrimedListeners();
 }
 
-/** @returns {Promise<boolean>} */
+/** Audible chime — only for live order status notifications. */
 export const playOrderChime = async () => {
+  if (!audioPrimed) return false;
+
   if (isMobileBrowser()) {
     try {
       const htmlPlayed = await playHtmlChime();
@@ -247,7 +227,7 @@ export const playOrderChime = async () => {
         try {
           await ctx.resume();
         } catch {
-          /* fall through */
+          return false;
         }
       }
       if (ctx.state === 'running') {
@@ -263,7 +243,6 @@ export const playOrderChime = async () => {
     return await playHtmlChime();
   } catch (e) {
     console.log('Audio playback prevented or unsupported', e);
-    markChimeNeedsUnlock();
     return false;
   }
 };

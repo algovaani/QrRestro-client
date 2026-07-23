@@ -16,8 +16,7 @@ import { getRestaurantRoom } from '../../utils/socketUrl';
 import CustomerAccountMenu from '../../components/customer/CustomerAccountMenu';
 import CustomerNotificationToast from '../../components/customer/CustomerNotificationToast';
 import CustomerSoundEnableBar from '../../components/customer/CustomerSoundEnableBar';
-import { getOrderStatusMessage, orderMatchesCustomerSession, playCustomerOrderAlert } from '../../utils/orderNotifications';
-import { unlockOrderChimeAudio } from '../../utils/orderChime';
+import { orderMatchesCustomerSession, notifyCustomerOrderStatus } from '../../utils/orderNotifications';
 import { resolveUploadUrl, resolveMenuItemImageUrl } from '../../utils/uploadUrl';
 
 export default function CustomerMenu() {
@@ -88,9 +87,11 @@ export default function CustomerMenu() {
           },
           onStatusUpdate: (updatedOrder) => {
             if (!orderMatchesCustomerSession(updatedOrder, restaurantAdminId, tableNumber, customerMobile)) return;
-            void playCustomerOrderAlert(updatedOrder);
-            setStatusToast(getOrderStatusMessage(updatedOrder));
             setTableOrders((prev) => {
+              const existing = prev.find((o) => String(o._id) === String(updatedOrder._id));
+              if (!showMyOrdersModal) {
+                notifyCustomerOrderStatus(updatedOrder, setStatusToast, existing?.orderStatus);
+              }
               const exists = prev.some((o) => String(o._id) === String(updatedOrder._id));
               if (!exists) return prev;
               return prev.map((o) =>
@@ -109,7 +110,6 @@ export default function CustomerMenu() {
           },
           onPaymentSuccess: (updatedOrder) => {
             if (!orderMatchesCustomerSession(updatedOrder, restaurantAdminId, tableNumber, customerMobile)) return;
-            void playCustomerOrderAlert(updatedOrder);
             setStatusToast(`💳 Payment approved for Order #${updatedOrder.orderNumber}!`);
             setTableOrders((prev) =>
               prev.map((o) =>
@@ -234,7 +234,6 @@ export default function CustomerMenu() {
 
   const handleAddToCartConfirm = () => {
     if (!selectedItem) return;
-    void unlockOrderChimeAudio();
 
     let price = 0;
     if (selectedSize === 'Half') price = selectedItem.halfPrice;

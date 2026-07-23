@@ -4,7 +4,7 @@ import API from '../../services/api';
 import { useSocket } from '../../context/SocketContext';
 import { useTableRoomSocket } from '../../hooks/useTableRoomSocket';
 import CustomerNotificationToast from './CustomerNotificationToast';
-import { getOrderStatusMessage, orderMatchesCustomerSession, playCustomerOrderAlert } from '../../utils/orderNotifications';
+import { orderMatchesCustomerSession, notifyCustomerOrderStatus } from '../../utils/orderNotifications';
 import { sendOrderBillOnWhatsApp } from '../../utils/billShare';
 import UPIPaymentModal from './UPIPaymentModal';
 import { X, ChevronDown, ChevronUp, QrCode, MessageSquare, Utensils, Loader2, ExternalLink } from 'lucide-react';
@@ -64,11 +64,11 @@ export default function MyOrdersModal({ tableNumber, adminId, customerMobile, on
         if (!orderMatchesCustomerSession(updatedOrder, adminId, tableNumber, customerMobile)) {
           return;
         }
-        setTableOrders((prev) =>
-          prev.map((o) => (String(o._id) === String(updatedOrder._id) ? updatedOrder : o))
-        );
-        void playCustomerOrderAlert(updatedOrder);
-        setStatusToast(getOrderStatusMessage(updatedOrder));
+        setTableOrders((prev) => {
+          const existing = prev.find((o) => String(o._id) === String(updatedOrder._id));
+          notifyCustomerOrderStatus(updatedOrder, setStatusToast, existing?.orderStatus);
+          return prev.map((o) => (String(o._id) === String(updatedOrder._id) ? updatedOrder : o));
+        });
       },
       onPaymentPending: (updatedOrder) => {
         if (!orderMatchesCustomerSession(updatedOrder, adminId, tableNumber, customerMobile)) {
@@ -86,7 +86,6 @@ export default function MyOrdersModal({ tableNumber, adminId, customerMobile, on
         setTableOrders((prev) =>
           prev.map((o) => (String(o._id) === String(updatedOrder._id) ? updatedOrder : o))
         );
-        void playCustomerOrderAlert(updatedOrder);
         setStatusToast(`💳 Payment approved for Order #${updatedOrder.orderNumber}!`);
       }
     }

@@ -1,4 +1,4 @@
-import { playOrderChime, markChimeNeedsUnlock } from './orderChime';
+import { playOrderChime } from './orderChime';
 
 export const normalizeMobile = (mobile) =>
   String(mobile || '').replace(/\D/g, '').slice(-10);
@@ -16,6 +16,19 @@ export const orderMatchesCustomerSession = (order, adminId, tableNumber, custome
   if (String(order.adminId) !== String(adminId)) return false;
   if (!tableNumbersMatch(order.tableNumber, tableNumber)) return false;
   return mobilesMatch(order.customerMobile, customerMobile);
+};
+
+const NOTIFY_STATUSES = new Set(['Confirmed', 'Preparing', 'Ready', 'Served', 'Completed']);
+
+export const shouldShowStatusToast = (order, prevStatus) => {
+  if (!order?.orderStatus || !prevStatus) return false;
+  return prevStatus !== order.orderStatus;
+};
+
+/** Sound only for meaningful kitchen/status updates — not payment or settings toasts. */
+export const shouldPlaySoundForOrder = (order, prevStatus) => {
+  if (!shouldShowStatusToast(order, prevStatus)) return false;
+  return NOTIFY_STATUSES.has(order.orderStatus);
 };
 
 export const getOrderStatusMessage = (order) => {
@@ -45,12 +58,12 @@ export const vibrateCustomerAlert = () => {
 const CUSTOMER_ALERT_COOLDOWN_MS = 2500;
 const recentCustomerAlerts = new Map();
 
-/** Prevent duplicate chime/vibrate for the same order update (socket + poll). */
-export async function playCustomerOrderAlert(order) {
-  if (!order) return false;
+/** Play chime + vibrate only when a live order status notification is shown. */
+export async function playCustomerOrderAlert(order, prevStatus) {
+  if (!order || !shouldPlaySoundForOrder(order, prevStatus)) return false;
 
   const orderId = String(order._id || order.orderNumber || '');
-  const key = `${orderId}:${order.orderStatus || ''}:${order.paymentStatus || ''}`;
+  const key = `${orderId}:${order.orderStatus || ''}`;
   const now = Date.now();
   const last = recentCustomerAlerts.get(key);
   if (last != null && now - last < CUSTOMER_ALERT_COOLDOWN_MS) {
@@ -58,12 +71,16 @@ export async function playCustomerOrderAlert(order) {
   }
 
   const played = await playOrderChime();
-  if (!played) {
-    markChimeNeedsUnlock();
-    return false;
-  }
+  if (!played) return false;
 
   recentCustomerAlerts.set(key, now);
   vibrateCustomerAlert();
   return true;
+}
+
+/** Show toast + optional sound together for order status updates only. */
+export function notifyCustomerOrderStatus(order, setToast, prevStatus) {
+  if (!shouldShowStatusToast(order, prevStatus)) return;
+  setToast(getOrderStatusMessage(order));
+  void playCustomerOrderAlert(order, prevStatus);
 }
