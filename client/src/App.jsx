@@ -19,8 +19,14 @@ import ReportsPage from './pages/admin/ReportsPage';
 import SettingsPage from './pages/admin/SettingsPage';
 import SubscriptionExpiredPage from './pages/admin/SubscriptionExpiredPage';
 import AdminMembershipRoute from './pages/admin/AdminMembershipRoute';
+import BranchesPage from './pages/admin/BranchesPage';
+import InventoryPage from './pages/admin/InventoryPage';
+import BranchLogin from './pages/branch/BranchLogin';
 import { isAdminDashboardBlocked, getPostLoginPath } from './utils/adminAccess';
+import { isBranchOnlyAdminPath } from './utils/adminPaths';
+import { hasPlanFeature } from './utils/planFeatures';
 import { AdminLayoutProvider } from './context/AdminLayoutContext';
+import { BranchProvider } from './context/BranchContext';
 
 // Customer Pages
 import CustomerMenu from './pages/customer/CustomerMenu';
@@ -55,7 +61,19 @@ function TenantScope({ children }) {
 function AdminRoute({ children }) {
   return (
     <AdminLayoutProvider>
-      <TenantScope>{children}</TenantScope>
+      <BranchProvider>
+        <TenantScope>{children}</TenantScope>
+      </BranchProvider>
+    </AdminLayoutProvider>
+  );
+}
+
+function BranchRoute({ children }) {
+  return (
+    <AdminLayoutProvider>
+      <BranchProvider>
+        <TenantScope>{children}</TenantScope>
+      </BranchProvider>
     </AdminLayoutProvider>
   );
 }
@@ -85,7 +103,37 @@ const ProtectedRoute = ({ children, allowedRoles, allowExpired = false }) => {
     return <Navigate to="/subscription-expired" replace />;
   }
 
+  if (user.role === 'Admin' && isBranchOnlyAdminPath(window.location.pathname)) {
+    return <Navigate to="/admin/dashboard" replace />;
+  }
+
+  if (user.role === 'Admin' && window.location.pathname === '/admin/inventory' && !hasPlanFeature(user, 'inventory')) {
+    return <Navigate to="/admin/dashboard" replace />;
+  }
+
   if (allowedRoles && !allowedRoles.includes(user.role)) {
+    return <Navigate to={getPostLoginPath(user)} replace />;
+  }
+
+  return children;
+};
+
+const BranchProtectedRoute = ({ children }) => {
+  const { user, token, authReady } = useAuth();
+
+  if (!authReady) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>
+        Loading...
+      </div>
+    );
+  }
+
+  if (!token || !user) {
+    return <Navigate to="/branch/login" replace />;
+  }
+
+  if (user.role !== 'BranchAdmin') {
     return <Navigate to={getPostLoginPath(user)} replace />;
   }
 
@@ -100,6 +148,8 @@ export default function App() {
           <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
             <Routes>
               {/* Public Customer QR Routes — cart route pehle (specific match) */}
+              <Route path="/menu/:adminId/branch/:branchId/table/:tableNumber/cart" element={<CartPage />} />
+              <Route path="/menu/:adminId/branch/:branchId/table/:tableNumber" element={<CustomerMenu />} />
               <Route path="/menu/:adminId/table/:tableNumber/cart" element={<CartPage />} />
               <Route path="/menu/:adminId/table/:tableNumber" element={<CustomerMenu />} />
               <Route path="/menu/table/:tableNumber" element={<CustomerMenu />} />
@@ -109,6 +159,7 @@ export default function App() {
 
               {/* Admin Auth Route */}
               <Route path="/admin/login" element={<AdminLogin />} />
+              <Route path="/branch/login" element={<BranchLogin />} />
 
               {/* Subscription Expired Route */}
               <Route path="/subscription-expired" element={<SubscriptionExpiredPage />} />
@@ -147,7 +198,7 @@ export default function App() {
               <Route
                 path="/admin/kitchen"
                 element={
-                  <ProtectedRoute allowedRoles={['Admin', 'Kitchen']}>
+                  <ProtectedRoute allowedRoles={['Kitchen']}>
                     <AdminRoute>
                       <KitchenScreen />
                     </AdminRoute>
@@ -155,31 +206,21 @@ export default function App() {
                 }
               />
               <Route
-                path="/admin/tables"
+                path="/admin/branches"
                 element={
                   <ProtectedRoute allowedRoles={['Admin']}>
                     <AdminRoute>
-                      <TablesPage />
+                      <BranchesPage />
                     </AdminRoute>
                   </ProtectedRoute>
                 }
               />
               <Route
-                path="/admin/categories"
+                path="/admin/inventory"
                 element={
                   <ProtectedRoute allowedRoles={['Admin']}>
                     <AdminRoute>
-                      <CategoriesPage />
-                    </AdminRoute>
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/admin/menu"
-                element={
-                  <ProtectedRoute allowedRoles={['Admin']}>
-                    <AdminRoute>
-                      <MenuPage />
+                      <InventoryPage />
                     </AdminRoute>
                   </ProtectedRoute>
                 }
@@ -210,6 +251,78 @@ export default function App() {
                   <ProtectedRoute allowedRoles={['Admin']} allowExpired>
                     <AdminMembershipRoute />
                   </ProtectedRoute>
+                }
+              />
+
+              {/* Branch Manager Portal — separate login, scoped to one branch */}
+              <Route
+                path="/branch/dashboard"
+                element={
+                  <BranchProtectedRoute>
+                    <BranchRoute>
+                      <AdminDashboard />
+                    </BranchRoute>
+                  </BranchProtectedRoute>
+                }
+              />
+              <Route
+                path="/branch/orders"
+                element={
+                  <BranchProtectedRoute>
+                    <BranchRoute>
+                      <OrdersPage />
+                    </BranchRoute>
+                  </BranchProtectedRoute>
+                }
+              />
+              <Route
+                path="/branch/kitchen"
+                element={
+                  <BranchProtectedRoute>
+                    <BranchRoute>
+                      <KitchenScreen />
+                    </BranchRoute>
+                  </BranchProtectedRoute>
+                }
+              />
+              <Route
+                path="/branch/tables"
+                element={
+                  <BranchProtectedRoute>
+                    <BranchRoute>
+                      <TablesPage />
+                    </BranchRoute>
+                  </BranchProtectedRoute>
+                }
+              />
+              <Route
+                path="/branch/reports"
+                element={
+                  <BranchProtectedRoute>
+                    <BranchRoute>
+                      <ReportsPage />
+                    </BranchRoute>
+                  </BranchProtectedRoute>
+                }
+              />
+              <Route
+                path="/branch/categories"
+                element={
+                  <BranchProtectedRoute>
+                    <BranchRoute>
+                      <CategoriesPage />
+                    </BranchRoute>
+                  </BranchProtectedRoute>
+                }
+              />
+              <Route
+                path="/branch/menu"
+                element={
+                  <BranchProtectedRoute>
+                    <BranchRoute>
+                      <MenuPage />
+                    </BranchRoute>
+                  </BranchProtectedRoute>
                 }
               />
 

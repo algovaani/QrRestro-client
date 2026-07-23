@@ -4,7 +4,7 @@ import API from '../../services/api';
 import UPIPaymentModal from '../../components/customer/UPIPaymentModal';
 import CustomerBottomNav from '../../components/customer/CustomerBottomNav';
 import MyOrdersModal from '../../components/customer/MyOrdersModal';
-import { useCart } from '../../context/CartContext';
+import { useCart, getCustomerMenuPath } from '../../context/CartContext';
 import { useTableSessionOrders } from '../../hooks/useTableSessionOrders';
 import { startCustomerPayFlow, getUnpaidOrders } from '../../utils/customerPayFlow';
 import PayOrderPickerModal from '../../components/customer/PayOrderPickerModal';
@@ -25,14 +25,15 @@ export default function OrderSuccessPage() {
 
   useEffect(() => {
     if (order?.adminId && order?.tableNumber) {
-      initTableCart(String(order.tableNumber), String(order.adminId));
+      initTableCart(String(order.tableNumber), String(order.adminId), order.branchId ? String(order.branchId) : '');
     }
-  }, [order?.adminId, order?.tableNumber]);
+  }, [order?.adminId, order?.tableNumber, order?.branchId]);
 
   const { orders, refreshOrders } = useTableSessionOrders(
     order?.adminId,
     order?.tableNumber,
-    customerMobile || order?.customerMobile
+    customerMobile || order?.customerMobile,
+    order?.branchId || ''
   );
 
   const openPaymentModal = (orderNumOrNums) => {
@@ -193,7 +194,7 @@ export default function OrderSuccessPage() {
         {order && (
           <button
             type="button"
-            onClick={() => navigate(`/menu/${order.adminId}/table/${order.tableNumber}`)}
+            onClick={() => navigate(getCustomerMenuPath(order.adminId, order.tableNumber, order.branchId))}
             className="btn btn-secondary"
             style={{ width: '100%', padding: '0.85rem', fontSize: '0.95rem', borderRadius: '14px' }}
           >
@@ -213,11 +214,12 @@ export default function OrderSuccessPage() {
         <MyOrdersModal
           tableNumber={order.tableNumber}
           adminId={order.adminId}
+          branchId={order.branchId || ''}
           customerMobile={customerMobile || order.customerMobile}
           onClose={() => setShowMyOrdersModal(false)}
           onOrderMore={() => {
             setShowMyOrdersModal(false);
-            navigate(`/menu/${order.adminId}/table/${order.tableNumber}`);
+            navigate(getCustomerMenuPath(order.adminId, order.tableNumber, order.branchId));
           }}
         />
       )}

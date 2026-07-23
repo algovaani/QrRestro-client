@@ -564,7 +564,7 @@ export default function AdminMembershipPage({ standalone = false }) {
 
                     {plan.features?.length > 0 && (
                       <div className="membership-plan-features">
-                        {plan.features.slice(0, 4).map((f, i) => (
+                        {plan.features.map((f, i) => (
                           <span key={i}>✓ {f}</span>
                         ))}
                       </div>

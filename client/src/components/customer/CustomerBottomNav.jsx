@@ -23,11 +23,12 @@ export default function CustomerBottomNav({
 }) {
   const navigate = useNavigate();
   const location = useLocation();
-  const { adminId: routeAdminId, tableNumber: routeTableNumber } = useParams();
+  const { adminId: routeAdminId, branchId: routeBranchId, tableNumber: routeTableNumber } = useParams();
 
   const {
     tableNumber: cartTable,
     restaurantAdminId,
+    branchId: cartBranchId,
     totalItemsCount,
     subtotal,
     customerMobile,
@@ -36,10 +37,11 @@ export default function CustomerBottomNav({
 
   const saved = loadActiveTableContext();
   const adminId = routeAdminId || restaurantAdminId || saved?.adminId || '';
+  const branchId = routeBranchId || cartBranchId || saved?.branchId || '';
   const tableNumber = routeTableNumber || cartTable || saved?.tableNumber || '';
 
-  const menuPath = getCustomerMenuPath(adminId, tableNumber);
-  const cartPath = getCustomerCartPath(adminId, tableNumber);
+  const menuPath = getCustomerMenuPath(adminId, tableNumber, branchId);
+  const cartPath = getCustomerCartPath(adminId, tableNumber, branchId);
 
   const onCartPage = isCartPath(location.pathname);
   const onMenuPage = isMenuPath(location.pathname);
@@ -48,7 +50,8 @@ export default function CustomerBottomNav({
   const { orders, ordersCount: hookOrdersCount } = useTableSessionOrders(
     customerDetailsComplete ? adminId : '',
     tableNumber,
-    customerMobile
+    customerMobile,
+    branchId
   );
   const ordersCount = ordersCountProp ?? hookOrdersCount;
 

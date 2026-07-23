@@ -6,6 +6,11 @@ const tableSchema = new mongoose.Schema({
     ref: 'User',
     required: true
   },
+  branchId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Branch',
+    required: true
+  },
   tableName: {
     type: String,
     required: true,
@@ -41,6 +46,6 @@ const tableSchema = new mongoose.Schema({
   timestamps: true
 });
 
-tableSchema.index({ adminId: 1, tableNumber: 1 }, { unique: true });
+tableSchema.index({ adminId: 1, branchId: 1, tableNumber: 1 }, { unique: true });
 
 module.exports = mongoose.model('Table', tableSchema);

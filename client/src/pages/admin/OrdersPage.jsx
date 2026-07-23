@@ -9,6 +9,7 @@ import { useLivePolling } from '../../hooks/useLivePolling';
 import { useAuth } from '../../context/AuthContext';
 import { sendOrderBillOnWhatsApp } from '../../utils/billShare';
 import { belongsToTenant } from '../../utils/tenant';
+import { useBranch } from '../../context/BranchContext';
 import OrderRatingDisplay from '../../components/admin/OrderRatingDisplay';
 import { Printer, Eye, RefreshCw, MessageSquare, Search, ArrowUpDown, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, CheckCircle2, XCircle, Loader2 } from 'lucide-react';
 
@@ -39,6 +40,7 @@ export default function OrdersPage() {
 
   const { socket, isConnected } = useSocket();
   const { user } = useAuth();
+  const { branchQueryParams, isAllBranches } = useBranch();
   const [billSendingId, setBillSendingId] = useState(null);
   const [restaurantBillInfo, setRestaurantBillInfo] = useState({
     contactNumber: '',
@@ -61,7 +63,7 @@ export default function OrdersPage() {
 
   useEffect(() => {
     fetchOrders();
-  }, [statusFilter, paymentFilter, user?._id]);
+  }, [statusFilter, paymentFilter, user?._id, branchQueryParams.branchId]);
 
   // Refetch orders when socket reconnects (catch missed events during disconnect)
   useEffect(() => {
@@ -177,7 +179,7 @@ export default function OrdersPage() {
   const fetchOrders = async () => {
     try {
       const res = await API.get('/orders', {
-        params: { status: statusFilter, paymentStatus: paymentFilter }
+        params: { status: statusFilter, paymentStatus: paymentFilter, ...branchQueryParams }
       });
       if (res.data.success) {
         setOrders(res.data.orders);
@@ -527,6 +529,9 @@ export default function OrdersPage() {
                       ORDER # <ArrowUpDown size={12} />
                     </div>
                   </th>
+                  {isAllBranches && (
+                    <th style={{ padding: '0.8rem 1rem' }}>BRANCH</th>
+                  )}
                   <th onClick={() => handleSort('tableNumber')} style={{ padding: '0.8rem 1rem', cursor: 'pointer' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
                       TABLE <ArrowUpDown size={12} />
@@ -572,6 +577,12 @@ export default function OrdersPage() {
                     <td style={{ padding: '0.85rem 1rem', fontWeight: '800', color: 'var(--primary)' }}>
                       {order.orderNumber}
                     </td>
+
+                    {isAllBranches && (
+                      <td style={{ padding: '0.85rem 1rem', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                        {order.branchName || '—'}
+                      </td>
+                    )}
 
                     <td style={{ padding: '0.85rem 1rem', fontWeight: '700' }}>
                       Table {order.tableNumber}

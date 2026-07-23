@@ -82,6 +82,37 @@ exports.protect = async (req, res, next) => {
     }
   }
 
+  if (user.role === 'BranchAdmin') {
+    if (!user.isActive) {
+      return res.status(403).json({
+        success: false,
+        code: 'ACCOUNT_DEACTIVATED',
+        message: 'Your branch login has been deactivated. Contact restaurant admin.'
+      });
+    }
+
+    const parent = user.restaurantAdminId
+      ? await User.findById(user.restaurantAdminId).select('isActive planStatus subscriptionEndsAt trialEndsAt restaurantName')
+      : null;
+
+    if (!parent || !parent.isActive) {
+      return res.status(403).json({
+        success: false,
+        code: 'RESTAURANT_INACTIVE',
+        message: 'Restaurant account is inactive. Contact restaurant admin.'
+      });
+    }
+
+    const expiryDate = parent.subscriptionEndsAt || parent.trialEndsAt;
+    if (expiryDate && new Date() > new Date(expiryDate)) {
+      return res.status(403).json({
+        success: false,
+        code: 'MEMBERSHIP_EXPIRED',
+        message: 'Restaurant membership expired. Branch login is temporarily unavailable.'
+      });
+    }
+  }
+
   next();
 };
 

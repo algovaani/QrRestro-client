@@ -1,5 +1,5 @@
 export function isAdminDashboardBlocked(user) {
-  if (!user || user.role !== 'Admin') return true;
+  if (!user || user.role !== 'Admin') return user?.role === 'BranchAdmin' ? false : true;
   if (user.isActive === false) return true;
 
   if (user.isExpired === true || user.planStatus === 'Expired') return true;
@@ -13,6 +13,7 @@ export function isAdminDashboardBlocked(user) {
 export function getPostLoginPath(user) {
   if (!user) return '/admin/login';
   if (user.role === 'SuperAdmin') return '/super-admin/dashboard';
+  if (user.role === 'BranchAdmin') return '/branch/dashboard';
   if (user.role === 'Kitchen') return '/admin/kitchen';
   if (isAdminDashboardBlocked(user)) return '/subscription-expired';
   return '/admin/dashboard';

@@ -1,4 +1,5 @@
 const Table = require('../models/Table');
+const Branch = require('../models/Branch');
 const Category = require('../models/Category');
 const MenuItem = require('../models/MenuItem');
 const Order = require('../models/Order');
@@ -8,18 +9,43 @@ const { generateOrderBillPdfBuffer } = require('../utils/billPdf');
 const { getPublicBillPdfUrl, orderBillIsAvailable } = require('../utils/publicApiUrl');
 const { MAX_REVIEW_WORDS, countReviewWords, sanitizeReviewForSave } = require('../utils/reviewText');
 const { normalizeMenuItemImage, ensureMenuItemImageStored, getMenuItemPhotoPath } = require('../utils/menuImage');
+const { ensureDefaultBranch } = require('../utils/branchUtils');
+const { deductInventoryForOrder } = require('../utils/inventoryUtils');
 
 const generateOrderNumber = () => {
   const randomNum = Math.floor(1000 + Math.random() * 9000);
   return `ORD-${randomNum}`;
 };
 
-const findActiveTable = async (tableNumber, adminId) => {
-  if (adminId) {
-    return Table.findOne({ adminId, tableNumber, status: 'Active' });
+const resolveBranchForLegacyTable = async (adminId, tables) => {
+  if (!tables.length) return null;
+  if (tables.length === 1) return tables[0];
+
+  const defaultBranch = await Branch.findOne({ adminId, isDefault: true });
+  if (defaultBranch) {
+    const match = tables.find((t) => String(t.branchId) === String(defaultBranch._id));
+    if (match) return match;
   }
 
-  const tables = await Table.find({ tableNumber, status: 'Active' });
+  const error = new Error('Multiple branches use this table number. Please scan the updated QR code from your table.');
+  error.status = 409;
+  throw error;
+};
+
+const findActiveTable = async (tableNumber, adminId, branchId) => {
+  const tNum = String(tableNumber);
+
+  if (adminId && branchId) {
+    return Table.findOne({ adminId, branchId, tableNumber: tNum, status: 'Active' });
+  }
+
+  if (adminId) {
+    const tables = await Table.find({ adminId, tableNumber: tNum, status: 'Active' });
+    if (tables.length === 0) return null;
+    return resolveBranchForLegacyTable(adminId, tables);
+  }
+
+  const tables = await Table.find({ tableNumber: tNum, status: 'Active' });
   if (tables.length === 0) return null;
   if (tables.length > 1) {
     const error = new Error('Multiple restaurants use this table number. Please scan the QR code placed on your table.');
@@ -29,12 +55,20 @@ const findActiveTable = async (tableNumber, adminId) => {
   return tables[0];
 };
 
-const findTableForOrder = async (tableNumber, adminId) => {
-  if (adminId) {
-    return Table.findOne({ adminId, tableNumber });
+const findTableForOrder = async (tableNumber, adminId, branchId) => {
+  const tNum = String(tableNumber);
+
+  if (adminId && branchId) {
+    return Table.findOne({ adminId, branchId, tableNumber: tNum });
   }
 
-  const tables = await Table.find({ tableNumber });
+  if (adminId) {
+    const tables = await Table.find({ adminId, tableNumber: tNum });
+    if (tables.length === 0) return null;
+    return resolveBranchForLegacyTable(adminId, tables);
+  }
+
+  const tables = await Table.find({ tableNumber: tNum });
   if (tables.length === 0) return null;
   if (tables.length > 1) {
     const error = new Error('Restaurant could not be identified. Please scan the QR code from your table again.');
@@ -46,6 +80,11 @@ const findTableForOrder = async (tableNumber, adminId) => {
 
 const buildMenuResponse = async (table) => {
   const adminId = table.adminId;
+  let branch = null;
+  if (table.branchId) {
+    branch = await Branch.findById(table.branchId).select('branchName address city mobile isActive');
+  }
+
   const categories = await Category.find({ adminId, status: 'Active' }).sort({ displayOrder: 1 });
   const menuItems = await MenuItem.find({ adminId, status: 'Active', isAvailable: true })
     .select('+imageData')
@@ -71,18 +110,36 @@ const buildMenuResponse = async (table) => {
     table,
     tableNumber: table.tableNumber,
     adminId,
+    branchId: table.branchId || null,
+    branchName: branch?.branchName || '',
+    branch,
     categories,
     menuItems: menuItems.map(normalizeMenuItemImage),
     setting: await Setting.findOne({ adminId }) || {}
   };
 };
 
-// @desc Get table info & public menu (tenant-scoped)
+// @desc Get table info & public menu (tenant-scoped, legacy — no branch in URL)
 // @route GET /api/public/menu/:adminId/table/:tableNumber
 exports.getPublicMenuByAdmin = async (req, res, next) => {
   try {
     const { adminId, tableNumber } = req.params;
     const table = await findActiveTable(tableNumber, adminId);
+    if (!table) {
+      return res.status(404).json({ success: false, message: 'Table not found or inactive' });
+    }
+    res.json(await buildMenuResponse(table));
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc Get table info & public menu (branch-scoped QR)
+// @route GET /api/public/menu/:adminId/branch/:branchId/table/:tableNumber
+exports.getPublicMenuByAdminBranch = async (req, res, next) => {
+  try {
+    const { adminId, branchId, tableNumber } = req.params;
+    const table = await findActiveTable(tableNumber, adminId, branchId);
     if (!table) {
       return res.status(404).json({ success: false, message: 'Table not found or inactive' });
     }
@@ -113,7 +170,7 @@ exports.getPublicMenu = exports.getTableInfo;
 // @route POST /api/public/orders
 exports.placeOrder = async (req, res, next) => {
   try {
-    const { tableNumber, adminId, customerName, customerMobile, items, notes, paymentMethod } = req.body;
+    const { tableNumber, adminId, branchId, customerName, customerMobile, items, notes, paymentMethod } = req.body;
 
     if (!customerMobile || !/^\d{10}$/.test(customerMobile.trim())) {
       return res.status(400).json({ success: false, message: 'A valid 10-digit Customer Mobile Number is required.' });
@@ -123,13 +180,21 @@ exports.placeOrder = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'Order cart cannot be empty' });
     }
 
-    const table = await findTableForOrder(tableNumber, adminId);
+    const table = await findTableForOrder(tableNumber, adminId, branchId);
     if (!table) {
       return res.status(404).json({ success: false, message: 'Invalid table number' });
     }
 
     const tenantAdminId = table.adminId;
     const setting = await Setting.findOne({ adminId: tenantAdminId }) || { taxPercentage: 5 };
+
+    let branch = null;
+    if (table.branchId) {
+      branch = await Branch.findById(table.branchId);
+    }
+    if (!branch) {
+      branch = await ensureDefaultBranch(tenantAdminId);
+    }
 
     let subtotal = 0;
     const processedItems = items.map(item => {
@@ -161,6 +226,8 @@ exports.placeOrder = async (req, res, next) => {
 
     const order = await Order.create({
       adminId: tenantAdminId,
+      branchId: branch?._id || table.branchId,
+      branchName: branch?.branchName || '',
       orderNumber,
       tableNumber: resolvedTableNumber,
       table: table._id,
@@ -182,6 +249,12 @@ exports.placeOrder = async (req, res, next) => {
       console.error('Socket emit error:', e);
     }
 
+    try {
+      await deductInventoryForOrder(tenantAdminId, branch?._id || table.branchId, processedItems);
+    } catch (e) {
+      console.error('Inventory deduct error:', e);
+    }
+
     res.status(201).json({
       success: true,
       message: 'Order placed successfully!',
@@ -194,25 +267,35 @@ exports.placeOrder = async (req, res, next) => {
 
 exports.createPublicOrder = exports.placeOrder;
 
+const buildActiveOrdersFilter = (adminId, tableNumber, branchId, customerMobile) => {
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+
+  const filter = {
+    adminId,
+    tableNumber: String(tableNumber),
+    createdAt: { $gte: todayStart }
+  };
+
+  if (branchId) {
+    filter.branchId = branchId;
+  }
+
+  if (customerMobile && /^\d{10}$/.test(String(customerMobile).trim())) {
+    filter.customerMobile = String(customerMobile).trim();
+  }
+
+  return filter;
+};
+
 // @desc Get active customer session orders for a table (tenant-scoped)
 // @route GET /api/public/orders/table/:adminId/:tableNumber/active
 exports.getActiveOrdersForTableByAdmin = async (req, res, next) => {
   try {
     const { adminId, tableNumber } = req.params;
-    const { customerMobile } = req.query;
+    const { customerMobile, branchId } = req.query;
 
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
-
-    const filter = {
-      adminId,
-      tableNumber: String(tableNumber),
-      createdAt: { $gte: todayStart }
-    };
-
-    if (customerMobile && /^\d{10}$/.test(String(customerMobile).trim())) {
-      filter.customerMobile = String(customerMobile).trim();
-    }
+    const filter = buildActiveOrdersFilter(adminId, tableNumber, branchId, customerMobile);
 
     const orders = await Order.find(filter).sort({ createdAt: -1 });
     const sessionTotal = orders.reduce((sum, ord) => sum + (ord.grandTotal || 0), 0);
@@ -221,6 +304,33 @@ exports.getActiveOrdersForTableByAdmin = async (req, res, next) => {
       success: true,
       tableNumber,
       adminId,
+      branchId: branchId || null,
+      count: orders.length,
+      sessionTotal,
+      orders
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc Get active orders (branch-scoped)
+// @route GET /api/public/orders/table/:adminId/branch/:branchId/:tableNumber/active
+exports.getActiveOrdersForTableByAdminBranch = async (req, res, next) => {
+  try {
+    const { adminId, branchId, tableNumber } = req.params;
+    const { customerMobile } = req.query;
+
+    const filter = buildActiveOrdersFilter(adminId, tableNumber, branchId, customerMobile);
+
+    const orders = await Order.find(filter).sort({ createdAt: -1 });
+    const sessionTotal = orders.reduce((sum, ord) => sum + (ord.grandTotal || 0), 0);
+
+    res.json({
+      success: true,
+      tableNumber,
+      adminId,
+      branchId,
       count: orders.length,
       sessionTotal,
       orders
@@ -235,7 +345,14 @@ exports.getActiveOrdersForTableByAdmin = async (req, res, next) => {
 exports.getActiveOrdersForTable = async (req, res, next) => {
   try {
     const { tableNumber } = req.params;
-    const { customerMobile, adminId } = req.query;
+    const { customerMobile, adminId, branchId } = req.query;
+
+    if (adminId && branchId) {
+      req.params.adminId = adminId;
+      req.params.branchId = branchId;
+      req.params.tableNumber = tableNumber;
+      return exports.getActiveOrdersForTableByAdminBranch(req, res, next);
+    }
 
     if (adminId) {
       req.params.adminId = adminId;

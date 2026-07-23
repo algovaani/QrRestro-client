@@ -23,7 +23,11 @@ const membershipPlanSchema = new mongoose.Schema({
   },
   features: {
     type: [String],
-    default: ['Unlimited Table QR Scans', 'Real-Time KDS Kitchen', 'Dynamic UPI Payments', 'WhatsApp Invoicing']
+    default: ['Orders & Dashboard', 'Multi-Branch Management', 'Sales Reports']
+  },
+  featureKeys: {
+    type: [String],
+    default: []
   },
   status: {
     type: String,

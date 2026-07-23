@@ -2,6 +2,12 @@ const MembershipPlan = require('../models/MembershipPlan');
 const { generateQRCode } = require('../utils/qrGenerator');
 const { buildUpiPayString } = require('../utils/upiHelper');
 const { isFreePlan, adminHasUsedFreeTrial } = require('../utils/membershipDays');
+const {
+  normalizeFeatureKeys,
+  keysToFeatureLabels,
+  resolvePlanFeatures,
+  DEFAULT_FEATURE_KEYS
+} = require('../utils/planFeatures');
 
 const parseFeatures = (features) => {
   if (Array.isArray(features)) return features;
@@ -11,10 +17,18 @@ const parseFeatures = (features) => {
   return [];
 };
 
+const mapPlanResponse = (plan) => {
+  const obj = plan.toObject ? plan.toObject() : { ...plan };
+  const resolved = resolvePlanFeatures(obj);
+  obj.featureKeys = resolved.featureKeys;
+  obj.features = resolved.features;
+  return obj;
+};
+
 const mapPlansWithOptionalQr = async (plans) =>
   Promise.all(
     plans.map(async (plan) => {
-      const obj = plan.toObject ? plan.toObject() : { ...plan };
+      const obj = mapPlanResponse(plan);
       obj.isFree = isFreePlan(obj);
       if (!obj.isFree && obj.upiId) {
         const upiString = buildUpiPayString({
@@ -42,9 +56,18 @@ const applyPlanFields = (plan, body) => {
   if (status) plan.status = status;
   if (upiId !== undefined) plan.upiId = String(upiId).trim();
 
-  if (features !== undefined) {
+  if (features !== undefined && body.featureKeys === undefined) {
     const parsed = parseFeatures(features);
     if (parsed.length > 0) plan.features = parsed;
+  }
+
+  if (body.featureKeys !== undefined) {
+    plan.featureKeys = normalizeFeatureKeys(
+      Array.isArray(body.featureKeys) ? body.featureKeys : parseFeatures(body.featureKeys)
+    );
+    plan.features = keysToFeatureLabels(plan.featureKeys);
+  } else if (plan.featureKeys?.length) {
+    plan.features = keysToFeatureLabels(plan.featureKeys);
   }
 };
 
@@ -56,7 +79,7 @@ exports.getAllPlans = async (req, res, next) => {
     res.json({
       success: true,
       count: plans.length,
-      plans
+      plans: plans.map((p) => mapPlanResponse(p))
     });
   } catch (error) {
     next(error);
@@ -79,13 +102,15 @@ exports.createPlan = async (req, res, next) => {
     }
 
     const processedFeatures = parseFeatures(req.body.features);
+    const featureKeys = normalizeFeatureKeys(req.body.featureKeys || []);
 
     const plan = new MembershipPlan({
       name: name.trim(),
       price: Number(price),
       durationDays: Number(durationDays),
       description: req.body.description || '',
-      features: processedFeatures.length > 0 ? processedFeatures : ['Unlimited Orders', 'Dynamic UPI QR', 'WhatsApp Bill'],
+      featureKeys: featureKeys.length ? featureKeys : undefined,
+      features: featureKeys.length ? keysToFeatureLabels(featureKeys) : (processedFeatures.length > 0 ? processedFeatures : keysToFeatureLabels(DEFAULT_FEATURE_KEYS)),
       status: req.body.status || 'Active',
       upiId: req.body.upiId ? String(req.body.upiId).trim() : ''
     });

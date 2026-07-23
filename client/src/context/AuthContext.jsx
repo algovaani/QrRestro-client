@@ -9,6 +9,8 @@ const syncUserFromApi = (prev, u) => ({
   isActive: u.isActive,
   planName: u.planName,
   planStatus: u.planStatus,
+  planFeatureKeys: u.planFeatureKeys,
+  planFeatures: u.planFeatures,
   isExpired: u.isExpired,
   daysRemaining: u.daysRemaining,
   displayPlanName: u.displayPlanName,

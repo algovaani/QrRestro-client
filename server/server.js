@@ -45,6 +45,7 @@ if (!fs.existsSync(uploadDir)) {
 
 connectDB()
   .then(() => require('./utils/migrateMenuImages').migrateMenuImages({ log: true }))
+  .then(() => require('./utils/branchUtils').migrateAllBranches({ log: true }))
   .catch((err) => {
     if (err?.message) console.error('[startup]', err.message);
   });
@@ -97,6 +98,8 @@ const settingRoutes = require('./routes/settingRoutes');
 const paymentRoutes = require('./routes/paymentRoutes');
 const superAdminRoutes = require('./routes/superAdminRoutes');
 
+app.use('/api/branches', require('./routes/branchRoutes'));
+app.use('/api/inventory', require('./routes/inventoryRoutes'));
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/tables', tableRoutes);

@@ -23,6 +23,7 @@ const {
   deletePlan
 } = require('../controllers/membershipPlanController');
 
+const { getPlanFeatureCatalogHandler } = require('../utils/planFeatures');
 const {
   getPlatformSettings,
   updatePlatformSettings
@@ -47,6 +48,7 @@ router.patch('/admins/:id/send-membership-offer', sendMembershipOffer);
 router.delete('/admins/:id', deleteAdmin);
 
 // Membership Plans Management Routes
+router.get('/plan-feature-catalog', getPlanFeatureCatalogHandler);
 router.get('/plans', getAllPlans);
 router.post('/plans', createPlan);
 router.put('/plans/:id', updatePlan);

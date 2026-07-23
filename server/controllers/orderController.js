@@ -1,12 +1,12 @@
 const Order = require('../models/Order');
-const { getTenantAdminId, buildTenantFilter, assertTenantOwnership } = require('../middleware/tenantMiddleware');
+const { getTenantAdminId, buildScopedFilter, assertTenantOwnership } = require('../middleware/tenantMiddleware');
 const { emitOrderStatusUpdate, emitPaymentSuccess } = require('../socket/socketHandler');
 
 // @desc Get all orders (filtered strictly by logged in adminId)
 // @route GET /api/orders
 exports.getOrders = async (req, res, next) => {
   try {
-    const filter = buildTenantFilter(req.user, res);
+    const filter = buildScopedFilter(req.user, req, res);
     if (!filter) return;
 
     if (req.query.status) {
@@ -149,7 +149,7 @@ exports.deleteOrder = async (req, res, next) => {
 // @route GET /api/orders/kitchen
 exports.getKitchenOrders = async (req, res, next) => {
   try {
-    const filter = buildTenantFilter(req.user, res);
+    const filter = buildScopedFilter(req.user, req, res);
     if (!filter) return;
     filter.orderStatus = { $in: ['New', 'Confirmed', 'Preparing', 'Ready'] };
 

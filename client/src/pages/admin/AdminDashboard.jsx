@@ -24,6 +24,8 @@ import { useAuth } from '../../context/AuthContext';
 import { canShowMembershipOption } from '../../utils/membershipAccess';
 import { formatExpiryDate, getMembershipDaysLabel, resolveMembershipDisplay } from '../../utils/membershipDays';
 import { belongsToTenant } from '../../utils/tenant';
+import { useBranch } from '../../context/BranchContext';
+import { isBranchAdmin, portalPath } from '../../utils/adminPaths';
 
 const toLocalDateStr = (date) => {
   const y = date.getFullYear();
@@ -45,6 +47,9 @@ const isOrderInDateRange = (order, start, end) => {
 export default function AdminDashboard() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { branchQueryParams } = useBranch();
+  const branchMode = isBranchAdmin(user);
+  const p = (segment) => portalPath(user, segment);
 
   // DATE FILTER STATES
   const [filterPreset, setFilterPreset] = useState('today');
@@ -73,7 +78,7 @@ export default function AdminDashboard() {
   const fetchDashboardData = useCallback(async (sDate, eDate, silent = false) => {
     if (!silent) setLoading(true);
     try {
-      const params = { startDate: sDate, endDate: eDate };
+      const params = { startDate: sDate, endDate: eDate, ...branchQueryParams };
       const [statsRes, recentRes, topRes] = await Promise.all([
         API.get('/dashboard/stats', { params }),
         API.get('/dashboard/recent-orders', { params }),
@@ -95,7 +100,7 @@ export default function AdminDashboard() {
     } finally {
       if (!silent) setLoading(false);
     }
-  }, []);
+  }, [branchQueryParams]);
 
   useLivePolling(
     () => fetchDashboardData(startDate, endDate, true),
@@ -387,7 +392,7 @@ export default function AdminDashboard() {
                 
                 {/* 1. Today Revenue Card */}
                 <div
-                  onClick={() => navigate('/admin/reports')}
+                  onClick={() => navigate(p('/reports'))}
                   className="stat-card"
                   style={{ cursor: 'pointer', transition: 'transform 0.2s ease, boxShadow 0.2s ease' }}
                   onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-3px)'}
@@ -405,7 +410,7 @@ export default function AdminDashboard() {
 
                 {/* 2. Today Orders Card */}
                 <div
-                  onClick={() => navigate('/admin/orders')}
+                  onClick={() => navigate(p('/orders'))}
                   className="stat-card"
                   style={{ cursor: 'pointer', transition: 'transform 0.2s ease, boxShadow 0.2s ease' }}
                   onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-3px)'}
@@ -423,7 +428,7 @@ export default function AdminDashboard() {
 
                 {/* 3. Pending Orders Card */}
                 <div
-                  onClick={() => navigate('/admin/orders?status=New')}
+                  onClick={() => navigate(`${p('/orders')}?status=New`)}
                   className="stat-card"
                   style={{ cursor: 'pointer', transition: 'transform 0.2s ease, boxShadow 0.2s ease' }}
                   onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-3px)'}
@@ -443,7 +448,7 @@ export default function AdminDashboard() {
 
                 {/* 4. Preparing Kitchen Card */}
                 <div
-                  onClick={() => navigate('/admin/orders?status=Preparing')}
+                  onClick={() => navigate(`${p('/orders')}?status=Preparing`)}
                   className="stat-card"
                   style={{ cursor: 'pointer', transition: 'transform 0.2s ease, boxShadow 0.2s ease' }}
                   onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-3px)'}
@@ -461,12 +466,13 @@ export default function AdminDashboard() {
 
               </div>
 
-              {/* Secondary Interactive Stats Row */}
+              {/* Secondary Interactive Stats Row — branch portal only for ops items */}
               <div className="stats-grid">
-                
-                {/* 5. Total Tables Card */}
+
+                {branchMode && (
+                  <>
                 <div
-                  onClick={() => navigate('/admin/tables')}
+                  onClick={() => navigate(p('/tables'))}
                   className="stat-card"
                   style={{ padding: '1rem', cursor: 'pointer', transition: 'transform 0.2s ease' }}
                   onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-2px)'}
@@ -480,9 +486,8 @@ export default function AdminDashboard() {
                   <QrCode size={20} color="var(--primary)" />
                 </div>
 
-                {/* 6. Menu Items Card */}
                 <div
-                  onClick={() => navigate('/admin/menu')}
+                  onClick={() => navigate(p('/menu'))}
                   className="stat-card"
                   style={{ padding: '1rem', cursor: 'pointer', transition: 'transform 0.2s ease' }}
                   onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-2px)'}
@@ -496,9 +501,8 @@ export default function AdminDashboard() {
                   <UtensilsCrossed size={20} color="var(--primary)" />
                 </div>
 
-                {/* 7. Categories Card */}
                 <div
-                  onClick={() => navigate('/admin/categories')}
+                  onClick={() => navigate(p('/categories'))}
                   className="stat-card"
                   style={{ padding: '1rem', cursor: 'pointer', transition: 'transform 0.2s ease' }}
                   onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-2px)'}
@@ -511,10 +515,12 @@ export default function AdminDashboard() {
                   </div>
                   <FolderKanban size={20} color="var(--primary)" />
                 </div>
+                  </>
+                )}
 
-                {/* 8. Completed Orders Card */}
+                {/* Completed Orders Card */}
                 <div
-                  onClick={() => navigate('/admin/orders?status=Completed')}
+                  onClick={() => navigate(`${p('/orders')}?status=Completed`)}
                   className="stat-card"
                   style={{ padding: '1rem', cursor: 'pointer', transition: 'transform 0.2s ease' }}
                   onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-2px)'}
@@ -537,7 +543,7 @@ export default function AdminDashboard() {
                 <div className="admin-panel admin-panel--padded">
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
                     <h3 style={{ fontSize: '1.1rem', fontWeight: '700' }}>Recent Orders</h3>
-                    <Link to="/admin/orders" style={{ fontSize: '0.85rem', color: 'var(--primary)', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                    <Link to={p('/orders')} style={{ fontSize: '0.85rem', color: 'var(--primary)', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
                       View All <ArrowRight size={14} />
                     </Link>
                   </div>
@@ -557,7 +563,7 @@ export default function AdminDashboard() {
                       {recentOrders.map(order => (
                         <tr
                           key={order._id}
-                          onClick={() => navigate('/admin/orders')}
+                          onClick={() => navigate(p('/orders'))}
                           style={{ borderBottom: '1px solid #f1f5f9', cursor: 'pointer', transition: 'background 0.15s ease' }}
                           onMouseEnter={(e) => e.currentTarget.style.background = '#f8fafc'}
                           onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
@@ -593,19 +599,21 @@ export default function AdminDashboard() {
                     <h3 style={{ fontSize: '1.1rem', fontWeight: '700' }}>
                       🔥 Top Selling Items
                     </h3>
-                    <Link to="/admin/menu" style={{ fontSize: '0.75rem', color: 'var(--primary)', fontWeight: '700' }}>
-                      Menu →
-                    </Link>
+                    {branchMode && (
+                      <Link to={p('/menu')} style={{ fontSize: '0.75rem', color: 'var(--primary)', fontWeight: '700' }}>
+                        Menu →
+                      </Link>
+                    )}
                   </div>
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                     {topItems.map((item, idx) => (
                       <div
                         key={idx}
-                        onClick={() => navigate('/admin/menu')}
-                        style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.6rem', borderRadius: '10px', border: '1px solid #f1f5f9', cursor: 'pointer', transition: 'background 0.15s ease' }}
-                        onMouseEnter={(e) => e.currentTarget.style.background = '#f8fafc'}
-                        onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                        onClick={branchMode ? () => navigate(p('/menu')) : undefined}
+                        style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.6rem', borderRadius: '10px', border: '1px solid #f1f5f9', cursor: branchMode ? 'pointer' : 'default', transition: 'background 0.15s ease' }}
+                        onMouseEnter={(e) => { if (branchMode) e.currentTarget.style.background = '#f8fafc'; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
                       >
                         <div>
                           <div style={{ fontWeight: '700', fontSize: '0.85rem', color: 'var(--secondary)' }}>{item._id}</div>

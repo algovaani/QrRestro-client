@@ -2,9 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { getPostLoginPath } from '../../utils/adminAccess';
-import { LogIn, AlertCircle } from 'lucide-react';
+import { LogIn, AlertCircle, MapPin } from 'lucide-react';
 
-export default function AdminLogin() {
+export default function BranchLogin() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -13,6 +13,10 @@ export default function AdminLogin() {
 
   useEffect(() => {
     if (!authReady || !token || !user) return;
+    if (user.role === 'BranchAdmin') {
+      navigate('/branch/dashboard', { replace: true });
+      return;
+    }
     navigate(getPostLoginPath(user), { replace: true });
   }, [authReady, token, user, navigate]);
 
@@ -21,12 +25,12 @@ export default function AdminLogin() {
     setError('');
     const res = await login(email, password);
     if (res && res.success) {
-      if (res.user?.role === 'BranchAdmin') {
+      if (res.user?.role !== 'BranchAdmin') {
         logout();
-        setError('Branch login ke liye /branch/login page use karein.');
+        setError('Ye login sirf branch managers ke liye hai. Restaurant admin ke liye admin login use karein.');
         return;
       }
-      navigate(getPostLoginPath(res.user));
+      navigate('/branch/dashboard');
     } else {
       setError(res?.message || 'Invalid email or password');
     }
@@ -59,16 +63,15 @@ export default function AdminLogin() {
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            fontSize: '2rem',
             margin: '0 auto 1rem auto'
           }}>
-            🍽️
+            <MapPin size={28} />
           </div>
           <h2 style={{ fontSize: '1.5rem', fontWeight: '800', color: 'var(--secondary)' }}>
-            System Portal Login
+            Branch Login
           </h2>
           <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginTop: '0.25rem' }}>
-            Restaurant SaaS & Super Admin Panel
+            Apni branch ke orders, tables & reports manage karein
           </p>
         </div>
 
@@ -92,14 +95,14 @@ export default function AdminLogin() {
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
           <div>
             <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', marginBottom: '0.4rem', color: 'var(--secondary)' }}>
-              Email Address
+              Branch Email
             </label>
             <input
               type="email"
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="admin@restaurant.com"
+              placeholder="branch@restaurant.com"
               style={{ width: '100%' }}
             />
           </div>
@@ -125,14 +128,14 @@ export default function AdminLogin() {
             style={{ width: '100%', padding: '0.8rem', marginTop: '0.5rem' }}
           >
             <LogIn size={18} />
-            <span>{loading ? 'Authenticating...' : 'Sign In'}</span>
+            <span>{loading ? 'Signing in...' : 'Branch Sign In'}</span>
           </button>
         </form>
 
         <p style={{ textAlign: 'center', marginTop: '1.25rem', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-          Branch manager?{' '}
-          <Link to="/branch/login" style={{ color: 'var(--primary)', fontWeight: '600' }}>
-            Branch Login
+          Restaurant owner?{' '}
+          <Link to="/admin/login" style={{ color: 'var(--primary)', fontWeight: '600' }}>
+            Admin Login
           </Link>
         </p>
       </div>

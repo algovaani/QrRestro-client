@@ -2,19 +2,20 @@ import { useEffect, useRef } from 'react';
 import { getTableRoom } from '../context/SocketContext';
 import { tableNumbersMatch } from '../utils/orderNotifications';
 
-export function useTableRoomSocket(socket, adminId, tableNumber, handlers = {}) {
+export function useTableRoomSocket(socket, adminId, tableNumber, branchId, handlers = {}) {
   const handlersRef = useRef(handlers);
   handlersRef.current = handlers;
 
   useEffect(() => {
     if (!socket || !adminId || !tableNumber) return;
 
-    const room = getTableRoom(adminId, tableNumber);
+    const room = getTableRoom(adminId, tableNumber, branchId);
 
     const belongsToThisTable = (order) =>
       order?.adminId &&
       String(order.adminId) === String(adminId) &&
-      tableNumbersMatch(order.tableNumber, tableNumber);
+      tableNumbersMatch(order.tableNumber, tableNumber) &&
+      (!branchId || !order.branchId || String(order.branchId) === String(branchId));
 
     const joinRoom = () => {
       socket.emit('join_room', room);
@@ -53,5 +54,5 @@ export function useTableRoomSocket(socket, adminId, tableNumber, handlers = {}) 
       socket.off('new_order', onNewOrder);
       socket.emit('leave_room', room);
     };
-  }, [socket, adminId, tableNumber]);
+  }, [socket, adminId, tableNumber, branchId]);
 }

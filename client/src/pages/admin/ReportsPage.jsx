@@ -2,9 +2,11 @@ import React, { useState, useEffect } from 'react';
 import API from '../../services/api';
 import Sidebar from '../../components/common/Sidebar';
 import Header from '../../components/common/Header';
+import { useBranch } from '../../context/BranchContext';
 import { Download, Printer, Calendar, BarChart2, DollarSign } from 'lucide-react';
 
 export default function ReportsPage() {
+  const { branchQueryParams, isAllBranches } = useBranch();
   const [reportType, setReportType] = useState('sales'); // 'sales', 'items', 'tables'
   const [salesData, setSalesData] = useState([]);
   const [itemsData, setItemsData] = useState([]);
@@ -13,19 +15,19 @@ export default function ReportsPage() {
 
   useEffect(() => {
     fetchReport();
-  }, [reportType]);
+  }, [reportType, branchQueryParams.branchId]);
 
   const fetchReport = async () => {
     setLoading(true);
     try {
       if (reportType === 'sales') {
-        const res = await API.get('/reports/sales');
+        const res = await API.get('/reports/sales', { params: branchQueryParams });
         if (res.data.success) setSalesData(res.data.sales);
       } else if (reportType === 'items') {
-        const res = await API.get('/reports/items');
+        const res = await API.get('/reports/items', { params: branchQueryParams });
         if (res.data.success) setItemsData(res.data.items);
       } else if (reportType === 'tables') {
-        const res = await API.get('/reports/tables');
+        const res = await API.get('/reports/tables', { params: branchQueryParams });
         if (res.data.success) setTablesData(res.data.tables);
       }
     } catch (err) {
@@ -48,9 +50,9 @@ export default function ReportsPage() {
         csvContent += `"${row._id}",${row.quantitySold},${row.totalRevenue}\n`;
       });
     } else if (reportType === 'tables') {
-      csvContent += "Table Number,Total Orders,Total Revenue\n";
+      csvContent += "Branch,Table Number,Total Orders,Total Revenue\n";
       tablesData.forEach(row => {
-        csvContent += `Table ${row._id},${row.totalOrders},${row.totalRevenue}\n`;
+        csvContent += `"${row.branchName || ''}",Table ${row.tableNumber},${row.totalOrders},${row.totalRevenue}\n`;
       });
     }
 
@@ -165,6 +167,7 @@ export default function ReportsPage() {
               <table className="admin-table-compact" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.9rem' }}>
                 <thead style={{ background: '#f8fafc', borderBottom: '1px solid var(--border)', color: 'var(--text-muted)', fontSize: '0.8rem' }}>
                   <tr>
+                    {isAllBranches && <th style={{ padding: '0.8rem 1rem' }}>BRANCH</th>}
                     <th style={{ padding: '0.8rem 1rem' }}>TABLE</th>
                     <th style={{ padding: '0.8rem 1rem' }}>TOTAL ORDERS</th>
                     <th style={{ padding: '0.8rem 1rem' }}>TOTAL REVENUE</th>
@@ -173,7 +176,12 @@ export default function ReportsPage() {
                 <tbody>
                   {tablesData.map((row, idx) => (
                     <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                      <td style={{ padding: '1rem', fontWeight: '700' }}>Table {row._id}</td>
+                      {isAllBranches && (
+                        <td style={{ padding: '1rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                          {row.branchName || '—'}
+                        </td>
+                      )}
+                      <td style={{ padding: '1rem', fontWeight: '700' }}>Table {row.tableNumber ?? row._id?.tableNumber ?? row._id}</td>
                       <td style={{ padding: '1rem' }}>{row.totalOrders}</td>
                       <td style={{ padding: '1rem', fontWeight: '800', color: 'var(--primary)' }}>₹{row.totalRevenue}</td>
                     </tr>

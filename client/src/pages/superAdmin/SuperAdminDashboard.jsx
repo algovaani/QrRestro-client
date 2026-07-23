@@ -32,6 +32,7 @@ import {
   Phone,
   Menu,
   X,
+  MapPin,
   Settings
 } from 'lucide-react';
 import { useSocket } from '../../context/SocketContext';
@@ -39,6 +40,7 @@ import NotificationToasts from '../../components/common/NotificationToasts';
 import AdminNotificationBell from '../../components/common/AdminNotificationBell';
 import UpiQrDisplay from '../../components/common/UpiQrDisplay';
 import { resolveUploadUrl } from '../../utils/uploadUrl';
+import { getSelectedPlanFeatures } from '../../utils/planFeatures';
 
 export default function SuperAdminDashboard() {
   const { user, logout, updateUser } = useAuth();
@@ -51,7 +53,9 @@ export default function SuperAdminDashboard() {
     activeAdmins: 0,
     trialingAdmins: 0,
     expiredAdmins: 0,
-    renewalRequestsCount: 0
+    renewalRequestsCount: 0,
+    totalBranches: 0,
+    activeBranches: 0
   });
 
   const [admins, setAdmins] = useState([]);
@@ -115,10 +119,11 @@ export default function SuperAdminDashboard() {
     price: 999,
     durationDays: 30,
     description: '',
-    features: 'Unlimited Table QR Scans, Real-Time KDS, Dynamic UPI QR, WhatsApp Invoice',
+    featureKeys: ['orders', 'branches', 'branch_portal', 'reports', 'settings'],
     status: 'Active',
     upiId: ''
   });
+  const [featureCatalog, setFeatureCatalog] = useState([]);
   const [modalError, setModalError] = useState('');
 
   const [sendingOfferAdmin, setSendingOfferAdmin] = useState(null);
@@ -183,16 +188,18 @@ export default function SuperAdminDashboard() {
   const fetchSuperAdminData = async (silent = false) => {
     if (!silent) setLoading(true);
     try {
-      const [statsRes, adminsRes, plansRes, platformRes] = await Promise.all([
+      const [statsRes, adminsRes, plansRes, platformRes, catalogRes] = await Promise.all([
         API.get('/super-admin/stats'),
         API.get('/super-admin/admins'),
         API.get('/super-admin/plans'),
-        API.get('/super-admin/platform-settings').catch(() => null)
+        API.get('/super-admin/platform-settings').catch(() => null),
+        API.get('/super-admin/plan-feature-catalog').catch(() => null)
       ]);
 
       if (statsRes.data.success) setStats(statsRes.data.stats);
       if (adminsRes.data.success) setAdmins(adminsRes.data.admins);
       if (plansRes.data.success) setPlans(plansRes.data.plans);
+      if (catalogRes?.data?.success) setFeatureCatalog(catalogRes.data.catalog || []);
       if (platformRes?.data?.success) {
         setSupportNumber(platformRes.data.settings?.supportNumber || '');
       }
@@ -398,6 +405,25 @@ export default function SuperAdminDashboard() {
     }
   };
 
+  const togglePlanFeatureKey = (key) => {
+    setPlanForm((prev) => ({
+      ...prev,
+      featureKeys: prev.featureKeys.includes(key)
+        ? prev.featureKeys.filter((k) => k !== key)
+        : [...prev.featureKeys, key]
+    }));
+  };
+
+  const renderPlanFeaturesList = (featureLabels = []) => (
+    <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+      {featureLabels.map((feat, idx) => (
+        <li key={idx} style={{ fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.4rem', color: 'var(--secondary)' }}>
+          <Check size={14} color="#10b981" /> {feat}
+        </li>
+      ))}
+    </ul>
+  );
+
   // --- PLAN MANAGEMENT ACTIONS ---
   const handleOpenAddPlan = () => {
     setEditingPlan(null);
@@ -406,7 +432,7 @@ export default function SuperAdminDashboard() {
       price: 999,
       durationDays: 30,
       description: 'Full featured membership plan for dining outlets',
-      features: 'Unlimited Table Scans, Real-Time Kitchen KDS, Dynamic UPI QR, WhatsApp Tax Invoice, Sales Reports',
+      featureKeys: ['orders', 'branches', 'branch_portal', 'reports', 'settings'],
       status: 'Active',
       upiId: ''
     });
@@ -421,7 +447,7 @@ export default function SuperAdminDashboard() {
       price: plan.price,
       durationDays: plan.durationDays,
       description: plan.description || '',
-      features: Array.isArray(plan.features) ? plan.features.join(', ') : '',
+      featureKeys: plan.featureKeys?.length ? plan.featureKeys : ['orders', 'branches', 'branch_portal', 'reports', 'settings'],
       status: plan.status || 'Active',
       upiId: plan.upiId || ''
     });
@@ -439,7 +465,7 @@ export default function SuperAdminDashboard() {
         price: planForm.price,
         durationDays: planForm.durationDays,
         description: planForm.description || '',
-        features: planForm.features || '',
+        featureKeys: planForm.featureKeys || [],
         status: planForm.status || 'Active',
         upiId: planForm.upiId || ''
       };
@@ -796,6 +822,22 @@ export default function SuperAdminDashboard() {
               </div>
             </div>
 
+            <div className="stat-card" onClick={() => setActiveTab('admins')} style={{ cursor: 'pointer' }}>
+              <div>
+                <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: '600' }}>Active Branches</span>
+                <h3 style={{ fontSize: '1.6rem', fontWeight: '800', marginTop: '0.2rem', color: '#7c3aed' }}>
+                  {stats.activeBranches}
+                  <span style={{ fontSize: '0.85rem', fontWeight: '700', color: 'var(--text-muted)', marginLeft: '0.35rem' }}>
+                    / {stats.totalBranches}
+                  </span>
+                </h3>
+                <span style={{ fontSize: '0.7rem', color: '#7c3aed', fontWeight: '700' }}>Chal rahi branches</span>
+              </div>
+              <div className="stat-icon" style={{ background: '#ede9fe', color: '#7c3aed' }}>
+                <MapPin size={22} />
+              </div>
+            </div>
+
             <div
               onClick={() => setActiveTab('renewals')}
               className="stat-card"
@@ -851,6 +893,7 @@ export default function SuperAdminDashboard() {
                 <thead style={{ background: '#f8fafc', borderBottom: '1px solid var(--border)', color: 'var(--text-muted)', fontSize: '0.75rem' }}>
                   <tr>
                     <th style={{ padding: '0.85rem 1rem' }}>RESTAURANT & ADMIN</th>
+                    <th style={{ padding: '0.85rem 1rem' }}>BRANCHES</th>
                     <th style={{ padding: '0.85rem 1rem' }}>EMAIL & LOGIN PASSWORD</th>
                     <th style={{ padding: '0.85rem 1rem' }}>MEMBERSHIP PLAN</th>
                     <th style={{ padding: '0.85rem 1rem' }}>STATUS</th>
@@ -862,25 +905,44 @@ export default function SuperAdminDashboard() {
                 <tbody>
                   {loading ? (
                     <tr>
-                      <td colSpan="7" style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+                      <td colSpan="8" style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>
                         Loading admin accounts...
                       </td>
                     </tr>
                   ) : filteredAdmins.length === 0 ? (
                     <tr>
-                      <td colSpan="7" style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+                      <td colSpan="8" style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>
                         No admin accounts found. <button type="button" className="btn btn-primary btn-sm" style={{ marginLeft: '0.5rem' }} onClick={() => setShowAddModal(true)}>+ Create Admin</button>
                       </td>
                     </tr>
                   ) : filteredAdmins.map(admin => {
                     const isPassVisible = visiblePasswords[admin._id];
                     const passText = admin.rawPassword || 'admin123';
+                    const branchStats = admin.branchStats || {};
+                    const activeBranches = branchStats.activeBranches ?? 0;
+                    const totalBranches = branchStats.totalBranches ?? 0;
+                    const branchManagers = branchStats.branchManagers ?? 0;
 
                     return (
                       <tr key={admin._id} style={{ borderBottom: '1px solid #f1f5f9' }}>
                         <td style={{ padding: '1rem' }}>
                           <div style={{ fontWeight: '800', color: 'var(--secondary)', fontSize: '0.95rem' }}>{admin.restaurantName}</div>
                           <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Admin: {admin.name}</div>
+                        </td>
+
+                        <td style={{ padding: '1rem' }}>
+                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', fontWeight: '800', color: activeBranches > 0 ? '#7c3aed' : 'var(--text-muted)' }}>
+                            <MapPin size={14} />
+                            {activeBranches} active
+                          </div>
+                          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>
+                            {totalBranches} total branch{totalBranches !== 1 ? 'es' : ''}
+                          </div>
+                          {branchManagers > 0 && (
+                            <div style={{ fontSize: '0.7rem', color: '#047857', fontWeight: '700', marginTop: '0.15rem' }}>
+                              {branchManagers} branch login{branchManagers !== 1 ? 's' : ''}
+                            </div>
+                          )}
                         </td>
 
                         {/* EMAIL & TOGGLEABLE LOGIN PASSWORD */}
@@ -1072,6 +1134,9 @@ export default function SuperAdminDashboard() {
                         <h4>{admin.restaurantName}</h4>
                         <p className="membership-sa-request-sub">
                           {admin.name} • {admin.email}
+                          {(admin.branchStats?.totalBranches ?? 0) > 0 && (
+                            <> • {admin.branchStats.activeBranches ?? 0} active / {admin.branchStats.totalBranches} branches</>
+                          )}
                         </p>
                         <div className="membership-sa-request-details">
                           <span>Current: <strong>{admin.planName}</strong></span>
@@ -1213,6 +1278,9 @@ export default function SuperAdminDashboard() {
                               <Check size={14} color="#10b981" /> {feat}
                             </li>
                           ))}
+                          {(plan.features || []).length === 0 && (
+                            <li style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>No features selected</li>
+                          )}
                         </ul>
                       </div>
 
@@ -1393,6 +1461,22 @@ export default function SuperAdminDashboard() {
                     <option value="5-Day Free Trial">5-Day Free Trial (5 Days - FREE)</option>
                   )}
                 </select>
+                {(() => {
+                  const preview = getSelectedPlanFeatures(plans, newAdmin.planName);
+                  return preview.features.length > 0 ? (
+                    <div style={{ marginTop: '0.65rem', padding: '0.75rem', background: '#f8fafc', borderRadius: '10px', border: '1px solid var(--border)' }}>
+                      <div style={{ fontSize: '0.75rem', fontWeight: '800', color: 'var(--text-muted)', marginBottom: '0.45rem' }}>
+                        Is plan mein ye features milenge:
+                      </div>
+                      {renderPlanFeaturesList(preview.features)}
+                      {!preview.featureKeys.includes('inventory') && (
+                        <p style={{ fontSize: '0.72rem', color: '#b45309', marginTop: '0.5rem', marginBottom: 0 }}>
+                          Inventory is plan mein included nahi hai.
+                        </p>
+                      )}
+                    </div>
+                  ) : null;
+                })()}
               </div>
 
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '0.5rem' }}>
@@ -1471,6 +1555,17 @@ export default function SuperAdminDashboard() {
                     </option>
                   ))}
                 </select>
+                {(() => {
+                  const preview = getSelectedPlanFeatures(plans, editForm.planName);
+                  return preview.features.length > 0 ? (
+                    <div style={{ marginTop: '0.65rem', padding: '0.75rem', background: '#f8fafc', borderRadius: '10px', border: '1px solid var(--border)' }}>
+                      <div style={{ fontSize: '0.75rem', fontWeight: '800', color: 'var(--text-muted)', marginBottom: '0.45rem' }}>
+                        Is plan mein ye features milenge:
+                      </div>
+                      {renderPlanFeaturesList(preview.features)}
+                    </div>
+                  ) : null;
+                })()}
               </div>
 
               <div>
@@ -1599,6 +1694,22 @@ export default function SuperAdminDashboard() {
                     </option>
                   ))}
                 </select>
+                {(() => {
+                  const preview = getSelectedPlanFeatures(plans, renewPlanName);
+                  return preview.features.length > 0 ? (
+                    <div style={{ marginTop: '0.65rem', padding: '0.75rem', background: '#f8fafc', borderRadius: '10px', border: '1px solid var(--border)' }}>
+                      <div style={{ fontSize: '0.75rem', fontWeight: '800', color: 'var(--text-muted)', marginBottom: '0.45rem' }}>
+                        Is plan mein ye features milenge:
+                      </div>
+                      {renderPlanFeaturesList(preview.features)}
+                      {!preview.featureKeys.includes('inventory') && (
+                        <p style={{ fontSize: '0.72rem', color: '#b45309', marginTop: '0.5rem', marginBottom: 0 }}>
+                          Inventory is plan mein included nahi hai.
+                        </p>
+                      )}
+                    </div>
+                  ) : null;
+                })()}
               </div>
 
               <div>
@@ -1755,14 +1866,39 @@ export default function SuperAdminDashboard() {
               </div>
 
               <div>
-                <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '700', marginBottom: '0.3rem' }}>Included Features (Comma Separated)</label>
-                <textarea
-                  rows="3"
-                  placeholder="Unlimited QR Scans, KDS Display, WhatsApp Tax Receipt, UPI QR Code"
-                  value={planForm.features}
-                  onChange={(e) => setPlanForm({ ...planForm, features: e.target.value })}
-                  style={{ width: '100%', resize: 'none' }}
-                />
+                <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '700', marginBottom: '0.45rem' }}>
+                  Plan Features (select karein — plan ke hisaab se access milega)
+                </label>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem', maxHeight: '220px', overflowY: 'auto', padding: '0.65rem', background: '#f8fafc', borderRadius: '10px', border: '1px solid var(--border)' }}>
+                  {(featureCatalog.length ? featureCatalog : [
+                    { key: 'orders', label: 'Orders & Dashboard' },
+                    { key: 'branches', label: 'Multi-Branch Management' },
+                    { key: 'branch_portal', label: 'Branch Manager Portal' },
+                    { key: 'reports', label: 'Sales Reports' },
+                    { key: 'inventory', label: 'Inventory & Stock' },
+                    { key: 'settings', label: 'Settings & UPI' }
+                  ]).map((feat) => (
+                    <label key={feat.key} style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem', cursor: 'pointer', fontSize: '0.82rem' }}>
+                      <input
+                        type="checkbox"
+                        checked={planForm.featureKeys.includes(feat.key)}
+                        onChange={() => togglePlanFeatureKey(feat.key)}
+                        style={{ marginTop: '0.15rem' }}
+                      />
+                      <span>
+                        <strong>{feat.label}</strong>
+                        {feat.description && (
+                          <span style={{ display: 'block', fontSize: '0.72rem', color: 'var(--text-muted)' }}>{feat.description}</span>
+                        )}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+                {planForm.featureKeys.length > 0 && (
+                  <div style={{ marginTop: '0.5rem', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                    Selected: {planForm.featureKeys.length} feature(s)
+                  </div>
+                )}
               </div>
 
               <div>

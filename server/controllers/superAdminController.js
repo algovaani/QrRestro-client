@@ -1,4 +1,5 @@
 const User = require('../models/User');
+const Branch = require('../models/Branch');
 const { emitMembershipRenewalRequest, emitMembershipActivated, emitMembershipOfferSent, emitMembershipRenewalRejected, emitAdminStatusChanged } = require('../socket/socketHandler');
 const Setting = require('../models/Setting');
 const Table = require('../models/Table');
@@ -32,6 +33,8 @@ exports.getSuperAdminStats = async (req, res, next) => {
     const trialingAdmins = await User.countDocuments({ role: 'Admin', planStatus: 'Trialing' });
     const expiredAdmins = await User.countDocuments({ role: 'Admin', planStatus: 'Expired' });
     const renewalRequestsCount = await User.countDocuments({ role: 'Admin', renewalRequested: true });
+    const totalBranches = await Branch.countDocuments({});
+    const activeBranches = await Branch.countDocuments({ isActive: { $ne: false } });
 
     res.json({
       success: true,
@@ -40,7 +43,9 @@ exports.getSuperAdminStats = async (req, res, next) => {
         activeAdmins,
         trialingAdmins,
         expiredAdmins,
-        renewalRequestsCount
+        renewalRequestsCount,
+        totalBranches,
+        activeBranches
       }
     });
   } catch (error) {
@@ -53,8 +58,40 @@ exports.getSuperAdminStats = async (req, res, next) => {
 exports.getAllAdmins = async (req, res, next) => {
   try {
     const admins = await User.find({ role: 'Admin' }).select('-password').sort({ createdAt: -1 });
+    const adminIds = admins.map((admin) => admin._id);
 
-    const processedAdmins = admins.map(admin => withMembershipDays(admin.toObject()));
+    const [branchStats, branchManagerStats] = await Promise.all([
+      Branch.aggregate([
+        { $match: { adminId: { $in: adminIds } } },
+        {
+          $group: {
+            _id: '$adminId',
+            totalBranches: { $sum: 1 },
+            activeBranches: { $sum: { $cond: [{ $ne: ['$isActive', false] }, 1, 0] } }
+          }
+        }
+      ]),
+      User.aggregate([
+        { $match: { role: 'BranchAdmin', restaurantAdminId: { $in: adminIds } } },
+        { $group: { _id: '$restaurantAdminId', branchManagers: { $sum: 1 } } }
+      ])
+    ]);
+
+    const branchMap = Object.fromEntries(branchStats.map((row) => [String(row._id), row]));
+    const managerMap = Object.fromEntries(branchManagerStats.map((row) => [String(row._id), row.branchManagers]));
+
+    const processedAdmins = admins.map((admin) => {
+      const adminObj = withMembershipDays(admin.toObject());
+      const branchInfo = branchMap[String(admin._id)] || {};
+      return {
+        ...adminObj,
+        branchStats: {
+          totalBranches: branchInfo.totalBranches || 0,
+          activeBranches: branchInfo.activeBranches || 0,
+          branchManagers: managerMap[String(admin._id)] || 0
+        }
+      };
+    });
 
     res.json({
       success: true,
@@ -105,6 +142,14 @@ exports.createAdmin = async (req, res, next) => {
       adminId: newAdmin._id,
       restaurantName: newAdmin.restaurantName,
       upiId: `${email.split('@')[0]}@upi`
+    });
+
+    const Branch = require('../models/Branch');
+    await Branch.create({
+      adminId: newAdmin._id,
+      branchName: 'Main Branch',
+      isDefault: true,
+      isActive: true
     });
 
     const daysRemaining = getDaysRemaining(expiryDate);
@@ -315,7 +360,10 @@ exports.deleteAdmin = async (req, res, next) => {
       Category.deleteMany({ adminId }),
       MenuItem.deleteMany({ adminId }),
       Order.deleteMany({ adminId }),
-      Setting.deleteMany({ adminId })
+      Setting.deleteMany({ adminId }),
+      require('../models/Branch').deleteMany({ adminId }),
+      require('../models/Inventory').deleteMany({ adminId }),
+      User.deleteMany({ restaurantAdminId: adminId, role: { $in: ['BranchAdmin', 'Kitchen'] } })
     ]);
 
     await admin.deleteOne();

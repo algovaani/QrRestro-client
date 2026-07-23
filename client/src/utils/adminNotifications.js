@@ -1,6 +1,7 @@
-export function getAdminOrderDetailsPath(order) {
-  if (!order?.orderNumber) return '/admin/orders';
-  return `/admin/orders?order=${encodeURIComponent(order.orderNumber)}`;
+export function getAdminOrderDetailsPath(order, user) {
+  const base = user?.role === 'BranchAdmin' ? '/branch' : '/admin';
+  if (!order?.orderNumber) return `${base}/orders`;
+  return `${base}/orders?order=${encodeURIComponent(order.orderNumber)}`;
 }
 
 export function getNotificationCardClass(type) {

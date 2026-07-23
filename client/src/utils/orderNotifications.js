@@ -10,11 +10,12 @@ export const normalizeTableNumber = (value) => String(value ?? '').trim();
 export const tableNumbersMatch = (a, b) =>
   normalizeTableNumber(a) === normalizeTableNumber(b);
 
-/** Order must match this table session — not just the same mobile on another table. */
-export const orderMatchesCustomerSession = (order, adminId, tableNumber, customerMobile) => {
+/** Order must match this table session — not just the same mobile on another table/branch. */
+export const orderMatchesCustomerSession = (order, adminId, tableNumber, customerMobile, branchId = '') => {
   if (!order || !adminId || !tableNumber || !customerMobile) return false;
   if (String(order.adminId) !== String(adminId)) return false;
   if (!tableNumbersMatch(order.tableNumber, tableNumber)) return false;
+  if (branchId && order.branchId && String(order.branchId) !== String(branchId)) return false;
   return mobilesMatch(order.customerMobile, customerMobile);
 };
 

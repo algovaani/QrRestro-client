@@ -38,6 +38,14 @@ const orderSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'
   },
+  branchId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Branch'
+  },
+  branchName: {
+    type: String,
+    default: ''
+  },
   orderNumber: {
     type: String,
     required: true,

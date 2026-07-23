@@ -1,15 +1,22 @@
 const Table = require('../models/Table');
+const Branch = require('../models/Branch');
 const QRCode = require('qrcode');
-const { getTenantAdminId, buildTenantFilter, assertTenantOwnership } = require('../middleware/tenantMiddleware');
+const { getTenantAdminId, buildScopedFilter, assertTenantOwnership } = require('../middleware/tenantMiddleware');
 const { buildMenuQrUrl } = require('../utils/tenantUtils');
-
+const { ensureDefaultBranch } = require('../utils/branchUtils');
 const { getClientUrl } = require('../utils/clientUrl');
 
-// @desc Get all tables (filtered strictly by logged-in adminId)
+const buildQrForTable = async (table) => {
+  const qrDataUrl = buildMenuQrUrl(getClientUrl(), table.adminId, table.branchId, table.tableNumber);
+  const qrCodeImage = await QRCode.toDataURL(qrDataUrl, { errorCorrectionLevel: 'H', margin: 2, width: 300 });
+  return { qrDataUrl, qrCodeImage };
+};
+
+// @desc Get all tables (filtered by admin + optional branch)
 // @route GET /api/tables
 exports.getTables = async (req, res, next) => {
   try {
-    const filter = buildTenantFilter(req.user, res);
+    const filter = buildScopedFilter(req.user, req, res);
     if (!filter) return;
 
     const tables = await Table.find(filter).sort({ tableNumber: 1 });
@@ -49,25 +56,44 @@ exports.createTable = async (req, res, next) => {
     if (!adminId) {
       return res.status(403).json({ success: false, message: 'Restaurant tenant access required' });
     }
-    const { tableName, tableNumber, capacity, section } = req.body;
 
-    const existingTable = await Table.findOne({ adminId, tableNumber });
-    if (existingTable) {
-      return res.status(400).json({ success: false, message: `Table Number ${tableNumber} already exists for your restaurant.` });
+    const { tableName, tableNumber, capacity, section, branchId: bodyBranchId } = req.body;
+
+    let branchId = bodyBranchId;
+    if (!branchId) {
+      const defaultBranch = await ensureDefaultBranch(adminId);
+      branchId = defaultBranch?._id;
     }
 
-    const qrDataUrl = buildMenuQrUrl(getClientUrl(), adminId, tableNumber);
-    const qrCodeImage = await QRCode.toDataURL(qrDataUrl, { errorCorrectionLevel: 'H', margin: 2, width: 300 });
+    const branch = await Branch.findOne({ _id: branchId, adminId });
+    if (!branch) {
+      return res.status(400).json({ success: false, message: 'Invalid branch selected' });
+    }
 
-    const table = await Table.create({
+    const existingTable = await Table.findOne({ adminId, branchId, tableNumber });
+    if (existingTable) {
+      return res.status(400).json({
+        success: false,
+        message: `Table Number ${tableNumber} already exists in ${branch.branchName}.`
+      });
+    }
+
+    const draft = {
       adminId,
+      branchId,
       tableName,
       tableNumber,
       capacity: capacity || 4,
       section: section || 'Main Hall',
-      qrCodeImage,
-      qrUrl: qrDataUrl,
       status: 'Active'
+    };
+
+    const { qrDataUrl, qrCodeImage } = await buildQrForTable(draft);
+
+    const table = await Table.create({
+      ...draft,
+      qrCodeImage,
+      qrUrl: qrDataUrl
     });
 
     res.status(201).json({
@@ -133,8 +159,12 @@ exports.regenerateQR = async (req, res, next) => {
       return res.status(403).json({ success: false, message: 'Not authorized' });
     }
 
-    const qrDataUrl = buildMenuQrUrl(getClientUrl(), table.adminId, table.tableNumber);
-    const qrCodeImage = await QRCode.toDataURL(qrDataUrl, { errorCorrectionLevel: 'H', margin: 2, width: 300 });
+    if (!table.branchId) {
+      const defaultBranch = await ensureDefaultBranch(adminId);
+      table.branchId = defaultBranch._id;
+    }
+
+    const { qrDataUrl, qrCodeImage } = await buildQrForTable(table);
 
     table.qrCodeImage = qrCodeImage;
     table.qrUrl = qrDataUrl;

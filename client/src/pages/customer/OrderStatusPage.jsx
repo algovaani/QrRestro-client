@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import API from '../../services/api';
-import { useCart } from '../../context/CartContext';
+import { useCart, getCustomerMenuPath } from '../../context/CartContext';
 import { useTableSessionOrders } from '../../hooks/useTableSessionOrders';
 import { startCustomerPayFlow, getUnpaidOrders } from '../../utils/customerPayFlow';
 import PayOrderPickerModal from '../../components/customer/PayOrderPickerModal';
@@ -39,14 +39,15 @@ export default function OrderStatusPage() {
 
   useEffect(() => {
     if (order?.adminId && order?.tableNumber) {
-      initTableCart(String(order.tableNumber), String(order.adminId));
+      initTableCart(String(order.tableNumber), String(order.adminId), order.branchId ? String(order.branchId) : '');
     }
-  }, [order?.adminId, order?.tableNumber]);
+  }, [order?.adminId, order?.tableNumber, order?.branchId]);
 
   const { orders, refreshOrders } = useTableSessionOrders(
     order?.adminId,
     order?.tableNumber,
-    customerMobile || order?.customerMobile
+    customerMobile || order?.customerMobile,
+    order?.branchId || ''
   );
 
   const openPaymentModal = (orderNumOrNums) => {
@@ -108,6 +109,7 @@ export default function OrderStatusPage() {
     socket,
     order?.adminId,
     order?.tableNumber,
+    order?.branchId || '',
     order
       ? {
           onPaymentPending: (updatedOrder) => {
@@ -123,7 +125,8 @@ export default function OrderStatusPage() {
                 updatedOrder,
                 order.adminId,
                 order.tableNumber,
-                customerMobile || order.customerMobile
+                customerMobile || order.customerMobile,
+                order.branchId
               )
             ) {
               return;
@@ -144,7 +147,8 @@ export default function OrderStatusPage() {
                 updatedOrder,
                 order.adminId,
                 order.tableNumber,
-                customerMobile || order.customerMobile
+                customerMobile || order.customerMobile,
+                order.branchId
               )
             ) {
               return;
@@ -165,7 +169,8 @@ export default function OrderStatusPage() {
                 updatedOrder,
                 order.adminId,
                 order.tableNumber,
-                customerMobile || order.customerMobile
+                customerMobile || order.customerMobile,
+                order.branchId
               )
             ) {
               return;
@@ -444,7 +449,7 @@ export default function OrderStatusPage() {
             <div style={{ marginTop: '1.5rem', textAlign: 'center' }}>
               <button
                 type="button"
-                onClick={() => navigate(`/menu/${order.adminId}/table/${order.tableNumber}`)}
+                onClick={() => navigate(getCustomerMenuPath(order.adminId, order.tableNumber, order.branchId))}
                 className="btn btn-secondary"
                 style={{ width: '100%', borderRadius: '12px' }}
               >
@@ -470,11 +475,12 @@ export default function OrderStatusPage() {
         <MyOrdersModal
           tableNumber={order.tableNumber}
           adminId={order.adminId}
+          branchId={order.branchId || ''}
           customerMobile={customerMobile || order.customerMobile}
           onClose={() => setShowMyOrdersModal(false)}
           onOrderMore={() => {
             setShowMyOrdersModal(false);
-            navigate(`/menu/${order.adminId}/table/${order.tableNumber}`);
+            navigate(getCustomerMenuPath(order.adminId, order.tableNumber, order.branchId));
           }}
         />
       )}

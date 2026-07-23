@@ -1,14 +1,14 @@
 const Order = require('../models/Order');
-const { getTenantAdminId } = require('../middleware/tenantMiddleware');
+const { buildScopedFilter } = require('../middleware/tenantMiddleware');
 
 const buildTenantMatch = (req, extra = {}) => {
-  const adminId = getTenantAdminId(req.user);
-  if (!adminId) {
+  const filter = buildScopedFilter(req.user, req);
+  if (!filter) {
     const error = new Error('Tenant access required');
     error.status = 403;
     throw error;
   }
-  return { adminId, ...extra };
+  return { ...filter, ...extra };
 };
 
 exports.getSalesReport = async (req, res, next) => {
@@ -75,7 +75,7 @@ exports.getTableSalesReport = async (req, res, next) => {
       { $match: matchQuery },
       {
         $group: {
-          _id: '$tableNumber',
+          _id: { tableNumber: '$tableNumber', branchName: '$branchName' },
           totalOrders: { $sum: 1 },
           totalRevenue: { $sum: '$grandTotal' }
         }
@@ -83,7 +83,15 @@ exports.getTableSalesReport = async (req, res, next) => {
       { $sort: { totalRevenue: -1 } }
     ]);
 
-    res.json({ success: true, tables });
+    res.json({
+      success: true,
+      tables: tables.map((row) => ({
+        tableNumber: row._id?.tableNumber,
+        branchName: row._id?.branchName || '',
+        totalOrders: row.totalOrders,
+        totalRevenue: row.totalRevenue
+      }))
+    });
   } catch (error) {
     next(error);
   }

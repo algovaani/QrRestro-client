@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import API from '../services/api';
 
-export function useTableSessionOrders(adminId, tableNumber, customerMobile) {
+export function useTableSessionOrders(adminId, tableNumber, customerMobile, branchId = '') {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(false);
 
@@ -13,7 +13,10 @@ export function useTableSessionOrders(adminId, tableNumber, customerMobile) {
 
     setLoading(true);
     try {
-      const res = await API.get(`/public/orders/table/${adminId}/${tableNumber}/active`, {
+      const url = branchId
+        ? `/public/orders/table/${adminId}/branch/${branchId}/${tableNumber}/active`
+        : `/public/orders/table/${adminId}/${tableNumber}/active`;
+      const res = await API.get(url, {
         params: { customerMobile }
       });
       if (res.data.success) {
@@ -24,7 +27,7 @@ export function useTableSessionOrders(adminId, tableNumber, customerMobile) {
     } finally {
       setLoading(false);
     }
-  }, [adminId, tableNumber, customerMobile]);
+  }, [adminId, tableNumber, customerMobile, branchId]);
 
   useEffect(() => {
     refreshOrders();

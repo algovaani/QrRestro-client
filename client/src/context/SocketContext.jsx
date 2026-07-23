@@ -6,8 +6,9 @@ import { playOrderChime } from '../utils/orderChime';
 
 const SocketContext = createContext();
 
-export const getTableRoom = (adminId, tableNumber) => {
+export const getTableRoom = (adminId, tableNumber, branchId) => {
   if (!adminId || tableNumber === undefined || tableNumber === null || tableNumber === '') return null;
+  if (branchId) return `table_${adminId}_${String(branchId)}_${String(tableNumber)}`;
   return `table_${adminId}_${String(tableNumber)}`;
 };
 

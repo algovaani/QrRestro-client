@@ -5,7 +5,10 @@ const toPayload = (order) => (order?.toObject ? order.toObject() : order);
 
 const getAdminRoom = (adminId) => `admin_${adminId}`;
 const getKitchenRoom = (adminId) => `kitchen_${adminId}`;
-const getTableRoom = (adminId, tableNumber) => `table_${adminId}_${String(tableNumber)}`;
+const getTableRoom = (adminId, tableNumber, branchId) => {
+  if (branchId) return `table_${adminId}_${String(branchId)}_${String(tableNumber)}`;
+  return `table_${adminId}_${String(tableNumber)}`;
+};
 const getRestaurantRoom = (adminId) => `restaurant_${adminId}`;
 
 const initSocket = (io) => {
@@ -38,7 +41,7 @@ const emitToTenant = (order, eventName) => {
   ioInstance
     .to(getAdminRoom(adminId))
     .to(getKitchenRoom(adminId))
-    .to(getTableRoom(adminId, payload.tableNumber))
+    .to(getTableRoom(adminId, payload.tableNumber, payload.branchId))
     .emit(eventName, payload);
 };
 

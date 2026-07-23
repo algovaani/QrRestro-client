@@ -1,11 +1,86 @@
 const User = require('../models/User');
 const jwt = require('jsonwebtoken');
+const Branch = require('../models/Branch');
 const { getDaysRemaining, withMembershipDays, adminHasUsedFreeTrial } = require('../utils/membershipDays');
+const { resolvePlanFeaturesByName } = require('../utils/planFeatures');
 
 const generateToken = (id) => {
   return jwt.sign({ id }, process.env.JWT_SECRET || 'super_secret_jwt_key_restaurant_qr_2026_safe', {
     expiresIn: '7d'
   });
+};
+
+const validateBranchAdminLogin = async (user, res) => {
+  if (!user.isActive) {
+    res.status(403).json({ success: false, message: 'Branch login deactivated. Contact restaurant admin.' });
+    return false;
+  }
+  if (!user.branchId || !user.restaurantAdminId) {
+    res.status(403).json({ success: false, message: 'Branch login is not configured correctly.' });
+    return false;
+  }
+
+  const parent = await User.findById(user.restaurantAdminId);
+  if (!parent || !parent.isActive) {
+    res.status(403).json({ success: false, message: 'Restaurant account is inactive.' });
+    return false;
+  }
+
+  const expiryDate = parent.subscriptionEndsAt || parent.trialEndsAt;
+  if (expiryDate && new Date() > new Date(expiryDate)) {
+    res.status(403).json({ success: false, message: 'Restaurant membership expired. Branch login unavailable.' });
+    return false;
+  }
+
+  const branch = await Branch.findOne({ _id: user.branchId, adminId: parent._id, isActive: true });
+  if (!branch) {
+    res.status(403).json({ success: false, message: 'Branch not found or inactive.' });
+    return false;
+  }
+
+  return branch;
+};
+
+const serializeAuthUser = async (user, isExpired = false) => {
+  const base = withMembershipDays({
+    _id: user._id,
+    name: user.name,
+    restaurantName: user.restaurantName,
+    email: user.email,
+    role: user.role,
+    isActive: user.isActive,
+    restaurantAdminId: user.restaurantAdminId || null,
+    branchId: user.branchId || null,
+    planName: user.planName,
+    planStatus: isExpired ? 'Expired' : user.planStatus,
+    renewalRequested: user.renewalRequested,
+    renewalRequestDate: user.renewalRequestDate,
+    requestedPlanName: user.requestedPlanName || '',
+    membershipOfferSent: user.membershipOfferSent,
+    membershipOfferPlanName: user.membershipOfferPlanName || '',
+    membershipOfferSentAt: user.membershipOfferSentAt,
+    subscriptionEndsAt: user.subscriptionEndsAt,
+    trialEndsAt: user.trialEndsAt,
+    freeTrialUsed: adminHasUsedFreeTrial(user),
+    isExpired: Boolean(isExpired)
+  });
+
+  if (user.role === 'BranchAdmin' && user.branchId) {
+    const branch = await Branch.findById(user.branchId).select('branchName');
+    base.branchName = branch?.branchName || '';
+    if (user.restaurantAdminId) {
+      const parent = await User.findById(user.restaurantAdminId).select('restaurantName');
+      if (parent?.restaurantName) base.restaurantName = parent.restaurantName;
+    }
+  }
+
+  if (user.role === 'Admin' && user.planName) {
+    const planFeatures = await resolvePlanFeaturesByName(user.planName);
+    base.planFeatureKeys = planFeatures.featureKeys;
+    base.planFeatures = planFeatures.features;
+  }
+
+  return base;
 };
 
 // @desc Auth user & get token
@@ -30,6 +105,18 @@ exports.login = async (req, res, next) => {
       return res.status(401).json({ success: false, message: 'Invalid email or password.' });
     }
 
+    if (user.role === 'BranchAdmin') {
+      const branch = await validateBranchAdminLogin(user, res);
+      if (!branch) return;
+
+      const token = generateToken(user._id);
+      return res.json({
+        success: true,
+        token,
+        user: await serializeAuthUser(user)
+      });
+    }
+
     const token = generateToken(user._id);
     const now = new Date();
     const expiryDate = user.subscriptionEndsAt || user.trialEndsAt;
@@ -43,26 +130,7 @@ exports.login = async (req, res, next) => {
     res.json({
       success: true,
       token,
-      user: withMembershipDays({
-        _id: user._id,
-        name: user.name,
-        restaurantName: user.restaurantName,
-        email: user.email,
-        role: user.role,
-        isActive: user.isActive,
-        planName: user.planName,
-        planStatus: isExpired ? 'Expired' : user.planStatus,
-        renewalRequested: user.renewalRequested,
-        renewalRequestDate: user.renewalRequestDate,
-        requestedPlanName: user.requestedPlanName || '',
-        membershipOfferSent: user.membershipOfferSent,
-        membershipOfferPlanName: user.membershipOfferPlanName || '',
-        membershipOfferSentAt: user.membershipOfferSentAt,
-        subscriptionEndsAt: user.subscriptionEndsAt,
-        trialEndsAt: user.trialEndsAt,
-        freeTrialUsed: adminHasUsedFreeTrial(user),
-        isExpired: Boolean(isExpired)
-      })
+      user: await serializeAuthUser(user, isExpired)
     });
   } catch (error) {
     next(error);
@@ -85,11 +153,7 @@ exports.getSubscriptionStatus = async (req, res, next) => {
 
     res.json({
       success: true,
-      user: withMembershipDays({
-        ...user.toObject(),
-        isExpired: Boolean(isExpired),
-        planStatus: isExpired ? 'Expired' : user.planStatus
-      })
+      user: await serializeAuthUser(user, isExpired)
     });
   } catch (error) {
     next(error);
@@ -106,11 +170,7 @@ exports.getMe = async (req, res, next) => {
 
     res.json({
       success: true,
-      user: withMembershipDays({
-        ...user.toObject(),
-        isExpired: Boolean(isExpired),
-        planStatus: isExpired ? 'Expired' : user.planStatus
-      })
+      user: await serializeAuthUser(user, isExpired)
     });
   } catch (error) {
     next(error);

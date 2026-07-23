@@ -141,7 +141,12 @@ API.interceptors.response.use(
     if (error.response && error.response.status === 401) {
       localStorage.removeItem('token');
       localStorage.removeItem('user');
-      if (window.location.pathname.startsWith('/admin') && window.location.pathname !== '/admin/login') {
+      const path = window.location.pathname;
+      if (path.startsWith('/branch')) {
+        if (path !== '/branch/login') {
+          window.location.href = '/branch/login';
+        }
+      } else if (path.startsWith('/admin') && path !== '/admin/login') {
         window.location.href = '/admin/login';
       }
     }

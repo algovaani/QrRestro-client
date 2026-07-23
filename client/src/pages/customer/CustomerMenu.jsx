@@ -20,7 +20,7 @@ import { orderMatchesCustomerSession, notifyCustomerOrderStatus } from '../../ut
 import { resolveUploadUrl, resolveMenuItemImageUrl } from '../../utils/uploadUrl';
 
 export default function CustomerMenu() {
-  const { adminId: routeAdminId, tableNumber } = useParams();
+  const { adminId: routeAdminId, branchId: routeBranchId, tableNumber } = useParams();
   const location = useLocation();
 
   const [tableInfo, setTableInfo] = useState(null);
@@ -46,17 +46,17 @@ export default function CustomerMenu() {
   const [quantity, setQuantity] = useState(1);
   const [instructions, setInstructions] = useState('');
 
-  const { initTableCart, bindRestaurantAdmin, addToCart, saveCustomerDetails, customerDetailsComplete, customerMobile, customerName, restaurantAdminId, applyRestaurantSettings } = useCart();
+  const { initTableCart, bindRestaurantAdmin, setBranchContext, branchId, addToCart, saveCustomerDetails, customerDetailsComplete, customerMobile, customerName, restaurantAdminId, applyRestaurantSettings } = useCart();
   const { socket } = useSocket();
 
   useEffect(() => {
     if (tableNumber) {
       if (routeAdminId) {
-        initTableCart(tableNumber, routeAdminId);
+        initTableCart(tableNumber, routeAdminId, routeBranchId || '');
       }
-      fetchMenuData(routeAdminId);
+      fetchMenuData(routeAdminId, routeBranchId);
     }
-  }, [tableNumber, routeAdminId]);
+  }, [tableNumber, routeAdminId, routeBranchId]);
 
   useEffect(() => {
     if (tableNumber && restaurantAdminId && customerDetailsComplete && customerMobile) {
@@ -76,17 +76,18 @@ export default function CustomerMenu() {
     socket,
     restaurantAdminId,
     tableNumber,
+    branchId || routeBranchId || '',
     customerDetailsComplete
       ? {
           onNewOrder: (newOrder) => {
-            if (!orderMatchesCustomerSession(newOrder, restaurantAdminId, tableNumber, customerMobile)) return;
+            if (!orderMatchesCustomerSession(newOrder, restaurantAdminId, tableNumber, customerMobile, branchId || routeBranchId)) return;
             setTableOrders((prev) => {
               if (prev.some((o) => String(o._id) === String(newOrder._id))) return prev;
               return [newOrder, ...prev];
             });
           },
           onStatusUpdate: (updatedOrder) => {
-            if (!orderMatchesCustomerSession(updatedOrder, restaurantAdminId, tableNumber, customerMobile)) return;
+            if (!orderMatchesCustomerSession(updatedOrder, restaurantAdminId, tableNumber, customerMobile, branchId || routeBranchId)) return;
             setTableOrders((prev) => {
               const existing = prev.find((o) => String(o._id) === String(updatedOrder._id));
               if (!showMyOrdersModal) {
@@ -100,7 +101,7 @@ export default function CustomerMenu() {
             });
           },
           onPaymentPending: (updatedOrder) => {
-            if (!orderMatchesCustomerSession(updatedOrder, restaurantAdminId, tableNumber, customerMobile)) return;
+            if (!orderMatchesCustomerSession(updatedOrder, restaurantAdminId, tableNumber, customerMobile, branchId || routeBranchId)) return;
             setStatusToast(`⏳ Payment submitted for Order #${updatedOrder.orderNumber} — waiting for admin approval`);
             setTableOrders((prev) =>
               prev.map((o) =>
@@ -109,7 +110,7 @@ export default function CustomerMenu() {
             );
           },
           onPaymentSuccess: (updatedOrder) => {
-            if (!orderMatchesCustomerSession(updatedOrder, restaurantAdminId, tableNumber, customerMobile)) return;
+            if (!orderMatchesCustomerSession(updatedOrder, restaurantAdminId, tableNumber, customerMobile, branchId || routeBranchId)) return;
             setStatusToast(`💳 Payment approved for Order #${updatedOrder.orderNumber}!`);
             setTableOrders((prev) =>
               prev.map((o) =>
@@ -121,18 +122,27 @@ export default function CustomerMenu() {
       : {}
   );
 
-  const fetchMenuData = async (adminIdParam) => {
+  const fetchMenuData = async (adminIdParam, branchIdParam) => {
     setLoading(true);
     setErrorMsg('');
     try {
-      const menuUrl = adminIdParam
-        ? `/public/menu/${adminIdParam}/table/${tableNumber}`
-        : `/public/menu/${tableNumber}`;
+      let menuUrl;
+      if (adminIdParam && branchIdParam) {
+        menuUrl = `/public/menu/${adminIdParam}/branch/${branchIdParam}/table/${tableNumber}`;
+      } else if (adminIdParam) {
+        menuUrl = `/public/menu/${adminIdParam}/table/${tableNumber}`;
+      } else {
+        menuUrl = `/public/menu/${tableNumber}`;
+      }
       const res = await API.get(menuUrl);
       if (res.data.success) {
         const resolvedAdminId = res.data.adminId || adminIdParam || res.data.table?.adminId;
+        const resolvedBranchId = res.data.branchId || branchIdParam || res.data.table?.branchId || '';
         if (resolvedAdminId) {
-          bindRestaurantAdmin(resolvedAdminId);
+          bindRestaurantAdmin(resolvedAdminId, resolvedBranchId);
+        }
+        if (resolvedBranchId) {
+          setBranchContext(resolvedBranchId, res.data.branchName || '');
         }
         const setting = res.data.setting || res.data.settings;
         if (setting) {
@@ -155,7 +165,11 @@ export default function CustomerMenu() {
   const fetchActiveTableOrders = async () => {
     if (!customerMobile || !restaurantAdminId) return;
     try {
-      const res = await API.get(`/public/orders/table/${restaurantAdminId}/${tableNumber}/active`, {
+      const activeBranchId = branchId || routeBranchId || '';
+      const url = activeBranchId
+        ? `/public/orders/table/${restaurantAdminId}/branch/${activeBranchId}/${tableNumber}/active`
+        : `/public/orders/table/${restaurantAdminId}/${tableNumber}/active`;
+      const res = await API.get(url, {
         params: { customerMobile }
       });
       if (res.data.success) {
@@ -738,6 +752,7 @@ export default function CustomerMenu() {
         <MyOrdersModal
           tableNumber={tableNumber}
           adminId={restaurantAdminId}
+          branchId={branchId || routeBranchId || ''}
           customerMobile={customerMobile}
           onClose={() => setShowMyOrdersModal(false)}
           onOrderMore={() => setShowMyOrdersModal(false)}

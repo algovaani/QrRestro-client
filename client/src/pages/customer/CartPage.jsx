@@ -15,10 +15,11 @@ import { ArrowLeft, Trash2, Plus, Minus, CheckCircle, AlertCircle, User, QrCode,
 
 export default function CartPage() {
   const navigate = useNavigate();
-  const { adminId: routeAdminId, tableNumber: routeTableNumber } = useParams();
+  const { adminId: routeAdminId, branchId: routeBranchId, tableNumber: routeTableNumber } = useParams();
   const {
     tableNumber,
     restaurantAdminId,
+    branchId,
     initTableCart,
     cartItems,
     updateQuantity,
@@ -43,19 +44,20 @@ export default function CartPage() {
   const [showPayPicker, setShowPayPicker] = useState(false);
 
   const activeAdminId = restaurantAdminId || routeAdminId || '';
+  const activeBranchId = branchId || routeBranchId || '';
   const activeTableNumber = routeTableNumber || tableNumber || '';
-  const menuPath = getCustomerMenuPath(activeAdminId, activeTableNumber);
+  const menuPath = getCustomerMenuPath(activeAdminId, activeTableNumber, activeBranchId);
   const hasTableContext = Boolean(activeTableNumber);
 
   useEffect(() => {
     if (routeAdminId && routeTableNumber) {
-      initTableCart(routeTableNumber, routeAdminId);
+      initTableCart(routeTableNumber, routeAdminId, routeBranchId || '');
     }
-  }, [routeAdminId, routeTableNumber]);
+  }, [routeAdminId, routeTableNumber, routeBranchId]);
 
   useEffect(() => {
     if (!customerDetailsComplete && menuPath && activeAdminId) {
-      const saved = getSavedCustomerMobile(activeAdminId, activeTableNumber);
+      const saved = getSavedCustomerMobile(activeAdminId, activeTableNumber, activeBranchId);
       if (!saved) {
         navigate(menuPath, { replace: true });
       }
@@ -68,7 +70,9 @@ export default function CartPage() {
     let cancelled = false;
     const loadTaxSettings = async () => {
       try {
-        const menuUrl = `/public/menu/${activeAdminId}/table/${activeTableNumber}`;
+        const menuUrl = activeBranchId
+          ? `/public/menu/${activeAdminId}/branch/${activeBranchId}/table/${activeTableNumber}`
+          : `/public/menu/${activeAdminId}/table/${activeTableNumber}`;
         const res = await API.get(menuUrl);
         if (!cancelled && res.data.success) {
           const setting = res.data.setting || res.data.settings;
@@ -86,7 +90,8 @@ export default function CartPage() {
   const { orders, refreshOrders } = useTableSessionOrders(
     customerDetailsComplete ? activeAdminId : '',
     activeTableNumber,
-    customerMobile
+    customerMobile,
+    activeBranchId
   );
 
   const handlePayClick = () => {
@@ -138,6 +143,7 @@ export default function CartPage() {
       const payload = {
         tableNumber: activeTableNumber,
         adminId: activeAdminId,
+        branchId: activeBranchId || undefined,
         customerName: cleanName,
         customerMobile: cleanMobile,
         items: cartItems.map(item => ({
@@ -407,6 +413,7 @@ export default function CartPage() {
         <MyOrdersModal
           tableNumber={activeTableNumber}
           adminId={activeAdminId}
+          branchId={activeBranchId}
           customerMobile={customerMobile}
           onClose={() => setShowMyOrdersModal(false)}
           onOrderMore={() => setShowMyOrdersModal(false)}

@@ -28,12 +28,17 @@ const userSchema = new mongoose.Schema({
   },
   role: {
     type: String,
-    enum: ['SuperAdmin', 'Admin', 'Kitchen'],
+    enum: ['SuperAdmin', 'Admin', 'Kitchen', 'BranchAdmin'],
     default: 'Admin'
   },
   restaurantAdminId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
+    default: null
+  },
+  branchId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Branch',
     default: null
   },
   isActive: {
@@ -106,6 +111,8 @@ const userSchema = new mongoose.Schema({
 }, {
   timestamps: true
 });
+
+userSchema.index({ branchId: 1, role: 1 }, { unique: true, partialFilterExpression: { role: 'BranchAdmin' } });
 
 // Hash password before saving
 userSchema.pre('save', async function (next) {

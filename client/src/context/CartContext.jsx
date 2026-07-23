@@ -9,15 +9,22 @@ const CartContext = createContext();
 
 const ACTIVE_TABLE_KEY = 'customer_active_table';
 
-const getTableSessionKey = (adminId, tNum) => `customer_session_${adminId}_${tNum}`;
-const getCartStorageKey = (adminId, tNum, sessionId) => `cart_${adminId}_${tNum}_${sessionId}`;
-const getCustomerStorageKey = (adminId, tNum, sessionId) => `customer_${adminId}_${tNum}_${sessionId}`;
+const getTableSessionKey = (adminId, tNum, branchId) =>
+  `customer_session_${adminId}_${branchId || 'legacy'}_${tNum}`;
+const getCartStorageKey = (adminId, tNum, sessionId, branchId) =>
+  `cart_${adminId}_${branchId || 'legacy'}_${tNum}_${sessionId}`;
+const getCustomerStorageKey = (adminId, tNum, sessionId, branchId) =>
+  `customer_${adminId}_${branchId || 'legacy'}_${tNum}_${sessionId}`;
 
-const saveActiveTableContext = (adminId, tableNumber) => {
+const saveActiveTableContext = (adminId, tableNumber, branchId = '') => {
   if (adminId && tableNumber) {
     sessionStorage.setItem(
       ACTIVE_TABLE_KEY,
-      JSON.stringify({ adminId: String(adminId), tableNumber: String(tableNumber) })
+      JSON.stringify({
+        adminId: String(adminId),
+        tableNumber: String(tableNumber),
+        branchId: branchId ? String(branchId) : ''
+      })
     );
   }
 };
@@ -36,13 +43,19 @@ const createSessionId = () =>
     ? crypto.randomUUID()
     : `${Date.now()}_${Math.random().toString(36).slice(2)}`);
 
-export const getCustomerMenuPath = (adminId, tableNumber) => {
+export const getCustomerMenuPath = (adminId, tableNumber, branchId) => {
   if (!tableNumber) return null;
+  if (adminId && branchId) {
+    return `/menu/${adminId}/branch/${branchId}/table/${tableNumber}`;
+  }
   return adminId ? `/menu/${adminId}/table/${tableNumber}` : `/menu/table/${tableNumber}`;
 };
 
-export const getCustomerCartPath = (adminId, tableNumber) => {
+export const getCustomerCartPath = (adminId, tableNumber, branchId) => {
   if (!tableNumber) return null;
+  if (adminId && branchId) {
+    return `/menu/${adminId}/branch/${branchId}/table/${tableNumber}/cart`;
+  }
   return adminId
     ? `/menu/${adminId}/table/${tableNumber}/cart`
     : '/cart';
@@ -51,6 +64,8 @@ export const getCustomerCartPath = (adminId, tableNumber) => {
 export const CartProvider = ({ children }) => {
   const [tableNumber, setTableNumber] = useState('');
   const [restaurantAdminId, setRestaurantAdminId] = useState('');
+  const [branchId, setBranchId] = useState('');
+  const [branchName, setBranchName] = useState('');
   const [customerSessionId, setCustomerSessionId] = useState('');
   const [cartItems, setCartItems] = useState([]);
   const [customerName, setCustomerName] = useState('');
@@ -70,8 +85,8 @@ export const CartProvider = ({ children }) => {
     });
   }, []);
 
-  const loadSessionData = (adminId, tNum, sessionId) => {
-    const savedCustomer = sessionStorage.getItem(getCustomerStorageKey(adminId, tNum, sessionId));
+  const loadSessionData = (adminId, tNum, sessionId, bId) => {
+    const savedCustomer = sessionStorage.getItem(getCustomerStorageKey(adminId, tNum, sessionId, bId));
     if (savedCustomer) {
       try {
         const parsed = JSON.parse(savedCustomer);
@@ -86,7 +101,7 @@ export const CartProvider = ({ children }) => {
       setCustomerMobile('');
     }
 
-    const savedCart = sessionStorage.getItem(getCartStorageKey(adminId, tNum, sessionId));
+    const savedCart = sessionStorage.getItem(getCartStorageKey(adminId, tNum, sessionId, bId));
     if (savedCart) {
       try {
         setCartItems(JSON.parse(savedCart));
@@ -98,9 +113,9 @@ export const CartProvider = ({ children }) => {
     }
   };
 
-  const startNewCustomerSession = (adminId, tNum) => {
+  const startNewCustomerSession = (adminId, tNum, bId) => {
     const sessionId = createSessionId();
-    sessionStorage.setItem(getTableSessionKey(adminId, tNum), sessionId);
+    sessionStorage.setItem(getTableSessionKey(adminId, tNum, bId), sessionId);
     setCustomerSessionId(sessionId);
     setCustomerName('');
     setCustomerMobile('');
@@ -109,17 +124,22 @@ export const CartProvider = ({ children }) => {
     return sessionId;
   };
 
-  const initTableCart = (tNum, adminId = '') => {
+  const initTableCart = (tNum, adminId = '', bId = '') => {
     const prevScope =
-      restaurantAdminId && tableNumber ? `${restaurantAdminId}::${tableNumber}` : '';
-    const nextScope = adminId && tNum ? `${adminId}::${tNum}` : '';
+      restaurantAdminId && tableNumber
+        ? `${restaurantAdminId}::${branchId || 'legacy'}::${tableNumber}`
+        : '';
+    const nextScope = adminId && tNum ? `${adminId}::${bId || 'legacy'}::${tNum}` : '';
 
     setTableNumber(tNum);
     if (adminId) {
       setRestaurantAdminId(adminId);
     }
+    if (bId) {
+      setBranchId(String(bId));
+    }
     if (tNum && adminId) {
-      saveActiveTableContext(adminId, tNum);
+      saveActiveTableContext(adminId, tNum, bId);
     }
     if (!tNum || !adminId) return;
 
@@ -127,18 +147,19 @@ export const CartProvider = ({ children }) => {
       setSpecialNote('');
     }
 
-    let sessionId = sessionStorage.getItem(getTableSessionKey(adminId, tNum));
+    const activeBranchId = bId || branchId || '';
+    let sessionId = sessionStorage.getItem(getTableSessionKey(adminId, tNum, activeBranchId));
     if (!sessionId) {
-      sessionId = startNewCustomerSession(adminId, tNum);
+      sessionId = startNewCustomerSession(adminId, tNum, activeBranchId);
     } else {
       setCustomerSessionId(sessionId);
-      loadSessionData(adminId, tNum, sessionId);
+      loadSessionData(adminId, tNum, sessionId, activeBranchId);
     }
 
-    const savedProfile = getSavedCustomerProfile(adminId, tNum);
+    const savedProfile = getSavedCustomerProfile(adminId, tNum, activeBranchId);
     const savedMobile = savedProfile.mobile;
     if (savedMobile) {
-      const customerKey = getCustomerStorageKey(adminId, tNum, sessionId);
+      const customerKey = getCustomerStorageKey(adminId, tNum, sessionId, activeBranchId);
       let hasSessionMobile = false;
       let sessionName = '';
       try {
@@ -163,19 +184,25 @@ export const CartProvider = ({ children }) => {
     }
   };
 
-  const bindRestaurantAdmin = (adminId) => {
+  const bindRestaurantAdmin = (adminId, bId = '') => {
     if (!adminId) return;
     setRestaurantAdminId(adminId);
+    if (bId) setBranchId(String(bId));
     if (tableNumber) {
-      initTableCart(tableNumber, adminId);
+      initTableCart(tableNumber, adminId, bId || branchId);
     }
+  };
+
+  const setBranchContext = (bId, name = '') => {
+    if (bId) setBranchId(String(bId));
+    if (name) setBranchName(name);
   };
 
   const saveCustomerDetails = (mobile) => {
     const trimmedMobile = String(mobile || '').trim();
     setCustomerMobile(trimmedMobile);
     if (tableNumber && restaurantAdminId && trimmedMobile.length === 10) {
-      const tableProfile = getSavedCustomerProfile(restaurantAdminId, tableNumber);
+      const tableProfile = getSavedCustomerProfile(restaurantAdminId, tableNumber, branchId);
       if (tableProfile.name && !customerName.trim()) {
         setCustomerName(tableProfile.name);
       }
@@ -183,12 +210,13 @@ export const CartProvider = ({ children }) => {
         restaurantAdminId,
         tableNumber,
         trimmedMobile,
-        tableProfile.name || customerName
+        tableProfile.name || customerName,
+        branchId
       );
-      const sessionId = customerSessionId || sessionStorage.getItem(getTableSessionKey(restaurantAdminId, tableNumber));
+      const sessionId = customerSessionId || sessionStorage.getItem(getTableSessionKey(restaurantAdminId, tableNumber, branchId));
       if (sessionId) {
         sessionStorage.setItem(
-          getCustomerStorageKey(restaurantAdminId, tableNumber, sessionId),
+          getCustomerStorageKey(restaurantAdminId, tableNumber, sessionId, branchId),
           JSON.stringify({
             customerName: (tableProfile.name || customerName || '').trim(),
             customerMobile: trimmedMobile
@@ -202,11 +230,11 @@ export const CartProvider = ({ children }) => {
     const trimmedName = String(name || '').trim();
     setCustomerName(trimmedName);
     if (tableNumber && restaurantAdminId && customerMobile.trim().length === 10) {
-      saveCustomerMobileLogin(restaurantAdminId, tableNumber, customerMobile.trim(), trimmedName);
-      const sessionId = customerSessionId || sessionStorage.getItem(getTableSessionKey(restaurantAdminId, tableNumber));
+      saveCustomerMobileLogin(restaurantAdminId, tableNumber, customerMobile.trim(), trimmedName, branchId);
+      const sessionId = customerSessionId || sessionStorage.getItem(getTableSessionKey(restaurantAdminId, tableNumber, branchId));
       if (sessionId) {
         sessionStorage.setItem(
-          getCustomerStorageKey(restaurantAdminId, tableNumber, sessionId),
+          getCustomerStorageKey(restaurantAdminId, tableNumber, sessionId, branchId),
           JSON.stringify({ customerName: trimmedName, customerMobile: customerMobile.trim() })
         );
       }
@@ -228,11 +256,11 @@ export const CartProvider = ({ children }) => {
     setCustomerMobile(trimmedMobile);
 
     if (tableNumber && restaurantAdminId) {
-      saveCustomerMobileLogin(restaurantAdminId, tableNumber, trimmedMobile, trimmedName);
-      const sessionId = customerSessionId || sessionStorage.getItem(getTableSessionKey(restaurantAdminId, tableNumber));
+      saveCustomerMobileLogin(restaurantAdminId, tableNumber, trimmedMobile, trimmedName, branchId);
+      const sessionId = customerSessionId || sessionStorage.getItem(getTableSessionKey(restaurantAdminId, tableNumber, branchId));
       if (sessionId) {
         sessionStorage.setItem(
-          getCustomerStorageKey(restaurantAdminId, tableNumber, sessionId),
+          getCustomerStorageKey(restaurantAdminId, tableNumber, sessionId, branchId),
           JSON.stringify({ customerName: trimmedName, customerMobile: trimmedMobile })
         );
       }
@@ -243,19 +271,19 @@ export const CartProvider = ({ children }) => {
 
   const logoutCustomer = () => {
     if (restaurantAdminId && tableNumber) {
-      clearCustomerMobileLogin(restaurantAdminId, tableNumber);
+      clearCustomerMobileLogin(restaurantAdminId, tableNumber, branchId);
     }
     resetCustomerDetails();
   };
 
   const resetCustomerDetails = () => {
     if (tableNumber && restaurantAdminId) {
-      const oldSessionId = sessionStorage.getItem(getTableSessionKey(restaurantAdminId, tableNumber));
+      const oldSessionId = sessionStorage.getItem(getTableSessionKey(restaurantAdminId, tableNumber, branchId));
       if (oldSessionId) {
-        sessionStorage.removeItem(getCartStorageKey(restaurantAdminId, tableNumber, oldSessionId));
-        sessionStorage.removeItem(getCustomerStorageKey(restaurantAdminId, tableNumber, oldSessionId));
+        sessionStorage.removeItem(getCartStorageKey(restaurantAdminId, tableNumber, oldSessionId, branchId));
+        sessionStorage.removeItem(getCustomerStorageKey(restaurantAdminId, tableNumber, oldSessionId, branchId));
       }
-      startNewCustomerSession(restaurantAdminId, tableNumber);
+      startNewCustomerSession(restaurantAdminId, tableNumber, branchId);
     } else {
       setCustomerName('');
       setCustomerMobile('');
@@ -269,18 +297,18 @@ export const CartProvider = ({ children }) => {
   useEffect(() => {
     const saved = loadActiveTableContext();
     if (saved?.adminId && saved?.tableNumber && !tableNumber) {
-      initTableCart(saved.tableNumber, saved.adminId);
+      initTableCart(saved.tableNumber, saved.adminId, saved.branchId || '');
     }
   }, []);
 
   useEffect(() => {
     if (tableNumber && restaurantAdminId && customerSessionId) {
       sessionStorage.setItem(
-        getCartStorageKey(restaurantAdminId, tableNumber, customerSessionId),
+        getCartStorageKey(restaurantAdminId, tableNumber, customerSessionId, branchId),
         JSON.stringify(cartItems)
       );
     }
-  }, [cartItems, tableNumber, restaurantAdminId, customerSessionId]);
+  }, [cartItems, tableNumber, restaurantAdminId, customerSessionId, branchId]);
 
   const addToCart = (menuItem, size, qty = 1, price, instructions = '') => {
     const cartKey = `${menuItem._id}_${size}`;
@@ -328,7 +356,7 @@ export const CartProvider = ({ children }) => {
   const clearCart = () => {
     setCartItems([]);
     if (tableNumber && restaurantAdminId && customerSessionId) {
-      sessionStorage.removeItem(getCartStorageKey(restaurantAdminId, tableNumber, customerSessionId));
+      sessionStorage.removeItem(getCartStorageKey(restaurantAdminId, tableNumber, customerSessionId, branchId));
     }
   };
 
@@ -339,6 +367,9 @@ export const CartProvider = ({ children }) => {
     <CartContext.Provider value={{
       tableNumber,
       restaurantAdminId,
+      branchId,
+      branchName,
+      setBranchContext,
       bindRestaurantAdmin,
       restaurantSettings,
       applyRestaurantSettings,

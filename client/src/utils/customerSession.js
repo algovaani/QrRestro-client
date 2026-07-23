@@ -1,4 +1,4 @@
-/** Per-table customer profile — same mobile on Table 2 is a separate session from Table 1 */
+/** Per-table customer profile — scoped by admin + branch + table (same mobile on Table 2 is separate) */
 const STORAGE_KEY = 'customer_profile_by_table';
 
 function readAll() {
@@ -13,23 +13,24 @@ function writeAll(data) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
 }
 
-function tableKey(adminId, tableNumber) {
+function tableKey(adminId, tableNumber, branchId = '') {
   if (!adminId || tableNumber === undefined || tableNumber === null || tableNumber === '') {
     return '';
   }
-  return `${String(adminId)}::${String(tableNumber)}`;
+  const branchPart = branchId ? String(branchId) : 'legacy';
+  return `${String(adminId)}::${branchPart}::${String(tableNumber)}`;
 }
 
-export function getSavedCustomerMobile(adminId, tableNumber) {
-  return getSavedCustomerProfile(adminId, tableNumber).mobile;
+export function getSavedCustomerMobile(adminId, tableNumber, branchId = '') {
+  return getSavedCustomerProfile(adminId, tableNumber, branchId).mobile;
 }
 
-export function getSavedCustomerName(adminId, tableNumber) {
-  return getSavedCustomerProfile(adminId, tableNumber).name;
+export function getSavedCustomerName(adminId, tableNumber, branchId = '') {
+  return getSavedCustomerProfile(adminId, tableNumber, branchId).name;
 }
 
-export function getSavedCustomerProfile(adminId, tableNumber) {
-  const key = tableKey(adminId, tableNumber);
+export function getSavedCustomerProfile(adminId, tableNumber, branchId = '') {
+  const key = tableKey(adminId, tableNumber, branchId);
   if (!key) return { mobile: '', name: '' };
 
   const entry = readAll()[key];
@@ -41,8 +42,8 @@ export function getSavedCustomerProfile(adminId, tableNumber) {
   };
 }
 
-export function saveCustomerMobileLogin(adminId, tableNumber, mobile, name = '') {
-  const key = tableKey(adminId, tableNumber);
+export function saveCustomerMobileLogin(adminId, tableNumber, mobile, name = '', branchId = '') {
+  const key = tableKey(adminId, tableNumber, branchId);
   if (!key || !/^\d{10}$/.test(String(mobile).trim())) return;
 
   const all = readAll();
@@ -56,8 +57,8 @@ export function saveCustomerMobileLogin(adminId, tableNumber, mobile, name = '')
 }
 
 /** Clears saved login for this table only (not other tables). */
-export function clearCustomerMobileLogin(adminId, tableNumber) {
-  const key = tableKey(adminId, tableNumber);
+export function clearCustomerMobileLogin(adminId, tableNumber, branchId = '') {
+  const key = tableKey(adminId, tableNumber, branchId);
   if (!key) return;
   const all = readAll();
   delete all[key];

@@ -2,17 +2,14 @@ const Order = require('../models/Order');
 const Table = require('../models/Table');
 const MenuItem = require('../models/MenuItem');
 const Category = require('../models/Category');
-const { getTenantAdminId } = require('../middleware/tenantMiddleware');
+const { getTenantAdminId, buildScopedFilter } = require('../middleware/tenantMiddleware');
 
 // @desc Get Admin Dashboard Analytics Stats
 // @route GET /api/dashboard/stats
 exports.getDashboardStats = async (req, res, next) => {
   try {
-    const adminId = getTenantAdminId(req.user);
-    if (!adminId) {
-      return res.status(403).json({ success: false, message: 'Restaurant admin access required' });
-    }
-    const adminFilter = { adminId };
+    const adminFilter = buildScopedFilter(req.user, req, res);
+    if (!adminFilter) return;
 
     let dateFilter = {};
     if (req.query.startDate && req.query.endDate) {
@@ -101,11 +98,8 @@ exports.getDashboardStats = async (req, res, next) => {
 // @route GET /api/dashboard/recent-orders
 exports.getRecentOrders = async (req, res, next) => {
   try {
-    const adminId = getTenantAdminId(req.user);
-    if (!adminId) {
-      return res.status(403).json({ success: false, message: 'Restaurant admin access required' });
-    }
-    const adminFilter = { adminId };
+    const adminFilter = buildScopedFilter(req.user, req, res);
+    if (!adminFilter) return;
 
     let dateFilter = {};
     if (req.query.startDate && req.query.endDate) {
@@ -135,11 +129,8 @@ exports.getRecentOrders = async (req, res, next) => {
 // @route GET /api/dashboard/top-items
 exports.getTopItems = async (req, res, next) => {
   try {
-    const adminId = getTenantAdminId(req.user);
-    if (!adminId) {
-      return res.status(403).json({ success: false, message: 'Restaurant admin access required' });
-    }
-    const adminFilter = { adminId };
+    const adminFilter = buildScopedFilter(req.user, req, res);
+    if (!adminFilter) return;
     const topItemsAgg = await Order.aggregate([
       { $match: adminFilter },
       { $unwind: '$items' },

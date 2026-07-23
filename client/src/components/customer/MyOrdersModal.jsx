@@ -19,7 +19,7 @@ function formatOrderTime(createdAt) {
   });
 }
 
-export default function MyOrdersModal({ tableNumber, adminId, customerMobile, onClose, onOrderMore }) {
+export default function MyOrdersModal({ tableNumber, adminId, branchId = '', customerMobile, onClose, onOrderMore }) {
   const navigate = useNavigate();
   const [tableOrders, setTableOrders] = useState([]);
   const [sessionTotal, setSessionTotal] = useState(0);
@@ -59,9 +59,10 @@ export default function MyOrdersModal({ tableNumber, adminId, customerMobile, on
     socket,
     adminId,
     tableNumber,
+    branchId,
     {
       onStatusUpdate: (updatedOrder) => {
-        if (!orderMatchesCustomerSession(updatedOrder, adminId, tableNumber, customerMobile)) {
+        if (!orderMatchesCustomerSession(updatedOrder, adminId, tableNumber, customerMobile, branchId)) {
           return;
         }
         setTableOrders((prev) => {
@@ -71,7 +72,7 @@ export default function MyOrdersModal({ tableNumber, adminId, customerMobile, on
         });
       },
       onPaymentPending: (updatedOrder) => {
-        if (!orderMatchesCustomerSession(updatedOrder, adminId, tableNumber, customerMobile)) {
+        if (!orderMatchesCustomerSession(updatedOrder, adminId, tableNumber, customerMobile, branchId)) {
           return;
         }
         setTableOrders((prev) =>
@@ -80,7 +81,7 @@ export default function MyOrdersModal({ tableNumber, adminId, customerMobile, on
         setStatusToast(`⏳ Payment submitted for Order #${updatedOrder.orderNumber} — waiting for admin approval`);
       },
       onPaymentSuccess: (updatedOrder) => {
-        if (!orderMatchesCustomerSession(updatedOrder, adminId, tableNumber, customerMobile)) {
+        if (!orderMatchesCustomerSession(updatedOrder, adminId, tableNumber, customerMobile, branchId)) {
           return;
         }
         setTableOrders((prev) =>
@@ -95,7 +96,10 @@ export default function MyOrdersModal({ tableNumber, adminId, customerMobile, on
     if (!customerMobile || !adminId) return;
     setLoading(true);
     try {
-      const res = await API.get(`/public/orders/table/${adminId}/${tableNumber}/active`, {
+      const url = branchId
+        ? `/public/orders/table/${adminId}/branch/${branchId}/${tableNumber}/active`
+        : `/public/orders/table/${adminId}/${tableNumber}/active`;
+      const res = await API.get(url, {
         params: { customerMobile }
       });
       if (res.data.success) {

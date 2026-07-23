@@ -5,6 +5,7 @@ import Header from '../../components/common/Header';
 import { useSocket } from '../../context/SocketContext';
 import { prependUniqueOrder, upsertOrder } from '../../utils/orderList';
 import { belongsToTenant } from '../../utils/tenant';
+import { useBranch } from '../../context/BranchContext';
 import { ChefHat, CheckCircle2, Clock, PlayCircle } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
@@ -13,10 +14,11 @@ export default function KitchenScreen() {
   const [loading, setLoading] = useState(true);
   const { socket } = useSocket();
   const { user } = useAuth();
+  const { branchQueryParams, isAllBranches } = useBranch();
 
   useEffect(() => {
     fetchKitchenOrders();
-  }, [user?._id]);
+  }, [user?._id, branchQueryParams.branchId]);
 
   useEffect(() => {
     if (!socket) return;
@@ -47,7 +49,7 @@ export default function KitchenScreen() {
 
   const fetchKitchenOrders = async () => {
     try {
-      const res = await API.get('/orders');
+      const res = await API.get('/orders', { params: branchQueryParams });
       if (res.data.success) {
         // Only show active kitchen orders (New, Confirmed, Preparing, Ready)
         const kitchenOrders = res.data.orders.filter(o =>
@@ -102,6 +104,7 @@ export default function KitchenScreen() {
                       </span>
                       <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
                         #{order.orderNumber} • {new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        {isAllBranches && order.branchName ? ` • ${order.branchName}` : ''}
                       </div>
                     </div>
                     <span className={`badge badge-${order.orderStatus.toLowerCase()}`}>
