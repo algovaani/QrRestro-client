@@ -1,4 +1,4 @@
-import { playOrderChime } from './orderChime';
+import { playOrderChime, markChimeNeedsUnlock } from './orderChime';
 
 export const normalizeMobile = (mobile) =>
   String(mobile || '').replace(/\D/g, '').slice(-10);
@@ -58,7 +58,10 @@ export async function playCustomerOrderAlert(order) {
   }
 
   const played = await playOrderChime();
-  if (!played) return false;
+  if (!played) {
+    markChimeNeedsUnlock();
+    return false;
+  }
 
   recentCustomerAlerts.set(key, now);
   vibrateCustomerAlert();

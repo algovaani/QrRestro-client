@@ -9,6 +9,7 @@ import { useSocket } from '../../context/SocketContext';
 import { useTableRoomSocket } from '../../hooks/useTableRoomSocket';
 import { useLivePolling, useSocketReconnectRefetch } from '../../hooks/useLivePolling';
 import CustomerNotificationToast from '../../components/customer/CustomerNotificationToast';
+import CustomerSoundEnableBar from '../../components/customer/CustomerSoundEnableBar';
 import CustomerBottomNav from '../../components/customer/CustomerBottomNav';
 import MyOrdersModal from '../../components/customer/MyOrdersModal';
 import { getOrderStatusMessage, orderMatchesCustomerSession, playCustomerOrderAlert } from '../../utils/orderNotifications';
@@ -253,6 +254,7 @@ export default function OrderStatusPage() {
         onDismiss={() => setLiveToast('')}
         aboveNav
       />
+      <CustomerSoundEnableBar aboveNav />
 
       {/* Top Navigation Bar */}
       <div style={{ background: '#ffffff', padding: '1rem', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: '1rem', position: 'sticky', top: 0, zIndex: 80 }}>

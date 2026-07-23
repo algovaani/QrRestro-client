@@ -1,6 +1,44 @@
 let audioCtx = null;
 let chimeAudio = null;
 let audioPrimed = false;
+let needsUnlockPrompt = false;
+const primedListeners = new Set();
+
+const notifyPrimedListeners = () => {
+  primedListeners.forEach((fn) => {
+    try {
+      fn(audioPrimed, needsUnlockPrompt);
+    } catch {
+      /* ignore */
+    }
+  });
+};
+
+export const isMobileBrowser = () => {
+  if (typeof navigator === 'undefined') return false;
+  return /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+};
+
+export const isOrderChimePrimed = () => audioPrimed;
+
+export const orderChimeNeedsPrompt = () => needsUnlockPrompt || !audioPrimed;
+
+export const subscribeOrderChimeState = (listener) => {
+  primedListeners.add(listener);
+  listener(audioPrimed, needsUnlockPrompt);
+  return () => primedListeners.delete(listener);
+};
+
+export const markChimeNeedsUnlock = () => {
+  needsUnlockPrompt = true;
+  notifyPrimedListeners();
+};
+
+const setPrimed = (value) => {
+  audioPrimed = value;
+  if (value) needsUnlockPrompt = false;
+  notifyPrimedListeners();
+};
 
 const getAudioContext = () => {
   if (typeof window === 'undefined') return null;
@@ -53,13 +91,87 @@ const makeBeepDataUri = () => {
   return `data:audio/wav;base64,${btoa(binary)}`;
 };
 
+const attachAudioElement = (audio) => {
+  if (!audio || typeof document === 'undefined') return;
+  audio.setAttribute('playsinline', '');
+  audio.setAttribute('webkit-playsinline', '');
+  audio.preload = 'auto';
+  if (!audio.isConnected) {
+    audio.style.display = 'none';
+    document.body.appendChild(audio);
+  }
+};
+
 const getChimeAudio = () => {
   if (typeof window === 'undefined') return null;
   if (!chimeAudio) {
     chimeAudio = new Audio(makeBeepDataUri());
-    chimeAudio.preload = 'auto';
+    attachAudioElement(chimeAudio);
   }
   return chimeAudio;
+};
+
+/** Synchronous play call — must run inside touch/click handler (Android Chrome). */
+const primeHtmlAudioSync = () => {
+  const audio = getChimeAudio();
+  if (!audio) return false;
+
+  try {
+    audio.volume = 0.001;
+    audio.currentTime = 0;
+    const playPromise = audio.play();
+    if (playPromise && typeof playPromise.then === 'function') {
+      playPromise
+        .then(() => {
+          audio.pause();
+          audio.currentTime = 0;
+          audio.volume = 1;
+          setPrimed(true);
+        })
+        .catch(() => {
+          markChimeNeedsUnlock();
+        });
+    }
+    return true;
+  } catch {
+    markChimeNeedsUnlock();
+    return false;
+  }
+};
+
+const primeWebAudioSync = () => {
+  const ctx = getAudioContext();
+  if (!ctx) return;
+  if (ctx.state === 'suspended') {
+    ctx.resume().then(() => setPrimed(true)).catch(() => {});
+  } else if (ctx.state === 'running') {
+    setPrimed(true);
+  }
+};
+
+/** Call during a user gesture so later socket chimes work on mobile. */
+export const unlockOrderChimeAudio = async () => {
+  primeHtmlAudioSync();
+  primeWebAudioSync();
+  return audioPrimed;
+};
+
+/** Explicit tap — plays audible test chime (best for Android Chrome). */
+export const enableOrderChimeWithTestSound = async () => {
+  const audio = getChimeAudio();
+  if (!audio) return false;
+
+  try {
+    attachAudioElement(audio);
+    audio.volume = 1;
+    audio.currentTime = 0;
+    await audio.play();
+    setPrimed(true);
+    return true;
+  } catch {
+    markChimeNeedsUnlock();
+    return false;
+  }
 };
 
 const playOscillatorChime = (ctx) => {
@@ -81,66 +193,53 @@ const playOscillatorChime = (ctx) => {
 };
 
 const playHtmlChime = async () => {
-  const audio = getChimeAudio();
-  if (!audio) return false;
+  const template = getChimeAudio();
+  if (!template) return false;
 
-  audio.currentTime = 0;
+  const audio = template.cloneNode(true);
+  attachAudioElement(audio);
   audio.volume = 1;
-  await audio.play();
-  return true;
-};
-
-/** Call during a user gesture so later socket/poll chimes can play on mobile. */
-export const unlockOrderChimeAudio = async () => {
-  const ctx = getAudioContext();
-  if (ctx) {
-    try {
-      if (ctx.state === 'suspended') {
-        await ctx.resume();
-      }
-      const buffer = ctx.createBuffer(1, 1, 22050);
-      const source = ctx.createBufferSource();
-      source.buffer = buffer;
-      source.connect(ctx.destination);
-      source.start(0);
-      if (ctx.state === 'running') {
-        audioPrimed = true;
-      }
-    } catch {
-      // fall through
-    }
-  }
+  audio.currentTime = 0;
 
   try {
-    const audio = getChimeAudio();
-    if (!audio) return audioPrimed;
-    const prevVolume = audio.volume;
-    audio.volume = 0.001;
-    audio.currentTime = 0;
     await audio.play();
-    audio.pause();
-    audio.currentTime = 0;
-    audio.volume = prevVolume || 1;
-    audioPrimed = true;
+    audio.onended = () => audio.remove();
+    setTimeout(() => {
+      if (audio.isConnected) audio.remove();
+    }, 2000);
+    return true;
   } catch {
-    // expected before first user gesture
+    if (audio.isConnected) audio.remove();
+    return false;
   }
-
-  return audioPrimed;
 };
 
 if (typeof window !== 'undefined') {
   const unlockFromGesture = () => {
-    unlockOrderChimeAudio().catch(() => {});
+    unlockOrderChimeAudio();
   };
 
   window.addEventListener('pointerdown', unlockFromGesture, true);
   window.addEventListener('touchstart', unlockFromGesture, true);
-  window.addEventListener('keydown', unlockFromGesture, true);
+  window.addEventListener('click', unlockFromGesture, true);
+
+  if (isMobileBrowser()) {
+    needsUnlockPrompt = true;
+    notifyPrimedListeners();
+  }
 }
 
 /** @returns {Promise<boolean>} */
 export const playOrderChime = async () => {
+  if (isMobileBrowser()) {
+    try {
+      const htmlPlayed = await playHtmlChime();
+      if (htmlPlayed) return true;
+    } catch {
+      /* try web audio */
+    }
+  }
+
   try {
     const ctx = getAudioContext();
     if (ctx) {
@@ -148,7 +247,7 @@ export const playOrderChime = async () => {
         try {
           await ctx.resume();
         } catch {
-          // resume outside gesture — try HTML fallback
+          /* fall through */
         }
       }
       if (ctx.state === 'running') {
@@ -157,16 +256,14 @@ export const playOrderChime = async () => {
       }
     }
   } catch {
-    // try HTML fallback
+    /* fall through */
   }
 
   try {
-    await playHtmlChime();
-    return true;
+    return await playHtmlChime();
   } catch (e) {
     console.log('Audio playback prevented or unsupported', e);
+    markChimeNeedsUnlock();
     return false;
   }
 };
-
-export const isOrderChimePrimed = () => audioPrimed;

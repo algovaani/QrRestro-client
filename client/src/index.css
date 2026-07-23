@@ -240,7 +240,49 @@ input:focus, select:focus, textarea:focus {
 }
 
 .customer-notifications--above-nav {
+  bottom: calc(132px + env(safe-area-inset-bottom, 0px));
+}
+
+.customer-sound-bar {
+  position: fixed;
+  z-index: 10055;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100%;
+  max-width: 480px;
+  bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
+  padding: 0 max(0.75rem, env(safe-area-inset-right, 0px)) 0 max(0.75rem, env(safe-area-inset-left, 0px));
+  pointer-events: none;
+}
+
+.customer-sound-bar--above-nav {
   bottom: calc(76px + env(safe-area-inset-bottom, 0px));
+}
+
+.customer-sound-bar__btn {
+  pointer-events: auto;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  border: none;
+  border-radius: 14px;
+  background: linear-gradient(135deg, var(--primary) 0%, #ea580c 100%);
+  color: #fff;
+  font-size: 0.85rem;
+  font-weight: 800;
+  box-shadow: 0 8px 24px rgba(234, 88, 12, 0.35);
+  cursor: pointer;
+}
+
+.customer-sound-bar__btn:disabled {
+  opacity: 0.75;
+}
+
+.customer-sound-bar__icon {
+  flex-shrink: 0;
 }
 
 .customer-notification-card {

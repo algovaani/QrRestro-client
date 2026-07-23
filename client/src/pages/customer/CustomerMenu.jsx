@@ -15,6 +15,7 @@ import { useLivePolling, useSocketReconnectRefetch } from '../../hooks/useLivePo
 import { getRestaurantRoom } from '../../utils/socketUrl';
 import CustomerAccountMenu from '../../components/customer/CustomerAccountMenu';
 import CustomerNotificationToast from '../../components/customer/CustomerNotificationToast';
+import CustomerSoundEnableBar from '../../components/customer/CustomerSoundEnableBar';
 import { getOrderStatusMessage, orderMatchesCustomerSession, playCustomerOrderAlert } from '../../utils/orderNotifications';
 import { unlockOrderChimeAudio } from '../../utils/orderChime';
 import { resolveUploadUrl, resolveMenuItemImageUrl } from '../../utils/uploadUrl';
@@ -317,6 +318,7 @@ export default function CustomerMenu() {
         onDismiss={() => setStatusToast('')}
         aboveNav
       />
+      <CustomerSoundEnableBar aboveNav />
 
       {/* Customer Mobile Top Bar */}
       <div className="customer-header">
