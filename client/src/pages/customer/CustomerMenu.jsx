@@ -16,6 +16,7 @@ import { getRestaurantRoom } from '../../utils/socketUrl';
 import CustomerAccountMenu from '../../components/customer/CustomerAccountMenu';
 import CustomerNotificationToast from '../../components/customer/CustomerNotificationToast';
 import { getOrderStatusMessage, orderMatchesCustomerSession, playCustomerOrderAlert } from '../../utils/orderNotifications';
+import { unlockOrderChimeAudio } from '../../utils/orderChime';
 import { resolveUploadUrl, resolveMenuItemImageUrl } from '../../utils/uploadUrl';
 
 export default function CustomerMenu() {
@@ -46,7 +47,7 @@ export default function CustomerMenu() {
   const [instructions, setInstructions] = useState('');
 
   const { initTableCart, bindRestaurantAdmin, addToCart, saveCustomerDetails, customerDetailsComplete, customerMobile, customerName, restaurantAdminId, applyRestaurantSettings } = useCart();
-  const { socket, playOrderChime } = useSocket();
+  const { socket } = useSocket();
 
   useEffect(() => {
     if (tableNumber) {
@@ -86,7 +87,7 @@ export default function CustomerMenu() {
           },
           onStatusUpdate: (updatedOrder) => {
             if (!orderMatchesCustomerSession(updatedOrder, restaurantAdminId, tableNumber, customerMobile)) return;
-            playCustomerOrderAlert(updatedOrder, playOrderChime);
+            void playCustomerOrderAlert(updatedOrder);
             setStatusToast(getOrderStatusMessage(updatedOrder));
             setTableOrders((prev) => {
               const exists = prev.some((o) => String(o._id) === String(updatedOrder._id));
@@ -107,7 +108,7 @@ export default function CustomerMenu() {
           },
           onPaymentSuccess: (updatedOrder) => {
             if (!orderMatchesCustomerSession(updatedOrder, restaurantAdminId, tableNumber, customerMobile)) return;
-            playCustomerOrderAlert(updatedOrder, playOrderChime);
+            void playCustomerOrderAlert(updatedOrder);
             setStatusToast(`💳 Payment approved for Order #${updatedOrder.orderNumber}!`);
             setTableOrders((prev) =>
               prev.map((o) =>
@@ -232,6 +233,7 @@ export default function CustomerMenu() {
 
   const handleAddToCartConfirm = () => {
     if (!selectedItem) return;
+    void unlockOrderChimeAudio();
 
     let price = 0;
     if (selectedSize === 'Half') price = selectedItem.halfPrice;

@@ -30,7 +30,7 @@ export default function MyOrdersModal({ tableNumber, adminId, customerMobile, on
   const [statusToast, setStatusToast] = useState('');
   const [billSendingId, setBillSendingId] = useState(null);
 
-  const { socket, playOrderChime } = useSocket();
+  const { socket } = useSocket();
 
   useEffect(() => {
     if (tableNumber && adminId && customerMobile) {
@@ -67,7 +67,7 @@ export default function MyOrdersModal({ tableNumber, adminId, customerMobile, on
         setTableOrders((prev) =>
           prev.map((o) => (String(o._id) === String(updatedOrder._id) ? updatedOrder : o))
         );
-        playCustomerOrderAlert(updatedOrder, playOrderChime);
+        void playCustomerOrderAlert(updatedOrder);
         setStatusToast(getOrderStatusMessage(updatedOrder));
       },
       onPaymentPending: (updatedOrder) => {
@@ -86,7 +86,7 @@ export default function MyOrdersModal({ tableNumber, adminId, customerMobile, on
         setTableOrders((prev) =>
           prev.map((o) => (String(o._id) === String(updatedOrder._id) ? updatedOrder : o))
         );
-        playCustomerOrderAlert(updatedOrder, playOrderChime);
+        void playCustomerOrderAlert(updatedOrder);
         setStatusToast(`💳 Payment approved for Order #${updatedOrder.orderNumber}!`);
       }
     }

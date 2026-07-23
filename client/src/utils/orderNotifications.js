@@ -1,3 +1,5 @@
+import { playOrderChime } from './orderChime';
+
 export const normalizeMobile = (mobile) =>
   String(mobile || '').replace(/\D/g, '').slice(-10);
 
@@ -40,12 +42,12 @@ export const vibrateCustomerAlert = () => {
   }
 };
 
-const CUSTOMER_ALERT_COOLDOWN_MS = 3000;
+const CUSTOMER_ALERT_COOLDOWN_MS = 2500;
 const recentCustomerAlerts = new Map();
 
-/** Prevent duplicate chime/vibrate for the same order update (socket + poll, or menu + modal). */
-export function playCustomerOrderAlert(order, playOrderChime) {
-  if (!order || typeof playOrderChime !== 'function') return false;
+/** Prevent duplicate chime/vibrate for the same order update (socket + poll). */
+export async function playCustomerOrderAlert(order) {
+  if (!order) return false;
 
   const orderId = String(order._id || order.orderNumber || '');
   const key = `${orderId}:${order.orderStatus || ''}:${order.paymentStatus || ''}`;
@@ -54,9 +56,11 @@ export function playCustomerOrderAlert(order, playOrderChime) {
   if (last != null && now - last < CUSTOMER_ALERT_COOLDOWN_MS) {
     return false;
   }
-  recentCustomerAlerts.set(key, now);
 
-  playOrderChime();
+  const played = await playOrderChime();
+  if (!played) return false;
+
+  recentCustomerAlerts.set(key, now);
   vibrateCustomerAlert();
   return true;
 }

@@ -60,7 +60,7 @@ export const SocketProvider = ({ children }) => {
 
     const handleNewOrder = (order) => {
       if (!belongsToTenant(order)) return;
-      playOrderChime();
+      playOrderChime().catch(() => {});
       vibrateAlert();
       const newNotif = {
         id: `${order._id || order.orderNumber}_${Date.now()}`,
@@ -80,7 +80,7 @@ export const SocketProvider = ({ children }) => {
 
     const handlePaymentPending = (order) => {
       if (!belongsToTenant(order)) return;
-      playOrderChime();
+      playOrderChime().catch(() => {});
       vibrateAlert();
       const newNotif = {
         id: `${order._id || order.orderNumber}_pending_${Date.now()}`,
@@ -100,7 +100,7 @@ export const SocketProvider = ({ children }) => {
 
     const handlePaymentSuccess = (order) => {
       if (!belongsToTenant(order)) return;
-      playOrderChime();
+      playOrderChime().catch(() => {});
       vibrateAlert();
       const newNotif = {
         id: `${order._id || order.orderNumber}_pay_${Date.now()}`,
@@ -124,7 +124,7 @@ export const SocketProvider = ({ children }) => {
 
     const handleOrderRating = (order) => {
       if (!belongsToTenant(order)) return;
-      playOrderChime();
+      playOrderChime().catch(() => {});
       vibrateAlert();
       const reviewNote = order.review ? ` — "${order.review}"` : '';
       const newNotif = {
@@ -146,7 +146,7 @@ export const SocketProvider = ({ children }) => {
     const handleMembershipOfferSent = (data) => {
       const { user: currentUser, tenantId: tid, updateUser: patchUser } = authRef.current;
       if (currentUser?.role !== 'Admin' || !tid || String(data.adminId) !== String(tid)) return;
-      playOrderChime();
+      playOrderChime().catch(() => {});
       vibrateAlert();
       patchUser?.({
         membershipOfferSent: true,
@@ -167,7 +167,7 @@ export const SocketProvider = ({ children }) => {
     const handleMembershipActivated = (data) => {
       const { user: currentUser, tenantId: tid, updateUser: patchUser } = authRef.current;
       if (currentUser?.role !== 'Admin' || !tid || String(data.adminId) !== String(tid)) return;
-      playOrderChime();
+      playOrderChime().catch(() => {});
       vibrateAlert();
       patchUser?.({
         planName: data.planName,
@@ -195,7 +195,7 @@ export const SocketProvider = ({ children }) => {
     const handleMembershipRenewalRequest = (data) => {
       const { user: currentUser } = authRef.current;
       if (currentUser?.role !== 'SuperAdmin') return;
-      playOrderChime();
+      playOrderChime().catch(() => {});
       vibrateAlert();
       const proofNote = data.renewalPaymentProof ? ' (payment screenshot attached)' : '';
       const newNotif = {
@@ -213,7 +213,7 @@ export const SocketProvider = ({ children }) => {
     const handleMembershipRenewalRejected = (data) => {
       const { user: currentUser, tenantId: tid, updateUser: patchUser } = authRef.current;
       if (currentUser?.role !== 'Admin' || !tid || String(data.adminId) !== String(tid)) return;
-      playOrderChime();
+      playOrderChime().catch(() => {});
       vibrateAlert();
       patchUser?.({
         renewalRequested: false,
@@ -246,7 +246,7 @@ export const SocketProvider = ({ children }) => {
       });
 
       if (!data.isActive) {
-        playOrderChime();
+        playOrderChime().catch(() => {});
         vibrateAlert();
         const newNotif = {
           id: `admin_deactivated_${Date.now()}`,

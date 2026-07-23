@@ -9,7 +9,7 @@ export default function CustomerWelcome({ tableNumber, restaurantName, onSubmit 
   const handleSubmit = (e) => {
     e.preventDefault();
     setErrorMsg('');
-    unlockOrderChimeAudio();
+    unlockOrderChimeAudio().catch(() => {});
 
     if (!mobile || mobile.length !== 10) {
       setErrorMsg('Please enter a valid 10-digit mobile number.');

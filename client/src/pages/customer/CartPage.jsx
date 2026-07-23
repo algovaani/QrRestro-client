@@ -131,7 +131,7 @@ export default function CartPage() {
       return;
     }
 
-    unlockOrderChimeAudio();
+    unlockOrderChimeAudio().catch(() => {});
     setLoading(true);
 
     try {

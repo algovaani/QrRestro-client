@@ -62,7 +62,7 @@ export default function OrderStatusPage() {
     });
   };
 
-  const { socket, playOrderChime } = useSocket();
+  const { socket } = useSocket();
   const lastStatusRef = useRef(null);
 
   const fetchStatus = useCallback(async () => {
@@ -80,7 +80,7 @@ export default function OrderStatusPage() {
           setRatingSubmitted(true);
         }
         if (prevStatus && prevStatus !== nextOrder.orderStatus) {
-          playCustomerOrderAlert(nextOrder, playOrderChime);
+          void playCustomerOrderAlert(nextOrder);
           setLiveToast(getOrderStatusMessage(nextOrder));
         }
       }
@@ -89,7 +89,7 @@ export default function OrderStatusPage() {
     } finally {
       setLoading(false);
     }
-  }, [orderNumber, playOrderChime]);
+  }, [orderNumber]);
 
   useEffect(() => {
     fetchStatus();
@@ -150,7 +150,7 @@ export default function OrderStatusPage() {
               return;
             }
             setOrder(updatedOrder);
-            playCustomerOrderAlert(updatedOrder, playOrderChime);
+            void playCustomerOrderAlert(updatedOrder);
             setLiveToast(`💳 Payment approved for Order #${updatedOrder.orderNumber}!`);
           },
           onStatusUpdate: (updatedOrder) => {
@@ -176,7 +176,7 @@ export default function OrderStatusPage() {
               setLiveToast(`Payment for Order #${updatedOrder.orderNumber} was not approved. Please try again.`);
               return;
             }
-            playCustomerOrderAlert(updatedOrder, playOrderChime);
+            void playCustomerOrderAlert(updatedOrder);
             setLiveToast(getOrderStatusMessage(updatedOrder));
           }
         }
