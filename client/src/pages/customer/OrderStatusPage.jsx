@@ -11,7 +11,7 @@ import { useLivePolling, useSocketReconnectRefetch } from '../../hooks/useLivePo
 import CustomerNotificationToast from '../../components/customer/CustomerNotificationToast';
 import CustomerBottomNav from '../../components/customer/CustomerBottomNav';
 import MyOrdersModal from '../../components/customer/MyOrdersModal';
-import { getOrderStatusMessage, mobilesMatch, vibrateCustomerAlert } from '../../utils/orderNotifications';
+import { getOrderStatusMessage, mobilesMatch, playCustomerOrderAlert } from '../../utils/orderNotifications';
 import { countReviewWords, MAX_REVIEW_WORDS, sanitizeReviewForSave, isReviewWithinWordLimit } from '../../utils/reviewText';
 import UPIPaymentModal from '../../components/customer/UPIPaymentModal';
 import { ArrowLeft, CheckCircle2, Clock, ChefHat, Sparkles, UtensilsCrossed, QrCode, Star, Send } from 'lucide-react';
@@ -80,8 +80,7 @@ export default function OrderStatusPage() {
           setRatingSubmitted(true);
         }
         if (prevStatus && prevStatus !== nextOrder.orderStatus) {
-          playOrderChime();
-          vibrateCustomerAlert();
+          playCustomerOrderAlert(nextOrder, playOrderChime);
           setLiveToast(getOrderStatusMessage(nextOrder));
         }
       }
@@ -129,8 +128,7 @@ export default function OrderStatusPage() {
               return;
             }
             setOrder(updatedOrder);
-            playOrderChime();
-            vibrateCustomerAlert();
+            playCustomerOrderAlert(updatedOrder, playOrderChime);
             setLiveToast(`💳 Payment approved for Order #${updatedOrder.orderNumber}!`);
           },
           onStatusUpdate: (updatedOrder) => {
@@ -145,8 +143,7 @@ export default function OrderStatusPage() {
               setLiveToast(`Payment for Order #${updatedOrder.orderNumber} was not approved. Please try again.`);
               return;
             }
-            playOrderChime();
-            vibrateCustomerAlert();
+            playCustomerOrderAlert(updatedOrder, playOrderChime);
             setLiveToast(getOrderStatusMessage(updatedOrder));
           }
         }

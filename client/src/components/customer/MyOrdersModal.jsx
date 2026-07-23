@@ -4,7 +4,7 @@ import API from '../../services/api';
 import { useSocket } from '../../context/SocketContext';
 import { useTableRoomSocket } from '../../hooks/useTableRoomSocket';
 import CustomerNotificationToast from './CustomerNotificationToast';
-import { getOrderStatusMessage, mobilesMatch, vibrateCustomerAlert } from '../../utils/orderNotifications';
+import { getOrderStatusMessage, mobilesMatch, playCustomerOrderAlert } from '../../utils/orderNotifications';
 import { sendOrderBillOnWhatsApp } from '../../utils/billShare';
 import UPIPaymentModal from './UPIPaymentModal';
 import { X, ChevronDown, ChevronUp, QrCode, MessageSquare, Utensils, Loader2, ExternalLink } from 'lucide-react';
@@ -70,8 +70,7 @@ export default function MyOrdersModal({ tableNumber, adminId, customerMobile, on
         setTableOrders((prev) =>
           prev.map((o) => (String(o._id) === String(updatedOrder._id) ? updatedOrder : o))
         );
-        playOrderChime();
-        vibrateCustomerAlert();
+        playCustomerOrderAlert(updatedOrder, playOrderChime);
         setStatusToast(getOrderStatusMessage(updatedOrder));
       },
       onPaymentPending: (updatedOrder) => {
@@ -96,8 +95,7 @@ export default function MyOrdersModal({ tableNumber, adminId, customerMobile, on
         setTableOrders((prev) =>
           prev.map((o) => (String(o._id) === String(updatedOrder._id) ? updatedOrder : o))
         );
-        playOrderChime();
-        vibrateCustomerAlert();
+        playCustomerOrderAlert(updatedOrder, playOrderChime);
         setStatusToast(`💳 Payment approved for Order #${updatedOrder.orderNumber}!`);
       }
     }

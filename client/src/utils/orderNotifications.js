@@ -26,3 +26,24 @@ export const vibrateCustomerAlert = () => {
     navigator.vibrate([120, 60, 120]);
   }
 };
+
+const CUSTOMER_ALERT_COOLDOWN_MS = 3000;
+const recentCustomerAlerts = new Map();
+
+/** Prevent duplicate chime/vibrate for the same order update (socket + poll, or menu + modal). */
+export function playCustomerOrderAlert(order, playOrderChime) {
+  if (!order || typeof playOrderChime !== 'function') return false;
+
+  const orderId = String(order._id || order.orderNumber || '');
+  const key = `${orderId}:${order.orderStatus || ''}:${order.paymentStatus || ''}`;
+  const now = Date.now();
+  const last = recentCustomerAlerts.get(key);
+  if (last != null && now - last < CUSTOMER_ALERT_COOLDOWN_MS) {
+    return false;
+  }
+  recentCustomerAlerts.set(key, now);
+
+  playOrderChime();
+  vibrateCustomerAlert();
+  return true;
+}

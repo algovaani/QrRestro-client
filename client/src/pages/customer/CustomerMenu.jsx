@@ -15,7 +15,7 @@ import { useLivePolling, useSocketReconnectRefetch } from '../../hooks/useLivePo
 import { getRestaurantRoom } from '../../utils/socketUrl';
 import CustomerAccountMenu from '../../components/customer/CustomerAccountMenu';
 import CustomerNotificationToast from '../../components/customer/CustomerNotificationToast';
-import { getOrderStatusMessage, mobilesMatch, vibrateCustomerAlert } from '../../utils/orderNotifications';
+import { getOrderStatusMessage, mobilesMatch, playCustomerOrderAlert } from '../../utils/orderNotifications';
 import { resolveUploadUrl, resolveMenuItemImageUrl } from '../../utils/uploadUrl';
 
 export default function CustomerMenu() {
@@ -86,8 +86,7 @@ export default function CustomerMenu() {
           },
           onStatusUpdate: (updatedOrder) => {
             if (!mobilesMatch(updatedOrder.customerMobile, customerMobile)) return;
-            playOrderChime();
-            vibrateCustomerAlert();
+            playCustomerOrderAlert(updatedOrder, playOrderChime);
             setStatusToast(getOrderStatusMessage(updatedOrder));
             setTableOrders((prev) => {
               const exists = prev.some((o) => String(o._id) === String(updatedOrder._id));
@@ -108,8 +107,7 @@ export default function CustomerMenu() {
           },
           onPaymentSuccess: (updatedOrder) => {
             if (!mobilesMatch(updatedOrder.customerMobile, customerMobile)) return;
-            playOrderChime();
-            vibrateCustomerAlert();
+            playCustomerOrderAlert(updatedOrder, playOrderChime);
             setStatusToast(`💳 Payment approved for Order #${updatedOrder.orderNumber}!`);
             setTableOrders((prev) =>
               prev.map((o) =>
