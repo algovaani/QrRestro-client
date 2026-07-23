@@ -3,7 +3,7 @@ import API from '../../services/api';
 import Sidebar from '../../components/common/Sidebar';
 import Header from '../../components/common/Header';
 import { Plus, Search, Edit2, Trash2, Star, ArrowUpDown, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
-import { resolveUploadUrl } from '../../utils/uploadUrl';
+import { resolveUploadUrl, resolveMenuItemImageUrl } from '../../utils/uploadUrl';
 
 export default function MenuPage() {
   const [menuItems, setMenuItems] = useState([]);
@@ -183,15 +183,7 @@ export default function MenuPage() {
     setPreviewImage(URL.createObjectURL(file));
   };
 
-  const getItemImageSrc = (item) => {
-    if (!item?.image) return null;
-    const base = resolveUploadUrl(item.image);
-    if (!base) return null;
-    const version = item.updatedAt ? new Date(item.updatedAt).getTime() : '';
-    if (!version) return base;
-    const joiner = base.includes('?') ? '&' : '?';
-    return `${base}${joiner}v=${version}`;
-  };
+  const getItemImageSrc = (item) => resolveMenuItemImageUrl(item) || (item?.image ? resolveUploadUrl(item.image) : null);
 
   const handleSubmit = async (e) => {
     e.preventDefault();

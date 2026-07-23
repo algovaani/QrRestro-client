@@ -45,6 +45,10 @@ body.admin-notifications-panel-open {
   overflow: hidden;
 }
 
+body.customer-account-open {
+  overflow: hidden;
+}
+
 a {
   color: inherit;
   text-decoration: none;
@@ -1333,6 +1337,18 @@ input:focus, select:focus, textarea:focus {
   cursor: pointer;
 }
 
+.customer-header__row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.65rem;
+}
+
+.customer-header__brand {
+  flex: 1;
+  min-width: 0;
+}
+
 .customer-header-actions {
   display: flex;
   align-items: center;
@@ -1349,6 +1365,14 @@ input:focus, select:focus, textarea:focus {
   font-weight: 800;
   border: 1px solid #ffd6bc;
   white-space: nowrap;
+}
+
+.customer-header-user-line {
+  display: block;
+  margin-top: 0.2rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--primary);
 }
 
 .customer-account-trigger {

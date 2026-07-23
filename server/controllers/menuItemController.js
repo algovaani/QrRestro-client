@@ -16,7 +16,8 @@ const hydrateMenuItemImages = async (items) => {
       if (
         item.imageData ||
         item.image?.startsWith('/uploads/') ||
-        item.image?.startsWith('data:')
+        item.image?.startsWith('data:') ||
+        (!item.image && item.imageData)
       ) {
         await ensureMenuItemImageStored(item);
       } else if (item.imageData && !String(item.image || '').includes('/photo')) {

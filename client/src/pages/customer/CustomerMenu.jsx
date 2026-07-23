@@ -16,7 +16,7 @@ import { getRestaurantRoom } from '../../utils/socketUrl';
 import CustomerAccountMenu from '../../components/customer/CustomerAccountMenu';
 import CustomerNotificationToast from '../../components/customer/CustomerNotificationToast';
 import { getOrderStatusMessage, mobilesMatch, vibrateCustomerAlert } from '../../utils/orderNotifications';
-import { resolveUploadUrl } from '../../utils/uploadUrl';
+import { resolveUploadUrl, resolveMenuItemImageUrl } from '../../utils/uploadUrl';
 
 export default function CustomerMenu() {
   const { adminId: routeAdminId, tableNumber } = useParams();
@@ -45,7 +45,7 @@ export default function CustomerMenu() {
   const [quantity, setQuantity] = useState(1);
   const [instructions, setInstructions] = useState('');
 
-  const { initTableCart, bindRestaurantAdmin, addToCart, saveCustomerDetails, customerDetailsComplete, customerMobile, restaurantAdminId, applyRestaurantSettings } = useCart();
+  const { initTableCart, bindRestaurantAdmin, addToCart, saveCustomerDetails, customerDetailsComplete, customerMobile, customerName, restaurantAdminId, applyRestaurantSettings } = useCart();
   const { socket, playOrderChime } = useSocket();
 
   useEffect(() => {
@@ -320,13 +320,18 @@ export default function CustomerMenu() {
 
       {/* Customer Mobile Top Bar */}
       <div className="customer-header">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div>
+        <div className="customer-header__row">
+          <div className="customer-header__brand">
             <h1 style={{ fontSize: '1.15rem', fontWeight: '800', color: 'var(--secondary)' }}>
               {tableInfo?.settings?.restaurantName || 'Royal Spice'}
             </h1>
             <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
               Digital QR Menu
+            </span>
+            <span className="customer-header-user-line">
+              {customerName?.trim()
+                ? `Hi, ${customerName.trim()} • ${customerMobile}`
+                : `Logged in • ${customerMobile}`}
             </span>
           </div>
 
@@ -334,7 +339,10 @@ export default function CustomerMenu() {
             <div className="customer-table-badge">
               Table {tableNumber}
             </div>
-            <CustomerAccountMenu tableNumber={tableNumber} />
+            <CustomerAccountMenu
+              tableNumber={tableNumber}
+              onSaved={() => setStatusToast('Profile updated successfully')}
+            />
           </div>
         </div>
 
@@ -451,9 +459,16 @@ export default function CustomerMenu() {
                   }}
                 >
                   <img
-                    src={resolveUploadUrl(item.image)}
+                    src={resolveMenuItemImageUrl(item)}
                     alt={item.name}
                     draggable={false}
+                    loading="lazy"
+                    onError={(e) => {
+                      const fallback = resolveUploadUrl(item.image);
+                      if (fallback && e.currentTarget.src !== fallback) {
+                        e.currentTarget.src = fallback;
+                      }
+                    }}
                     style={{ width: '85px', height: '85px', borderRadius: '10px', objectFit: 'cover', display: 'block', pointerEvents: 'none' }}
                   />
                 </button>
@@ -537,7 +552,7 @@ export default function CustomerMenu() {
 
             <div className="menu-image-preview-media">
               <img
-                src={resolveUploadUrl(imagePreview.image)}
+                src={resolveMenuItemImageUrl(imagePreview) || resolveUploadUrl(imagePreview.image)}
                 alt={imagePreview.name}
               />
             </div>
@@ -592,7 +607,7 @@ export default function CustomerMenu() {
                 }}
               >
                 <img
-                  src={resolveUploadUrl(selectedItem.image)}
+                  src={resolveMenuItemImageUrl(selectedItem) || resolveUploadUrl(selectedItem.image)}
                   alt={selectedItem.name}
                   draggable={false}
                   style={{ width: '100%', maxHeight: '220px', objectFit: 'cover', display: 'block', pointerEvents: 'none' }}

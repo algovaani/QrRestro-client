@@ -1,4 +1,5 @@
-const STORAGE_KEY = 'customer_phone_by_restaurant';
+/** Per-table customer profile — same mobile on Table 2 is a separate session from Table 1 */
+const STORAGE_KEY = 'customer_profile_by_table';
 
 function readAll() {
   try {
@@ -12,17 +13,26 @@ function writeAll(data) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
 }
 
-export function getSavedCustomerMobile(adminId) {
-  return getSavedCustomerProfile(adminId).mobile;
+function tableKey(adminId, tableNumber) {
+  if (!adminId || tableNumber === undefined || tableNumber === null || tableNumber === '') {
+    return '';
+  }
+  return `${String(adminId)}::${String(tableNumber)}`;
 }
 
-export function getSavedCustomerName(adminId) {
-  return getSavedCustomerProfile(adminId).name;
+export function getSavedCustomerMobile(adminId, tableNumber) {
+  return getSavedCustomerProfile(adminId, tableNumber).mobile;
 }
 
-export function getSavedCustomerProfile(adminId) {
-  if (!adminId) return { mobile: '', name: '' };
-  const entry = readAll()[String(adminId)];
+export function getSavedCustomerName(adminId, tableNumber) {
+  return getSavedCustomerProfile(adminId, tableNumber).name;
+}
+
+export function getSavedCustomerProfile(adminId, tableNumber) {
+  const key = tableKey(adminId, tableNumber);
+  if (!key) return { mobile: '', name: '' };
+
+  const entry = readAll()[key];
   const mobile = entry?.mobile ? String(entry.mobile).trim() : '';
   const name = entry?.name ? String(entry.name).trim() : '';
   return {
@@ -31,11 +41,13 @@ export function getSavedCustomerProfile(adminId) {
   };
 }
 
-export function saveCustomerMobileLogin(adminId, mobile, name = '') {
-  if (!adminId || !/^\d{10}$/.test(String(mobile).trim())) return;
+export function saveCustomerMobileLogin(adminId, tableNumber, mobile, name = '') {
+  const key = tableKey(adminId, tableNumber);
+  if (!key || !/^\d{10}$/.test(String(mobile).trim())) return;
+
   const all = readAll();
-  const prev = all[String(adminId)] || {};
-  all[String(adminId)] = {
+  const prev = all[key] || {};
+  all[key] = {
     mobile: String(mobile).trim(),
     name: String(name || prev.name || '').trim(),
     savedAt: Date.now()
@@ -43,9 +55,11 @@ export function saveCustomerMobileLogin(adminId, mobile, name = '') {
   writeAll(all);
 }
 
-export function clearCustomerMobileLogin(adminId) {
-  if (!adminId) return;
+/** Clears saved login for this table only (not other tables). */
+export function clearCustomerMobileLogin(adminId, tableNumber) {
+  const key = tableKey(adminId, tableNumber);
+  if (!key) return;
   const all = readAll();
-  delete all[String(adminId)];
+  delete all[key];
   writeAll(all);
 }

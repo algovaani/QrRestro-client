@@ -110,6 +110,10 @@ export const CartProvider = ({ children }) => {
   };
 
   const initTableCart = (tNum, adminId = '') => {
+    const prevScope =
+      restaurantAdminId && tableNumber ? `${restaurantAdminId}::${tableNumber}` : '';
+    const nextScope = adminId && tNum ? `${adminId}::${tNum}` : '';
+
     setTableNumber(tNum);
     if (adminId) {
       setRestaurantAdminId(adminId);
@@ -119,6 +123,10 @@ export const CartProvider = ({ children }) => {
     }
     if (!tNum || !adminId) return;
 
+    if (prevScope && nextScope && prevScope !== nextScope) {
+      setSpecialNote('');
+    }
+
     let sessionId = sessionStorage.getItem(getTableSessionKey(adminId, tNum));
     if (!sessionId) {
       sessionId = startNewCustomerSession(adminId, tNum);
@@ -127,7 +135,7 @@ export const CartProvider = ({ children }) => {
       loadSessionData(adminId, tNum, sessionId);
     }
 
-    const savedProfile = getSavedCustomerProfile(adminId);
+    const savedProfile = getSavedCustomerProfile(adminId, tNum);
     const savedMobile = savedProfile.mobile;
     if (savedMobile) {
       const customerKey = getCustomerStorageKey(adminId, tNum, sessionId);
@@ -167,17 +175,22 @@ export const CartProvider = ({ children }) => {
     const trimmedMobile = String(mobile || '').trim();
     setCustomerMobile(trimmedMobile);
     if (tableNumber && restaurantAdminId && trimmedMobile.length === 10) {
-      const savedName = getSavedCustomerProfile(restaurantAdminId).name;
-      if (savedName && !customerName.trim()) {
-        setCustomerName(savedName);
+      const tableProfile = getSavedCustomerProfile(restaurantAdminId, tableNumber);
+      if (tableProfile.name && !customerName.trim()) {
+        setCustomerName(tableProfile.name);
       }
-      saveCustomerMobileLogin(restaurantAdminId, trimmedMobile, savedName || customerName);
+      saveCustomerMobileLogin(
+        restaurantAdminId,
+        tableNumber,
+        trimmedMobile,
+        tableProfile.name || customerName
+      );
       const sessionId = customerSessionId || sessionStorage.getItem(getTableSessionKey(restaurantAdminId, tableNumber));
       if (sessionId) {
         sessionStorage.setItem(
           getCustomerStorageKey(restaurantAdminId, tableNumber, sessionId),
           JSON.stringify({
-            customerName: (savedName || customerName || '').trim(),
+            customerName: (tableProfile.name || customerName || '').trim(),
             customerMobile: trimmedMobile
           })
         );
@@ -189,7 +202,7 @@ export const CartProvider = ({ children }) => {
     const trimmedName = String(name || '').trim();
     setCustomerName(trimmedName);
     if (tableNumber && restaurantAdminId && customerMobile.trim().length === 10) {
-      saveCustomerMobileLogin(restaurantAdminId, customerMobile.trim(), trimmedName);
+      saveCustomerMobileLogin(restaurantAdminId, tableNumber, customerMobile.trim(), trimmedName);
       const sessionId = customerSessionId || sessionStorage.getItem(getTableSessionKey(restaurantAdminId, tableNumber));
       if (sessionId) {
         sessionStorage.setItem(
@@ -215,7 +228,7 @@ export const CartProvider = ({ children }) => {
     setCustomerMobile(trimmedMobile);
 
     if (tableNumber && restaurantAdminId) {
-      saveCustomerMobileLogin(restaurantAdminId, trimmedMobile, trimmedName);
+      saveCustomerMobileLogin(restaurantAdminId, tableNumber, trimmedMobile, trimmedName);
       const sessionId = customerSessionId || sessionStorage.getItem(getTableSessionKey(restaurantAdminId, tableNumber));
       if (sessionId) {
         sessionStorage.setItem(
@@ -229,8 +242,8 @@ export const CartProvider = ({ children }) => {
   };
 
   const logoutCustomer = () => {
-    if (restaurantAdminId) {
-      clearCustomerMobileLogin(restaurantAdminId);
+    if (restaurantAdminId && tableNumber) {
+      clearCustomerMobileLogin(restaurantAdminId, tableNumber);
     }
     resetCustomerDetails();
   };
