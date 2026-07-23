@@ -4,7 +4,11 @@ import { prepareQrForWhatsApp, getShareQrHint, isMobileDevice, openWhatsApp, bui
 import { sendOrderBillOnWhatsApp } from '../../utils/billShare';
 import { X, CheckCircle, ShieldCheck, Loader2, MessageSquare, Clock, AlertCircle, QrCode, FileText } from 'lucide-react';
 
-export default function UPIPaymentModal({ orderNumber, onClose, onSuccess }) {
+export default function UPIPaymentModal({ orderNumber, orderNumbers, onClose, onSuccess }) {
+  const numbers = (orderNumbers?.length ? orderNumbers : orderNumber ? [orderNumber] : []);
+  const isCombined = numbers.length > 1;
+  const primaryOrderNumber = numbers[0] || '';
+
   const [loading, setLoading] = useState(true);
   const [qrData, setQrData] = useState(null);
   const [submitting, setSubmitting] = useState(false);
@@ -19,8 +23,9 @@ export default function UPIPaymentModal({ orderNumber, onClose, onSuccess }) {
   const [error, setError] = useState('');
 
   const loadPaidOrder = useCallback(async () => {
+    if (!primaryOrderNumber) return;
     try {
-      const res = await API.get(`/public/orders/${orderNumber}/status`);
+      const res = await API.get(`/public/orders/${primaryOrderNumber}/status`);
       if (res.data.success) {
         setPaidOrder(res.data.order);
         setBillMeta({
@@ -34,11 +39,11 @@ export default function UPIPaymentModal({ orderNumber, onClose, onSuccess }) {
     } catch {
       setError('Could not load paid order details.');
     }
-  }, [orderNumber, qrData?.restaurantName]);
+  }, [primaryOrderNumber, qrData?.restaurantName]);
 
   useEffect(() => {
     fetchDynamicUPIQR();
-  }, [orderNumber]);
+  }, [primaryOrderNumber, isCombined, numbers.join(',')]);
 
   useEffect(() => {
     if (paid) {
@@ -47,10 +52,19 @@ export default function UPIPaymentModal({ orderNumber, onClose, onSuccess }) {
   }, [paid, loadPaidOrder]);
 
   const fetchDynamicUPIQR = async () => {
+    if (!numbers.length) {
+      setError('No order selected for payment.');
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     setError('');
     try {
-      const res = await API.get(`/payment/upi-qr/${orderNumber}`);
+      const res = isCombined
+        ? await API.post('/payment/upi-qr/combined', { orderNumbers: numbers })
+        : await API.get(`/payment/upi-qr/${primaryOrderNumber}`);
+
       if (res.data.success) {
         setQrData(res.data);
         if (res.data.paymentStatus === 'Paid') {
@@ -70,15 +84,20 @@ export default function UPIPaymentModal({ orderNumber, onClose, onSuccess }) {
     setSubmitting(true);
     setError('');
     try {
-      const res = await API.post('/payment/verify', {
-        orderNumber,
-        paymentMethod: 'UPI'
-      });
+      const res = isCombined
+        ? await API.post('/payment/verify-combined', {
+            orderNumbers: numbers,
+            paymentMethod: 'UPI'
+          })
+        : await API.post('/payment/verify', {
+            orderNumber: primaryOrderNumber,
+            paymentMethod: 'UPI'
+          });
 
       if (res.data.success) {
         if (res.data.pending || res.data.order?.paymentStatus === 'Pending') {
           setPending(true);
-          if (onSuccess) onSuccess(res.data.order);
+          if (onSuccess) onSuccess(res.data.order, res.data);
         } else {
           setPaid(true);
           if (res.data.order) {
@@ -87,7 +106,7 @@ export default function UPIPaymentModal({ orderNumber, onClose, onSuccess }) {
           if (res.data.bill) {
             setBillMeta(res.data.bill);
           }
-          if (onSuccess) onSuccess(res.data.order);
+          if (onSuccess) onSuccess(res.data.order, res.data);
         }
       }
     } catch (err) {
@@ -129,7 +148,7 @@ export default function UPIPaymentModal({ orderNumber, onClose, onSuccess }) {
       const shareMessage = buildPaymentQrShareMessage(qrData);
       const result = await prepareQrForWhatsApp({
         qrDataUrl: qrData.qrCodeDataUrl,
-        filename: `payment-${qrData.orderNumber}.png`,
+        filename: `payment-${isCombined ? 'combined' : qrData.orderNumber}.png`,
         message: shareMessage
       });
       const hint = getShareQrHint(result);
@@ -184,7 +203,9 @@ export default function UPIPaymentModal({ orderNumber, onClose, onSuccess }) {
             </div>
             <h3 style={{ fontSize: '1.3rem', fontWeight: '800', color: 'var(--secondary)' }}>Payment Approved! 🎉</h3>
             <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginTop: '0.25rem', marginBottom: '1.5rem' }}>
-              Order #{orderNumber} is <strong>PAID</strong> and sent to kitchen.
+              {isCombined
+                ? <>All {numbers.length} orders are <strong>PAID</strong>.</>
+                : <>Order #{primaryOrderNumber} is <strong>PAID</strong> and sent to kitchen.</>}
             </p>
 
             {paidOrder ? (
@@ -244,7 +265,9 @@ export default function UPIPaymentModal({ orderNumber, onClose, onSuccess }) {
             </div>
             <h3 style={{ fontSize: '1.2rem', fontWeight: '800', color: 'var(--secondary)' }}>Approval Pending ⏳</h3>
             <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginTop: '0.35rem', marginBottom: '1rem', lineHeight: 1.5 }}>
-              Payment submitted for order #{orderNumber}. The admin will verify and approve it.
+              {isCombined
+                ? `Payment submitted for ${numbers.length} orders. The admin will verify and approve them.`
+                : `Payment submitted for order #${primaryOrderNumber}. The admin will verify and approve it.`}
             </p>
             <button type="button" onClick={onClose} className="btn btn-secondary" style={{ width: '100%', borderRadius: '12px' }}>
               OK, Got It
@@ -258,7 +281,16 @@ export default function UPIPaymentModal({ orderNumber, onClose, onSuccess }) {
                 ₹{qrData.grandTotal}
               </div>
               <div style={{ fontSize: '0.75rem', color: 'var(--secondary)', fontWeight: '600', marginTop: '0.2rem' }}>
-                Order #{qrData.orderNumber} • Table {qrData.tableNumber}
+                {isCombined ? (
+                  <>
+                    {qrData.orderCount} Orders Combined • Table {qrData.tableNumber}
+                    <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', fontWeight: '500', marginTop: '0.25rem' }}>
+                      {(qrData.orderNumbers || numbers).join(' • ')}
+                    </div>
+                  </>
+                ) : (
+                  <>Order #{qrData.orderNumber} • Table {qrData.tableNumber}</>
+                )}
               </div>
             </div>
 

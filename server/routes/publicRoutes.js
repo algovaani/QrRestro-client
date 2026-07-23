@@ -13,8 +13,10 @@ const {
   getOrderBillLink,
   getOrderBillPdf
 } = require('../controllers/publicController');
+const { getMenuItemPhoto } = require('../controllers/menuItemController');
 
 router.get('/membership-plans', getPublicMembershipPlans);
+router.get('/menu-item/:id/photo', getMenuItemPhoto);
 router.get('/menu/:adminId/table/:tableNumber', getPublicMenuByAdmin);
 router.get('/table/:adminId/:tableNumber', getPublicMenuByAdmin);
 router.get('/table/:tableNumber', getTableInfo);

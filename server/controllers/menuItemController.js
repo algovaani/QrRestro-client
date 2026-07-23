@@ -1,6 +1,13 @@
 const MenuItem = require('../models/MenuItem');
 const { getTenantAdminId, buildTenantFilter, assertTenantOwnership } = require('../middleware/tenantMiddleware');
 const { persistUploadedImage } = require('../utils/persistUpload');
+const {
+  parseDataUrl,
+  getMenuItemPhotoPath,
+  normalizeMenuItemImage,
+  readUploadedImageData,
+  ensureMenuItemImageStored
+} = require('../utils/menuImage');
 
 const parseBool = (val, defaultVal = false) => {
   if (val === undefined || val === null || val === '') return defaultVal;
@@ -25,7 +32,7 @@ exports.getMenuItems = async (req, res, next) => {
     res.json({
       success: true,
       count: items.length,
-      items
+      items: items.map(normalizeMenuItemImage)
     });
   } catch (error) {
     next(error);
@@ -42,7 +49,7 @@ exports.getMenuItemById = async (req, res, next) => {
     }
     res.json({
       success: true,
-      item
+      item: normalizeMenuItemImage(item)
     });
   } catch (error) {
     next(error);
@@ -59,10 +66,10 @@ exports.createMenuItem = async (req, res, next) => {
     }
     const { name, category, description, foodType, priceType, halfPrice, fullPrice, fixedPrice, preparationTime, isAvailable, isFeatured, status } = req.body;
 
-    let image = '';
+    let imageData = '';
     if (req.file) {
       try {
-        image = persistUploadedImage(req.file);
+        imageData = readUploadedImageData(req.file);
       } catch (err) {
         return res.status(400).json({ success: false, message: err.message || 'Image upload failed' });
       }
@@ -82,12 +89,18 @@ exports.createMenuItem = async (req, res, next) => {
       isAvailable: parseBool(isAvailable, true),
       isFeatured: parseBool(isFeatured, false),
       status: status || 'Active',
-      image
+      image: '',
+      imageData: imageData || ''
     });
+
+    if (imageData) {
+      item.image = getMenuItemPhotoPath(item._id);
+      await item.save();
+    }
 
     res.status(201).json({
       success: true,
-      item
+      item: normalizeMenuItemImage(item)
     });
   } catch (error) {
     next(error);
@@ -127,7 +140,8 @@ exports.updateMenuItem = async (req, res, next) => {
 
     if (req.file) {
       try {
-        item.image = persistUploadedImage(req.file);
+        item.imageData = readUploadedImageData(req.file);
+        item.image = getMenuItemPhotoPath(item._id);
       } catch (err) {
         return res.status(400).json({ success: false, message: err.message || 'Image upload failed' });
       }
@@ -137,7 +151,7 @@ exports.updateMenuItem = async (req, res, next) => {
 
     res.json({
       success: true,
-      item
+      item: normalizeMenuItemImage(item)
     });
   } catch (error) {
     next(error);
@@ -192,6 +206,44 @@ exports.toggleAvailability = async (req, res, next) => {
       success: true,
       isAvailable: item.isAvailable
     });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc Serve menu item photo (stored in MongoDB)
+// @route GET /api/public/menu-item/:id/photo
+exports.getMenuItemPhoto = async (req, res, next) => {
+  try {
+    let item = await MenuItem.findById(req.params.id).select('+imageData image');
+    if (!item) {
+      return res.status(404).json({ success: false, message: 'Image not found' });
+    }
+
+    item = await ensureMenuItemImageStored(item);
+
+    let dataUrl = item.imageData;
+    if (!dataUrl && item.image?.startsWith('data:')) {
+      dataUrl = item.image;
+      item.imageData = dataUrl;
+      item.image = getMenuItemPhotoPath(item._id);
+      await item.save();
+    }
+
+    if (!dataUrl) {
+      return res.status(404).json({ success: false, message: 'Image not found' });
+    }
+
+    const parsed = parseDataUrl(dataUrl);
+    if (!parsed) {
+      return res.status(404).json({ success: false, message: 'Invalid image data' });
+    }
+
+    res.set({
+      'Content-Type': parsed.mime,
+      'Cache-Control': 'public, max-age=604800'
+    });
+    res.send(parsed.buffer);
   } catch (error) {
     next(error);
   }

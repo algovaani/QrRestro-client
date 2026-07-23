@@ -1,21 +1,24 @@
 import React, { useEffect, useState } from 'react';
-import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import API from '../../services/api';
 import UPIPaymentModal from '../../components/customer/UPIPaymentModal';
 import CustomerBottomNav from '../../components/customer/CustomerBottomNav';
 import MyOrdersModal from '../../components/customer/MyOrdersModal';
 import { useCart } from '../../context/CartContext';
-import { useTableSessionOrders, getPayOrderNumber } from '../../hooks/useTableSessionOrders';
+import { useTableSessionOrders } from '../../hooks/useTableSessionOrders';
+import { startCustomerPayFlow, getUnpaidOrders } from '../../utils/customerPayFlow';
+import PayOrderPickerModal from '../../components/customer/PayOrderPickerModal';
 import { CheckCircle2, Clock, Utensils, QrCode } from 'lucide-react';
 
 export default function OrderSuccessPage() {
   const { orderNumber } = useParams();
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(true);
 
   const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [paymentOrderNumbers, setPaymentOrderNumbers] = useState(null);
+  const [showPayPicker, setShowPayPicker] = useState(false);
   const [showMyOrdersModal, setShowMyOrdersModal] = useState(false);
 
   const { initTableCart, customerMobile } = useCart();
@@ -32,27 +35,23 @@ export default function OrderSuccessPage() {
     customerMobile || order?.customerMobile
   );
 
+  const openPaymentModal = (orderNumOrNums) => {
+    const nums = Array.isArray(orderNumOrNums) ? orderNumOrNums : [orderNumOrNums];
+    if (!nums.length || !nums[0]) return;
+    setPaymentOrderNumbers(nums);
+    setShowPaymentModal(true);
+  };
+
   const handlePayClick = () => {
-    if (order?.paymentStatus === 'Unpaid' && order?.paymentMethod === 'UPI') {
-      setShowPaymentModal(true);
-      return;
-    }
-    const num = getPayOrderNumber(orders) || order?.orderNumber;
-    if (num) setShowPaymentModal(true);
-    else alert('No unpaid order found.');
+    startCustomerPayFlow(orders, order?.tableNumber, {
+      setPayOrderNumbers: (nums) => openPaymentModal(nums),
+      setShowPayPicker
+    });
   };
 
   useEffect(() => {
     fetchOrderDetails();
   }, [orderNumber]);
-
-  useEffect(() => {
-    if (order && order.paymentStatus === 'Unpaid' && order.paymentMethod === 'UPI') {
-      if (searchParams.get('pay') === 'upi') {
-        setShowPaymentModal(true);
-      }
-    }
-  }, [order, searchParams]);
 
   const fetchOrderDetails = async () => {
     try {
@@ -131,7 +130,7 @@ export default function OrderSuccessPage() {
 
                 {order.paymentStatus === 'Unpaid' && order.paymentMethod === 'UPI' && (
                   <button
-                    onClick={() => setShowPaymentModal(true)}
+                    onClick={() => openPaymentModal(order.orderNumber)}
                     className="btn btn-primary pulse-button"
                     style={{ padding: '0.5rem 1rem', fontSize: '0.85rem', borderRadius: '10px' }}
                   >
@@ -145,7 +144,7 @@ export default function OrderSuccessPage() {
                 )}
                 {order.paymentStatus === 'Pending' && (
                   <button
-                    onClick={() => setShowPaymentModal(true)}
+                    onClick={() => openPaymentModal(order.orderNumber)}
                     className="btn btn-secondary"
                     style={{ padding: '0.5rem 1rem', fontSize: '0.85rem', borderRadius: '10px' }}
                   >
@@ -175,7 +174,7 @@ export default function OrderSuccessPage() {
       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginBottom: '0.5rem' }}>
         {order?.paymentStatus === 'Unpaid' && order?.paymentMethod === 'UPI' && (
           <button
-            onClick={() => setShowPaymentModal(true)}
+            onClick={() => openPaymentModal(order.orderNumber)}
             className="btn btn-primary pulse-button"
             style={{ width: '100%', padding: '0.95rem', fontSize: '1rem', borderRadius: '14px' }}
           >
@@ -223,11 +222,31 @@ export default function OrderSuccessPage() {
         />
       )}
 
+      {showPayPicker && (
+        <PayOrderPickerModal
+          orders={getUnpaidOrders(orders)}
+          allOrders={orders}
+          tableNumber={order?.tableNumber}
+          onClose={() => setShowPayPicker(false)}
+          onPayOrder={(num) => {
+            setShowPayPicker(false);
+            openPaymentModal(num);
+          }}
+          onPayAll={(nums) => {
+            setShowPayPicker(false);
+            openPaymentModal(nums);
+          }}
+        />
+      )}
+
       {/* Dynamic UPI Payment Modal */}
-      {showPaymentModal && order && (
+      {showPaymentModal && paymentOrderNumbers?.length > 0 && (
         <UPIPaymentModal
-          orderNumber={order.orderNumber}
-          onClose={() => setShowPaymentModal(false)}
+          orderNumbers={paymentOrderNumbers}
+          onClose={() => {
+            setShowPaymentModal(false);
+            setPaymentOrderNumbers(null);
+          }}
           onSuccess={(updatedOrder) => {
             handlePaymentSuccess(updatedOrder);
             refreshOrders();

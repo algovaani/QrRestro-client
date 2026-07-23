@@ -7,6 +7,7 @@ const { emitNewOrder, emitOrderRating } = require('../socket/socketHandler');
 const { generateOrderBillPdfBuffer } = require('../utils/billPdf');
 const { getPublicBillPdfUrl, orderBillIsAvailable } = require('../utils/publicApiUrl');
 const { MAX_REVIEW_WORDS, countReviewWords, sanitizeReviewForSave } = require('../utils/reviewText');
+const { normalizeMenuItemImage } = require('../utils/menuImage');
 
 const generateOrderNumber = () => {
   const randomNum = Math.floor(1000 + Math.random() * 9000);
@@ -55,7 +56,7 @@ const buildMenuResponse = async (table) => {
     tableNumber: table.tableNumber,
     adminId,
     categories,
-    menuItems,
+    menuItems: menuItems.map(normalizeMenuItemImage),
     setting
   };
 };
@@ -97,10 +98,6 @@ exports.getPublicMenu = exports.getTableInfo;
 exports.placeOrder = async (req, res, next) => {
   try {
     const { tableNumber, adminId, customerName, customerMobile, items, notes, paymentMethod } = req.body;
-
-    if (!customerName || !customerName.trim()) {
-      return res.status(400).json({ success: false, message: 'Customer Full Name is strictly required before placing order.' });
-    }
 
     if (!customerMobile || !/^\d{10}$/.test(customerMobile.trim())) {
       return res.status(400).json({ success: false, message: 'A valid 10-digit Customer Mobile Number is required.' });
@@ -149,7 +146,7 @@ exports.placeOrder = async (req, res, next) => {
       orderNumber,
       tableNumber,
       table: table._id,
-      customerName: customerName.trim(),
+      customerName: (customerName && customerName.trim()) ? customerName.trim() : 'Guest',
       customerMobile: customerMobile.trim(),
       items: processedItems,
       subtotal,

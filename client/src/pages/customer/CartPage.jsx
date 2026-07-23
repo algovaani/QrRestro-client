@@ -1,12 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useCart, getCustomerMenuPath, getCustomerCartPath } from '../../context/CartContext';
+import { getSavedCustomerMobile } from '../../utils/customerSession';
 import API from '../../services/api';
 import CustomerBottomNav from '../../components/customer/CustomerBottomNav';
 import MyOrdersModal from '../../components/customer/MyOrdersModal';
 import UPIPaymentModal from '../../components/customer/UPIPaymentModal';
-import { useTableSessionOrders, getPayOrderNumber } from '../../hooks/useTableSessionOrders';
-import { ArrowLeft, Trash2, Plus, Minus, CheckCircle, AlertCircle, User, Edit3, QrCode, Banknote } from 'lucide-react';
+import { useTableSessionOrders } from '../../hooks/useTableSessionOrders';
+import { startCustomerPayFlow, getUnpaidOrders } from '../../utils/customerPayFlow';
+import PayOrderPickerModal from '../../components/customer/PayOrderPickerModal';
+import { ArrowLeft, Trash2, Plus, Minus, CheckCircle, AlertCircle, User, QrCode, Banknote } from 'lucide-react';
 
 export default function CartPage() {
   const navigate = useNavigate();
@@ -21,11 +24,10 @@ export default function CartPage() {
     clearCart,
     subtotal,
     customerName,
-    setCustomerName,
+    updateCustomerName,
     customerMobile,
-    setCustomerMobile,
     customerDetailsComplete,
-    resetCustomerDetails,
+    logoutCustomer,
     specialNote,
     setSpecialNote,
     restaurantSettings,
@@ -36,7 +38,8 @@ export default function CartPage() {
   const [errorMsg, setErrorMsg] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('UPI');
   const [showMyOrdersModal, setShowMyOrdersModal] = useState(false);
-  const [payOrderNumber, setPayOrderNumber] = useState(null);
+  const [payOrderNumbers, setPayOrderNumbers] = useState(null);
+  const [showPayPicker, setShowPayPicker] = useState(false);
 
   const activeAdminId = restaurantAdminId || routeAdminId || '';
   const activeTableNumber = tableNumber || routeTableNumber || '';
@@ -48,6 +51,15 @@ export default function CartPage() {
       initTableCart(routeTableNumber, routeAdminId);
     }
   }, [routeAdminId, routeTableNumber]);
+
+  useEffect(() => {
+    if (!customerDetailsComplete && menuPath && activeAdminId) {
+      const saved = getSavedCustomerMobile(activeAdminId);
+      if (!saved) {
+        navigate(menuPath, { replace: true });
+      }
+    }
+  }, [customerDetailsComplete, menuPath, navigate, activeAdminId]);
 
   useEffect(() => {
     if (!activeAdminId || !activeTableNumber) return;
@@ -77,9 +89,10 @@ export default function CartPage() {
   );
 
   const handlePayClick = () => {
-    const num = getPayOrderNumber(orders);
-    if (num) setPayOrderNumber(num);
-    else alert(`No active order yet for Table ${activeTableNumber}. Please place an order first.`);
+    startCustomerPayFlow(orders, activeTableNumber, {
+      setPayOrderNumbers,
+      setShowPayPicker
+    });
   };
 
   useEffect(() => {
@@ -106,13 +119,14 @@ export default function CartPage() {
     }
 
     // MANDATORY CUSTOMER VALIDATION
-    if (!customerName || !customerName.trim()) {
-      setErrorMsg('Please enter your Full Name before confirming order.');
-      return;
-    }
     const cleanMobile = customerMobile ? customerMobile.trim() : '';
     if (!cleanMobile || cleanMobile.length < 10) {
       setErrorMsg('Please enter a valid 10-digit Mobile Number before confirming order.');
+      return;
+    }
+    const cleanName = customerName ? customerName.trim() : '';
+    if (!cleanName) {
+      setErrorMsg('Please enter your name before confirming order.');
       return;
     }
 
@@ -122,7 +136,7 @@ export default function CartPage() {
       const payload = {
         tableNumber: activeTableNumber,
         adminId: activeAdminId,
-        customerName: customerName.trim(),
+        customerName: cleanName,
         customerMobile: cleanMobile,
         items: cartItems.map(item => ({
           menuItemId: item.menuItemId,
@@ -140,8 +154,7 @@ export default function CartPage() {
       if (res.data.success) {
         const orderNumber = res.data.order.orderNumber;
         clearCart();
-        const payQuery = paymentMethod === 'UPI' ? '?pay=upi' : '';
-        navigate(`/order-success/${orderNumber}${payQuery}`);
+        navigate(`/order-success/${orderNumber}`);
       }
     } catch (err) {
       setErrorMsg(err.response?.data?.message || 'Failed to place order. Please check customer details.');
@@ -188,18 +201,32 @@ export default function CartPage() {
                 <button
                   type="button"
                   onClick={() => {
-                    resetCustomerDetails();
-                    navigate(menuPath);
+                    logoutCustomer();
+                    if (menuPath) navigate(menuPath);
                   }}
-                  style={{ fontSize: '0.75rem', color: 'var(--primary)', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '0.25rem', background: 'transparent', border: 'none' }}
+                  style={{ fontSize: '0.75rem', color: '#dc2626', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '0.25rem', background: 'transparent', border: 'none' }}
                 >
-                  <Edit3 size={14} /> Edit
+                  Logout
                 </button>
               </div>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem', fontSize: '0.9rem' }}>
-                <div><strong>Name:</strong> {customerName}</div>
-                <div><strong>Mobile:</strong> {customerMobile}</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '700', marginBottom: '0.3rem', color: 'var(--secondary)' }}>
+                    Full Name <span style={{ color: 'var(--danger)' }}>*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Enter your name"
+                    value={customerName}
+                    onChange={(e) => updateCustomerName(e.target.value)}
+                    style={{ width: '100%', fontSize: '0.9rem' }}
+                  />
+                </div>
+                <div style={{ fontSize: '0.9rem' }}>
+                  <strong>Mobile:</strong> {customerMobile}
+                </div>
               </div>
 
               <div style={{ marginTop: '0.85rem' }}>
@@ -346,9 +373,7 @@ export default function CartPage() {
               className="btn btn-primary pulse-button"
               style={{ width: '100%', padding: '0.95rem', fontSize: '1rem', borderRadius: '14px' }}
             >
-              {loading ? 'Placing Order...' : paymentMethod === 'UPI'
-                ? `Place Order & Pay via UPI QR • ₹${grandTotal}`
-                : `Place Order (Cash at Counter) • ₹${grandTotal}`}
+              {loading ? 'Placing Order...' : `Place Order • ₹${grandTotal}`}
             </button>
           </form>
         ) : (
@@ -390,12 +415,29 @@ export default function CartPage() {
         />
       )}
 
-      {payOrderNumber && (
+      {showPayPicker && (
+        <PayOrderPickerModal
+          orders={getUnpaidOrders(orders)}
+          allOrders={orders}
+          tableNumber={activeTableNumber}
+          onClose={() => setShowPayPicker(false)}
+          onPayOrder={(num) => {
+            setShowPayPicker(false);
+            setPayOrderNumbers([num]);
+          }}
+          onPayAll={(nums) => {
+            setShowPayPicker(false);
+            setPayOrderNumbers(nums);
+          }}
+        />
+      )}
+
+      {payOrderNumbers?.length > 0 && (
         <UPIPaymentModal
-          orderNumber={payOrderNumber}
-          onClose={() => setPayOrderNumber(null)}
+          orderNumbers={payOrderNumbers}
+          onClose={() => setPayOrderNumbers(null)}
           onSuccess={() => {
-            setPayOrderNumber(null);
+            setPayOrderNumbers(null);
             refreshOrders();
           }}
         />

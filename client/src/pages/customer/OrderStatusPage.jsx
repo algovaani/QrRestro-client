@@ -2,7 +2,9 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import API from '../../services/api';
 import { useCart } from '../../context/CartContext';
-import { useTableSessionOrders, getPayOrderNumber } from '../../hooks/useTableSessionOrders';
+import { useTableSessionOrders } from '../../hooks/useTableSessionOrders';
+import { startCustomerPayFlow, getUnpaidOrders } from '../../utils/customerPayFlow';
+import PayOrderPickerModal from '../../components/customer/PayOrderPickerModal';
 import { useSocket } from '../../context/SocketContext';
 import { useTableRoomSocket } from '../../hooks/useTableRoomSocket';
 import { useLivePolling, useSocketReconnectRefetch } from '../../hooks/useLivePolling';
@@ -28,6 +30,8 @@ export default function OrderStatusPage() {
   const [submittingRating, setSubmittingRating] = useState(false);
 
   const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [paymentOrderNumbers, setPaymentOrderNumbers] = useState(null);
+  const [showPayPicker, setShowPayPicker] = useState(false);
   const [showMyOrdersModal, setShowMyOrdersModal] = useState(false);
 
   const { initTableCart, customerMobile } = useCart();
@@ -44,14 +48,18 @@ export default function OrderStatusPage() {
     customerMobile || order?.customerMobile
   );
 
+  const openPaymentModal = (orderNumOrNums) => {
+    const nums = Array.isArray(orderNumOrNums) ? orderNumOrNums : [orderNumOrNums];
+    if (!nums.length || !nums[0]) return;
+    setPaymentOrderNumbers(nums);
+    setShowPaymentModal(true);
+  };
+
   const handlePayClick = () => {
-    if (order?.paymentStatus === 'Unpaid' && order?.paymentMethod === 'UPI') {
-      setShowPaymentModal(true);
-      return;
-    }
-    const num = getPayOrderNumber(orders) || order?.orderNumber;
-    if (num) setShowPaymentModal(true);
-    else alert('No unpaid order found.');
+    startCustomerPayFlow(orders, order?.tableNumber, {
+      setPayOrderNumbers: (nums) => openPaymentModal(nums),
+      setShowPayPicker
+    });
   };
 
   const { socket, playOrderChime } = useSocket();
@@ -257,7 +265,7 @@ export default function OrderStatusPage() {
 
               {order.paymentStatus === 'Unpaid' && (
                 <button
-                  onClick={() => setShowPaymentModal(true)}
+                  onClick={() => openPaymentModal(order.orderNumber)}
                   className="btn btn-primary pulse-button"
                   style={{ padding: '0.55rem 1rem', fontSize: '0.85rem', borderRadius: '12px' }}
                 >
@@ -266,7 +274,7 @@ export default function OrderStatusPage() {
               )}
               {order.paymentStatus === 'Pending' && (
                 <button
-                  onClick={() => setShowPaymentModal(true)}
+                  onClick={() => openPaymentModal(order.orderNumber)}
                   className="btn btn-secondary"
                   style={{ padding: '0.55rem 1rem', fontSize: '0.85rem', borderRadius: '12px' }}
                 >
@@ -442,10 +450,30 @@ export default function OrderStatusPage() {
         />
       )}
 
-      {showPaymentModal && order && (
+      {showPayPicker && (
+        <PayOrderPickerModal
+          orders={getUnpaidOrders(orders)}
+          allOrders={orders}
+          tableNumber={order?.tableNumber}
+          onClose={() => setShowPayPicker(false)}
+          onPayOrder={(num) => {
+            setShowPayPicker(false);
+            openPaymentModal(num);
+          }}
+          onPayAll={(nums) => {
+            setShowPayPicker(false);
+            openPaymentModal(nums);
+          }}
+        />
+      )}
+
+      {showPaymentModal && paymentOrderNumbers?.length > 0 && (
         <UPIPaymentModal
-          orderNumber={order.orderNumber}
-          onClose={() => setShowPaymentModal(false)}
+          orderNumbers={paymentOrderNumbers}
+          onClose={() => {
+            setShowPaymentModal(false);
+            setPaymentOrderNumbers(null);
+          }}
           onSuccess={(updatedOrder) => {
             handlePaymentSuccess(updatedOrder);
             refreshOrders();

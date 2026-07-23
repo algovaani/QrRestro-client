@@ -2,7 +2,7 @@ import React from 'react';
 import { useNavigate, useLocation, useParams } from 'react-router-dom';
 import { Home, ShoppingBag, ReceiptText, QrCode } from 'lucide-react';
 import { useCart, getCustomerMenuPath, getCustomerCartPath, loadActiveTableContext } from '../../context/CartContext';
-import { useTableSessionOrders, getPayOrderNumber } from '../../hooks/useTableSessionOrders';
+import { useTableSessionOrders, resolvePayFlow, getUnpaidOrders } from '../../hooks/useTableSessionOrders';
 
 function isCartPath(pathname) {
   return pathname === '/cart' || pathname.endsWith('/cart');
@@ -52,6 +52,8 @@ export default function CustomerBottomNav({
   );
   const ordersCount = ordersCountProp ?? hookOrdersCount;
 
+  const unpaidCount = getUnpaidOrders(orders).length;
+
   const goMenu = (e) => {
     e?.preventDefault?.();
     e?.stopPropagation?.();
@@ -98,9 +100,15 @@ export default function CustomerBottomNav({
       onPay();
       return;
     }
-    const payNum = getPayOrderNumber(orders);
-    if (payNum) {
-      if (menuPath) navigate(menuPath, { state: { openPay: true, payOrderNumber: payNum } });
+    const { mode } = resolvePayFlow(orders);
+    if (mode === 'none') {
+      alert(`No active order yet for Table ${tableNumber || ''}. Please place an order first.`);
+      return;
+    }
+    if (menuPath) {
+      navigate(menuPath, {
+        state: mode === 'picker' ? { openPayPicker: true } : { openPay: true }
+      });
       return;
     }
     alert(`No active order yet for Table ${tableNumber || ''}. Please place an order first.`);
@@ -161,6 +169,9 @@ export default function CustomerBottomNav({
       >
         <QrCode size={18} color="#fff" />
         <span style={{ marginTop: '0.2rem' }}>Pay</span>
+        {unpaidCount > 0 && (
+          <span className="customer-bottom-nav__badge">{unpaidCount}</span>
+        )}
       </button>
     </nav>
   );

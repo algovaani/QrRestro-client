@@ -13,6 +13,39 @@ const getBillMeta = (settings) => ({
   gstNumber: settings.gstNumber || ''
 });
 
+const normalizeOrderNumbers = (value) => {
+  if (!value) return [];
+  const list = Array.isArray(value) ? value : String(value).split(',');
+  return [...new Set(list.map((n) => String(n).trim()).filter(Boolean))];
+};
+
+const loadUnpaidOrdersForPayment = async (orderNumbers) => {
+  const numbers = normalizeOrderNumbers(orderNumbers);
+  if (!numbers.length) {
+    return { error: { status: 400, message: 'No orders specified' } };
+  }
+
+  const orders = await Order.find({
+    orderNumber: { $in: numbers },
+    paymentStatus: 'Unpaid'
+  }).sort({ createdAt: 1 });
+
+  if (!orders.length) {
+    return { error: { status: 404, message: 'No unpaid orders found' } };
+  }
+
+  const adminId = orders[0].adminId?.toString();
+  const tableNumber = String(orders[0].tableNumber);
+  const sameSession = orders.every(
+    (o) => o.adminId?.toString() === adminId && String(o.tableNumber) === tableNumber
+  );
+  if (!sameSession) {
+    return { error: { status: 400, message: 'Orders must belong to the same table' } };
+  }
+
+  return { orders, adminId, tableNumber };
+};
+
 // @desc Generate Dynamic UPI QR Code for Order Grand Total
 // @route GET /api/payment/upi-qr/:orderNumber
 exports.getDynamicUPIQR = async (req, res, next) => {
@@ -84,6 +117,92 @@ exports.getUpiQrPng = async (req, res, next) => {
       'Cache-Control': 'public, max-age=300'
     });
     res.send(pngBuffer);
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc Combined UPI QR for multiple unpaid orders (one payment)
+// @route POST /api/payment/upi-qr/combined
+exports.getCombinedUPIQR = async (req, res, next) => {
+  try {
+    const loaded = await loadUnpaidOrdersForPayment(req.body.orderNumbers);
+    if (loaded.error) {
+      return res.status(loaded.error.status).json({ success: false, message: loaded.error.message });
+    }
+
+    const { orders, tableNumber } = loaded;
+    const settings = await Setting.findOne({ adminId: orders[0].adminId }) || {};
+    const upiId = settings.upiId || 'royalspice@upi';
+    const restaurantName = settings.restaurantName || 'Royal Spice Restaurant';
+    const grandTotal = orders.reduce((sum, o) => sum + (Number(o.grandTotal) || 0), 0);
+    const orderNumbers = orders.map((o) => o.orderNumber);
+    const note =
+      orderNumbers.length === 1
+        ? orderNumbers[0]
+        : `Table${tableNumber}-${orderNumbers.length}orders`;
+
+    const upiString = buildUpiPayString({
+      upiId,
+      payeeName: restaurantName,
+      amount: grandTotal,
+      note
+    });
+
+    const qrCodeDataUrl = await generateQRCode(upiString);
+
+    res.json({
+      success: true,
+      combined: true,
+      orderNumbers,
+      orderNumber: orderNumbers[0],
+      orderCount: orderNumbers.length,
+      tableNumber,
+      grandTotal,
+      paymentStatus: 'Unpaid',
+      upiId,
+      restaurantName,
+      upiString,
+      qrCodeDataUrl
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc Customer submits one UPI payment for multiple unpaid orders
+// @route POST /api/payment/verify-combined
+exports.verifyCombinedPayment = async (req, res, next) => {
+  try {
+    const { transactionId, paymentMethod } = req.body;
+    const loaded = await loadUnpaidOrdersForPayment(req.body.orderNumbers);
+    if (loaded.error) {
+      return res.status(loaded.error.status).json({ success: false, message: loaded.error.message });
+    }
+
+    const { orders } = loaded;
+    const txnId = (transactionId && String(transactionId).trim()) || `TXN${Date.now()}`;
+    const method = paymentMethod || 'UPI';
+    const updatedOrders = [];
+
+    for (const order of orders) {
+      order.paymentStatus = 'Pending';
+      order.paymentMethod = method;
+      order.transactionId = txnId;
+      order.paidAt = null;
+      await order.save();
+      emitPaymentPending(order);
+      updatedOrders.push(order);
+    }
+
+    res.json({
+      success: true,
+      message: `Payment submitted for ${updatedOrders.length} orders! Waiting for admin approval.`,
+      orders: updatedOrders,
+      order: updatedOrders[0],
+      pending: true,
+      combined: true
+    });
   } catch (error) {
     next(error);
   }

@@ -1,4 +1,9 @@
 import React, { createContext, useState, useEffect, useContext, useCallback } from 'react';
+import {
+  getSavedCustomerProfile,
+  saveCustomerMobileLogin,
+  clearCustomerMobileLogin
+} from '../utils/customerSession';
 
 const CartContext = createContext();
 
@@ -121,6 +126,33 @@ export const CartProvider = ({ children }) => {
       setCustomerSessionId(sessionId);
       loadSessionData(adminId, tNum, sessionId);
     }
+
+    const savedProfile = getSavedCustomerProfile(adminId);
+    const savedMobile = savedProfile.mobile;
+    if (savedMobile) {
+      const customerKey = getCustomerStorageKey(adminId, tNum, sessionId);
+      let hasSessionMobile = false;
+      let sessionName = '';
+      try {
+        const raw = sessionStorage.getItem(customerKey);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          hasSessionMobile = parsed.customerMobile?.length === 10;
+          sessionName = parsed.customerName || '';
+        }
+      } catch {
+        hasSessionMobile = false;
+      }
+      if (!hasSessionMobile) {
+        const displayName = sessionName || savedProfile.name || '';
+        setCustomerName(displayName);
+        setCustomerMobile(savedMobile);
+        sessionStorage.setItem(
+          customerKey,
+          JSON.stringify({ customerName: displayName, customerMobile: savedMobile })
+        );
+      }
+    }
   };
 
   const bindRestaurantAdmin = (adminId) => {
@@ -131,20 +163,48 @@ export const CartProvider = ({ children }) => {
     }
   };
 
-  const saveCustomerDetails = (name, mobile) => {
-    const trimmedName = name.trim();
-    const trimmedMobile = mobile.trim();
-    setCustomerName(trimmedName);
+  const saveCustomerDetails = (mobile) => {
+    const trimmedMobile = String(mobile || '').trim();
     setCustomerMobile(trimmedMobile);
-    if (tableNumber && restaurantAdminId) {
+    if (tableNumber && restaurantAdminId && trimmedMobile.length === 10) {
+      const savedName = getSavedCustomerProfile(restaurantAdminId).name;
+      if (savedName && !customerName.trim()) {
+        setCustomerName(savedName);
+      }
+      saveCustomerMobileLogin(restaurantAdminId, trimmedMobile, savedName || customerName);
       const sessionId = customerSessionId || sessionStorage.getItem(getTableSessionKey(restaurantAdminId, tableNumber));
       if (sessionId) {
         sessionStorage.setItem(
           getCustomerStorageKey(restaurantAdminId, tableNumber, sessionId),
-          JSON.stringify({ customerName: trimmedName, customerMobile: trimmedMobile })
+          JSON.stringify({
+            customerName: (savedName || customerName || '').trim(),
+            customerMobile: trimmedMobile
+          })
         );
       }
     }
+  };
+
+  const updateCustomerName = (name) => {
+    const trimmedName = String(name || '').trim();
+    setCustomerName(trimmedName);
+    if (tableNumber && restaurantAdminId && customerMobile.trim().length === 10) {
+      saveCustomerMobileLogin(restaurantAdminId, customerMobile.trim(), trimmedName);
+      const sessionId = customerSessionId || sessionStorage.getItem(getTableSessionKey(restaurantAdminId, tableNumber));
+      if (sessionId) {
+        sessionStorage.setItem(
+          getCustomerStorageKey(restaurantAdminId, tableNumber, sessionId),
+          JSON.stringify({ customerName: trimmedName, customerMobile: customerMobile.trim() })
+        );
+      }
+    }
+  };
+
+  const logoutCustomer = () => {
+    if (restaurantAdminId) {
+      clearCustomerMobileLogin(restaurantAdminId);
+    }
+    resetCustomerDetails();
   };
 
   const resetCustomerDetails = () => {
@@ -163,8 +223,7 @@ export const CartProvider = ({ children }) => {
     }
   };
 
-  const customerDetailsComplete =
-    customerName.trim().length > 0 && customerMobile.trim().length === 10;
+  const customerDetailsComplete = customerMobile.trim().length === 10;
 
   useEffect(() => {
     const saved = loadActiveTableContext();
@@ -253,10 +312,12 @@ export const CartProvider = ({ children }) => {
       totalItemsCount,
       customerName,
       setCustomerName,
+      updateCustomerName,
       customerMobile,
       setCustomerMobile,
       saveCustomerDetails,
       resetCustomerDetails,
+      logoutCustomer,
       customerDetailsComplete,
       specialNote,
       setSpecialNote

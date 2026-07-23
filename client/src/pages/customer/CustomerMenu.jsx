@@ -6,7 +6,8 @@ import MyOrdersModal from '../../components/customer/MyOrdersModal';
 import CustomerWelcome from '../../components/customer/CustomerWelcome';
 import UPIPaymentModal from '../../components/customer/UPIPaymentModal';
 import CustomerBottomNav from '../../components/customer/CustomerBottomNav';
-import { getPayOrderNumber } from '../../hooks/useTableSessionOrders';
+import { startCustomerPayFlow, getUnpaidOrders } from '../../utils/customerPayFlow';
+import PayOrderPickerModal from '../../components/customer/PayOrderPickerModal';
 import { Search, Plus, Minus, X, AlertCircle, Clock, Utensils, ReceiptText } from 'lucide-react';
 import { useSocket } from '../../context/SocketContext';
 import { useTableRoomSocket } from '../../hooks/useTableRoomSocket';
@@ -32,7 +33,8 @@ export default function CustomerMenu() {
   // Active orders for this table session
   const [tableOrders, setTableOrders] = useState([]);
   const [showMyOrdersModal, setShowMyOrdersModal] = useState(false);
-  const [payOrderNumber, setPayOrderNumber] = useState(null);
+  const [payOrderNumbers, setPayOrderNumbers] = useState(null);
+  const [showPayPicker, setShowPayPicker] = useState(false);
   const [statusToast, setStatusToast] = useState('');
 
   // Modal State for Item Selection
@@ -42,7 +44,7 @@ export default function CustomerMenu() {
   const [quantity, setQuantity] = useState(1);
   const [instructions, setInstructions] = useState('');
 
-  const { initTableCart, bindRestaurantAdmin, addToCart, saveCustomerDetails, customerDetailsComplete, customerMobile, restaurantAdminId, applyRestaurantSettings } = useCart();
+  const { initTableCart, bindRestaurantAdmin, addToCart, saveCustomerDetails, customerDetailsComplete, customerMobile, restaurantAdminId, applyRestaurantSettings, logoutCustomer } = useCart();
   const { socket, playOrderChime } = useSocket();
 
   useEffect(() => {
@@ -244,20 +246,22 @@ export default function CustomerMenu() {
   useEffect(() => {
     if (!location.state) return;
     if (location.state.openOrders) setShowMyOrdersModal(true);
+    if (location.state.openPayPicker) setShowPayPicker(true);
     if (location.state.openPay) {
-      const num = location.state.payOrderNumber || getPayOrderNumber(tableOrders);
-      if (num) setPayOrderNumber(num);
-      else alert(`No active order yet for Table ${tableNumber}. Please place an order first.`);
+      startCustomerPayFlow(tableOrders, tableNumber, {
+        setPayOrderNumbers,
+        setShowPayPicker,
+        alertFn: (msg) => alert(msg)
+      });
     }
   }, [location.state, tableOrders, tableNumber]);
 
   const handleDirectPayClick = () => {
-    const num = getPayOrderNumber(tableOrders);
-    if (num) {
-      setPayOrderNumber(num);
-      return;
-    }
-    alert('No active order placed yet for Table ' + tableNumber + '. Please add items & place order first.');
+    startCustomerPayFlow(tableOrders, tableNumber, {
+      setPayOrderNumbers,
+      setShowPayPicker,
+      alertFn: (msg) => alert(msg)
+    });
   };
 
   // Filter menu items
@@ -325,16 +329,23 @@ export default function CustomerMenu() {
             </span>
           </div>
 
-          <div style={{
-            background: 'var(--primary-light)',
-            color: 'var(--primary)',
-            padding: '0.35rem 0.85rem',
-            borderRadius: '99px',
-            fontSize: '0.85rem',
-            fontWeight: '800',
-            border: '1px solid #ffd6bc'
-          }}>
-            Table {tableNumber}
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.35rem' }}>
+            <div style={{
+              background: 'var(--primary-light)',
+              color: 'var(--primary)',
+              padding: '0.35rem 0.85rem',
+              borderRadius: '99px',
+              fontSize: '0.85rem',
+              fontWeight: '800',
+              border: '1px solid #ffd6bc'
+            }}>
+              Table {tableNumber}
+            </div>
+            {customerMobile && (
+              <button type="button" className="customer-logout-btn" onClick={logoutCustomer}>
+                Logout ({customerMobile})
+              </button>
+            )}
           </div>
         </div>
 
@@ -728,13 +739,30 @@ export default function CustomerMenu() {
         />
       )}
 
+      {showPayPicker && (
+        <PayOrderPickerModal
+          orders={getUnpaidOrders(tableOrders)}
+          allOrders={tableOrders}
+          tableNumber={tableNumber}
+          onClose={() => setShowPayPicker(false)}
+          onPayOrder={(num) => {
+            setShowPayPicker(false);
+            setPayOrderNumbers([num]);
+          }}
+          onPayAll={(nums) => {
+            setShowPayPicker(false);
+            setPayOrderNumbers(nums);
+          }}
+        />
+      )}
+
       {/* DYNAMIC UPI PAYMENT MODAL */}
-      {payOrderNumber && (
+      {payOrderNumbers?.length > 0 && (
         <UPIPaymentModal
-          orderNumber={payOrderNumber}
-          onClose={() => setPayOrderNumber(null)}
+          orderNumbers={payOrderNumbers}
+          onClose={() => setPayOrderNumbers(null)}
           onSuccess={() => {
-            setPayOrderNumber(null);
+            setPayOrderNumbers(null);
             fetchActiveTableOrders();
           }}
         />
