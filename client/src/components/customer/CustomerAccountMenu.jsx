@@ -1,21 +1,45 @@
-import React, { useState } from 'react';
-import { User, Phone, UtensilsCrossed, LogOut, X } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { User, Phone, UtensilsCrossed, LogOut, X, Check, AlertCircle } from 'lucide-react';
 import { useCart } from '../../context/CartContext';
 
-function maskMobile(mobile) {
-  const digits = String(mobile || '').replace(/\D/g, '');
-  if (digits.length !== 10) return mobile || '';
-  return `+91 ${digits.slice(0, 5)} ${digits.slice(5)}`;
-}
-
-export default function CustomerAccountMenu({ tableNumber, onAfterLogout }) {
-  const { customerMobile, customerName, logoutCustomer } = useCart();
+export default function CustomerAccountMenu({ tableNumber, onAfterLogout, onSaved }) {
+  const { customerMobile, customerName, updateCustomerProfile, logoutCustomer } = useCart();
   const [open, setOpen] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [editMobile, setEditMobile] = useState('');
+  const [errorMsg, setErrorMsg] = useState('');
+  const [savedMsg, setSavedMsg] = useState('');
+
+  useEffect(() => {
+    if (!open) return;
+    setEditName(customerName?.trim() || '');
+    setEditMobile(customerMobile || '');
+    setErrorMsg('');
+    setSavedMsg('');
+  }, [open, customerName, customerMobile]);
+
+  useEffect(() => {
+    if (!savedMsg) return undefined;
+    const timer = setTimeout(() => setSavedMsg(''), 2500);
+    return () => clearTimeout(timer);
+  }, [savedMsg]);
 
   if (!customerMobile) return null;
 
-  const displayName = customerName?.trim() || 'Guest';
+  const displayName = (editName || customerName || 'Guest').trim() || 'Guest';
   const initial = displayName.charAt(0).toUpperCase();
+
+  const handleSave = (e) => {
+    e.preventDefault();
+    setErrorMsg('');
+    const result = updateCustomerProfile(editName, editMobile);
+    if (!result.ok) {
+      setErrorMsg(result.error);
+      return;
+    }
+    setSavedMsg('Profile updated');
+    if (onSaved) onSaved();
+  };
 
   const handleLogout = () => {
     setOpen(false);
@@ -62,20 +86,45 @@ export default function CustomerAccountMenu({ tableNumber, onAfterLogout }) {
               <div className="customer-account-sheet__avatar">{initial}</div>
               <div>
                 <div className="customer-account-sheet__name">{displayName}</div>
-                <div className="customer-account-sheet__subtitle">Logged in on this phone</div>
+                <div className="customer-account-sheet__subtitle">Edit name &amp; mobile below</div>
               </div>
             </div>
 
-            <div className="customer-account-sheet__details">
-              <div className="customer-account-sheet__row">
-                <Phone size={16} />
-                <div>
-                  <span className="customer-account-sheet__row-label">Mobile</span>
-                  <span className="customer-account-sheet__row-value">{maskMobile(customerMobile)}</span>
-                </div>
+            <form className="customer-account-form" onSubmit={handleSave}>
+              <div className="customer-account-form__field">
+                <label htmlFor="customer-account-name">
+                  <User size={14} /> Full Name
+                </label>
+                <input
+                  id="customer-account-name"
+                  type="text"
+                  required
+                  placeholder="Enter your name"
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  className="customer-account-form__input"
+                />
               </div>
+
+              <div className="customer-account-form__field">
+                <label htmlFor="customer-account-mobile">
+                  <Phone size={14} /> Mobile Number
+                </label>
+                <input
+                  id="customer-account-mobile"
+                  type="tel"
+                  required
+                  inputMode="numeric"
+                  maxLength={10}
+                  placeholder="10-digit mobile"
+                  value={editMobile}
+                  onChange={(e) => setEditMobile(e.target.value.replace(/\D/g, ''))}
+                  className="customer-account-form__input"
+                />
+              </div>
+
               {tableNumber && (
-                <div className="customer-account-sheet__row">
+                <div className="customer-account-sheet__row customer-account-sheet__row--static">
                   <UtensilsCrossed size={16} />
                   <div>
                     <span className="customer-account-sheet__row-label">Table</span>
@@ -83,11 +132,26 @@ export default function CustomerAccountMenu({ tableNumber, onAfterLogout }) {
                   </div>
                 </div>
               )}
-            </div>
 
-            <p className="customer-account-sheet__note">
-              Logout to use a different mobile number on this table.
-            </p>
+              {errorMsg && (
+                <div className="customer-account-form__error">
+                  <AlertCircle size={15} />
+                  <span>{errorMsg}</span>
+                </div>
+              )}
+
+              {savedMsg && (
+                <div className="customer-account-form__success">
+                  <Check size={15} />
+                  <span>{savedMsg}</span>
+                </div>
+              )}
+
+              <button type="submit" className="customer-account-form__save">
+                <Check size={18} />
+                Save Changes
+              </button>
+            </form>
 
             <button type="button" className="customer-account-sheet__logout" onClick={handleLogout}>
               <LogOut size={18} />

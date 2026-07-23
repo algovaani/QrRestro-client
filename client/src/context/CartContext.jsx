@@ -200,6 +200,34 @@ export const CartProvider = ({ children }) => {
     }
   };
 
+  const updateCustomerProfile = (name, mobile) => {
+    const trimmedName = String(name || '').trim();
+    const trimmedMobile = String(mobile || '').replace(/\D/g, '').slice(0, 10);
+
+    if (trimmedMobile.length !== 10) {
+      return { ok: false, error: 'Please enter a valid 10-digit mobile number.' };
+    }
+    if (!trimmedName) {
+      return { ok: false, error: 'Please enter your name.' };
+    }
+
+    setCustomerName(trimmedName);
+    setCustomerMobile(trimmedMobile);
+
+    if (tableNumber && restaurantAdminId) {
+      saveCustomerMobileLogin(restaurantAdminId, trimmedMobile, trimmedName);
+      const sessionId = customerSessionId || sessionStorage.getItem(getTableSessionKey(restaurantAdminId, tableNumber));
+      if (sessionId) {
+        sessionStorage.setItem(
+          getCustomerStorageKey(restaurantAdminId, tableNumber, sessionId),
+          JSON.stringify({ customerName: trimmedName, customerMobile: trimmedMobile })
+        );
+      }
+    }
+
+    return { ok: true };
+  };
+
   const logoutCustomer = () => {
     if (restaurantAdminId) {
       clearCustomerMobileLogin(restaurantAdminId);
@@ -313,6 +341,7 @@ export const CartProvider = ({ children }) => {
       customerName,
       setCustomerName,
       updateCustomerName,
+      updateCustomerProfile,
       customerMobile,
       setCustomerMobile,
       saveCustomerDetails,
