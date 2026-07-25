@@ -96,7 +96,7 @@ export default function Sidebar() {
           {!branchMode && hasPlanFeature(user, 'inventory') && (
             <NavLink to={p('/inventory')} onClick={closeSidebar} className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
               <Package size={18} />
-              <span>Inventory & Stock</span>
+              <span>Kitchen Stock</span>
             </NavLink>
           )}
 

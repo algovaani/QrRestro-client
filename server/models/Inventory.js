@@ -35,7 +35,7 @@ const inventorySchema = new mongoose.Schema({
   },
   unit: {
     type: String,
-    default: 'pcs',
+    default: 'kg',
     trim: true
   },
   isTracked: {

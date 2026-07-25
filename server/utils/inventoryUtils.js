@@ -1,6 +1,6 @@
 const Inventory = require('../models/Inventory');
 
-exports.getStockStatus = (quantity, lowStockThreshold = 10) => {
+exports.getStockStatus = (quantity, lowStockThreshold = 5) => {
   const qty = Number(quantity) || 0;
   const threshold = Number(lowStockThreshold) || 0;
   if (qty <= 0) return 'out_of_stock';
@@ -8,25 +8,25 @@ exports.getStockStatus = (quantity, lowStockThreshold = 10) => {
   return 'in_stock';
 };
 
-exports.serializeInventoryRow = (row, menuItem, branch) => {
+exports.serializeInventoryRow = (row, _menuItem, branch) => {
   const quantity = row.quantity ?? 0;
-  const lowStockThreshold = row.lowStockThreshold ?? 10;
-  const isCustom = !row.menuItemId && Boolean(row.customItemName);
+  const lowStockThreshold = row.lowStockThreshold ?? 5;
+  const itemName = row.customItemName || 'Unknown Item';
   return {
     _id: row._id,
     adminId: row.adminId,
     branchId: row.branchId,
     branchName: branch?.branchName || '',
-    menuItemId: row.menuItemId || null,
+    menuItemId: null,
     customItemName: row.customItemName || '',
-    isCustom,
-    itemName: menuItem?.name || row.customItemName || 'Unknown Item',
-    categoryName: menuItem?.category?.name || (isCustom ? 'Custom Stock' : ''),
-    foodType: menuItem?.foodType || '',
-    image: menuItem?.image || '',
+    isCustom: true,
+    itemName,
+    categoryName: 'Kitchen Stock',
+    foodType: '',
+    image: '',
     quantity,
     lowStockThreshold,
-    unit: row.unit || 'pcs',
+    unit: row.unit || 'kg',
     isTracked: row.isTracked !== false,
     stockStatus: exports.getStockStatus(quantity, lowStockThreshold),
     lastRestockedAt: row.lastRestockedAt,
@@ -35,25 +35,8 @@ exports.serializeInventoryRow = (row, menuItem, branch) => {
   };
 };
 
-/** Deduct stock when customer places order (only tracked inventory rows). */
-exports.deductInventoryForOrder = async (adminId, branchId, orderItems = []) => {
-  if (!adminId || !branchId || !orderItems.length) return;
-
-  for (const item of orderItems) {
-    const menuItemId = item.menuItem || item.menuItemId;
-    if (!menuItemId) continue;
-
-    const qty = Number(item.quantity) || 1;
-    const record = await Inventory.findOne({
-      adminId,
-      branchId,
-      menuItemId,
-      isTracked: { $ne: false }
-    });
-
-    if (!record) continue;
-
-    record.quantity = Math.max(0, (record.quantity || 0) - qty);
-    await record.save();
-  }
-};
+/**
+ * Kitchen inventory (salt, oil, etc.) is not linked to menu orders.
+ * Kept as a no-op so order placement does not touch stock.
+ */
+exports.deductInventoryForOrder = async () => {};

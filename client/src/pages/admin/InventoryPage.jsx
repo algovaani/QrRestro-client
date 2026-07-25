@@ -13,9 +13,10 @@ import {
   Search,
   AlertTriangle,
   CheckCircle2,
-  XCircle,
-  Download
+  XCircle
 } from 'lucide-react';
+
+const UNITS = ['kg', 'g', 'L', 'ml', 'pcs', 'packet', 'dozen', 'box'];
 
 const STATUS_LABELS = {
   in_stock: { label: 'In Stock', className: 'badge-completed', icon: CheckCircle2, color: '#15803d' },
@@ -24,20 +25,16 @@ const STATUS_LABELS = {
 };
 
 const emptyForm = {
-  addMode: 'custom',
-  menuItemId: '',
   customItemName: '',
   quantity: '0',
-  lowStockThreshold: '10',
-  unit: 'pcs'
+  lowStockThreshold: '5',
+  unit: 'kg'
 };
 
 export default function InventoryPage() {
-  const { branchQueryParams, selectedBranchId, selectedBranch, isAllBranches, branches } = useBranch();
+  const { branchQueryParams, selectedBranchId, isAllBranches, branches } = useBranch();
   const [items, setItems] = useState([]);
   const [summary, setSummary] = useState({ total: 0, in_stock: 0, low_stock: 0, out_of_stock: 0 });
-  const [untracked, setUntracked] = useState([]);
-  const [menuOptionsLoading, setMenuOptionsLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
@@ -58,25 +55,6 @@ export default function InventoryPage() {
     }
     return '';
   }, [isAllBranches, selectedBranchId, branches]);
-
-  const loadMenuOptionsForBranch = useCallback(async (branchId) => {
-    if (!branchId) {
-      setUntracked([]);
-      return [];
-    }
-    setMenuOptionsLoading(true);
-    try {
-      const res = await API.get('/inventory/untracked', { params: { branchId } });
-      const list = res.data?.items || [];
-      setUntracked(list);
-      return list;
-    } catch (err) {
-      setUntracked([]);
-      throw err;
-    } finally {
-      setMenuOptionsLoading(false);
-    }
-  }, []);
 
   const fetchInventory = useCallback(async () => {
     setLoading(true);
@@ -102,75 +80,27 @@ export default function InventoryPage() {
     fetchInventory();
   }, [fetchInventory]);
 
-  useEffect(() => {
-    if (resolvedBranchId) {
-      loadMenuOptionsForBranch(resolvedBranchId).catch(() => {});
-    } else {
-      setUntracked([]);
-    }
-  }, [resolvedBranchId, loadMenuOptionsForBranch]);
-
-  const handleOpenAdd = async () => {
+  const handleOpenAdd = () => {
     if (branches.length === 0) {
       alert('Pehle Branches page se ek branch banayein.');
       return;
     }
-
     const defaultBranch = resolvedBranchId || (branches.length === 1 ? String(branches[0]._id) : '');
     setModalBranchId(defaultBranch);
     setEditingItem(null);
-    setFormData({ ...emptyForm, addMode: untracked.length > 0 ? 'menu' : 'custom' });
+    setFormData(emptyForm);
     setModalError('');
     setShowModal(true);
-
-    if (defaultBranch) {
-      try {
-        const list = await loadMenuOptionsForBranch(defaultBranch);
-        if (list.length === 0) {
-          setFormData((prev) => ({ ...prev, addMode: 'custom' }));
-        }
-      } catch (err) {
-        setModalError(err.response?.data?.message || 'Menu items load nahi ho paye — custom item add kar sakte hain.');
-        setFormData((prev) => ({ ...prev, addMode: 'custom' }));
-      }
-    }
-  };
-
-  const handleModalBranchChange = async (branchId) => {
-    setModalBranchId(branchId);
-    setFormData((prev) => ({ ...prev, menuItemId: '', customItemName: '' }));
-    if (!branchId) {
-      setUntracked([]);
-      return;
-    }
-    try {
-      const list = await loadMenuOptionsForBranch(branchId);
-      setFormData((prev) => ({ ...prev, addMode: list.length > 0 ? prev.addMode : 'custom' }));
-    } catch (err) {
-      setModalError(err.response?.data?.message || 'Branch ke menu load nahi ho paye.');
-      setFormData((prev) => ({ ...prev, addMode: 'custom' }));
-    }
-  };
-
-  const handleMenuItemPick = (menuItemId) => {
-    const picked = untracked.find((m) => String(m._id) === String(menuItemId));
-    setFormData((prev) => ({
-      ...prev,
-      menuItemId,
-      quantity: picked?.currentQuantity != null ? String(picked.currentQuantity) : prev.quantity || '0'
-    }));
   };
 
   const handleOpenEdit = (item) => {
     setEditingItem(item);
     setModalBranchId(String(item.branchId || ''));
     setFormData({
-      addMode: item.menuItemId ? 'menu' : 'custom',
-      menuItemId: item.menuItemId || '',
       customItemName: item.customItemName || item.itemName || '',
       quantity: String(item.quantity ?? 0),
-      lowStockThreshold: String(item.lowStockThreshold ?? 10),
-      unit: item.unit || 'pcs'
+      lowStockThreshold: String(item.lowStockThreshold ?? 5),
+      unit: item.unit || 'kg'
     });
     setModalError('');
     setShowModal(true);
@@ -183,40 +113,24 @@ export default function InventoryPage() {
       setModalError('Pehle branch select karein.');
       return;
     }
+    const name = formData.customItemName.trim();
+    if (!name) {
+      setModalError('Item ka naam likhein (e.g. Salt, Mirch, Ghee).');
+      return;
+    }
+
     setSaving(true);
     setModalError('');
     try {
-      const payload = {
+      await API.post('/inventory', {
         branchId,
+        customItemName: editingItem ? (editingItem.customItemName || editingItem.itemName) : name,
         quantity: Number(formData.quantity) || 0,
-        lowStockThreshold: Number(formData.lowStockThreshold) || 10,
-        unit: formData.unit || 'pcs'
-      };
-
-      if (editingItem) {
-        if (editingItem.menuItemId) payload.menuItemId = editingItem.menuItemId;
-        else payload.customItemName = editingItem.customItemName || editingItem.itemName;
-      } else if (formData.addMode === 'menu') {
-        if (!formData.menuItemId) {
-          setModalError('Menu item select karein.');
-          setSaving(false);
-          return;
-        }
-        payload.menuItemId = formData.menuItemId;
-      } else {
-        const name = formData.customItemName.trim();
-        if (!name) {
-          setModalError('Item ka naam likhein.');
-          setSaving(false);
-          return;
-        }
-        payload.customItemName = name;
-      }
-
-      await API.post('/inventory', payload);
+        lowStockThreshold: Number(formData.lowStockThreshold) || 5,
+        unit: formData.unit || 'kg'
+      });
       setShowModal(false);
       await fetchInventory();
-      if (branchId) await loadMenuOptionsForBranch(branchId).catch(() => {});
     } catch (err) {
       setModalError(err.response?.data?.message || 'Failed to save inventory');
     } finally {
@@ -237,38 +151,12 @@ export default function InventoryPage() {
   };
 
   const handleDelete = async (item) => {
-    if (!window.confirm(`"${item.itemName}" ka stock tracking hata den?`)) return;
+    if (!window.confirm(`"${item.itemName}" stock se hata den?`)) return;
     try {
       await API.delete(`/inventory/${item._id}`);
       await fetchInventory();
-      if (item.branchId) await loadMenuOptionsForBranch(String(item.branchId)).catch(() => {});
     } catch (err) {
       alert(err.response?.data?.message || 'Failed to remove');
-    }
-  };
-
-  const handleInitBranch = async () => {
-    const branchId = resolvedBranchId;
-    if (!branchId) {
-      alert('Pehle header se ek branch select karein.');
-      return;
-    }
-    const branchName = selectedBranch?.branchName || branches.find((b) => String(b._id) === branchId)?.branchName || 'branch';
-    if (!window.confirm(`"${branchName}" ke liye saare menu items inventory mein add karein? (0 stock se start)`)) return;
-    setActionLoading('init');
-    try {
-      const res = await API.post('/inventory/init-branch', {
-        branchId,
-        defaultQuantity: 0,
-        lowStockThreshold: 10
-      });
-      alert(res.data.message || 'Done');
-      await fetchInventory();
-      await loadMenuOptionsForBranch(branchId).catch(() => {});
-    } catch (err) {
-      alert(err.response?.data?.message || 'Failed to initialize inventory');
-    } finally {
-      setActionLoading('');
     }
   };
 
@@ -286,13 +174,14 @@ export default function InventoryPage() {
     <div className="admin-layout">
       <Sidebar />
       <div className="admin-main">
-        <Header title="Inventory & Stock" />
+        <Header title="Branch Inventory" />
         <div className="admin-content">
 
           <div className="admin-action-bar" style={{ marginBottom: '1rem', alignItems: 'flex-start' }}>
             <div style={{ maxWidth: '640px' }}>
               <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '0.5rem' }}>
-                Branch-wise stock manage karein — kaunsi item kitni hai aur kaunsi khatam hone wali hai.
+                Har branch ka kitchen stock yahan manage karein — Salt, Mirch, Ghee, Haldi wagaira.
+                Menu dishes se alag. Quantity add/remove karke track karein kitna bacha hai.
                 {isAllBranches && branches.length > 1 && ' Header se branch filter kar sakte hain.'}
               </p>
             </div>
@@ -300,17 +189,6 @@ export default function InventoryPage() {
               <button type="button" onClick={fetchInventory} className="btn btn-secondary btn-sm" title="Refresh">
                 <RefreshCw size={16} />
               </button>
-              {resolvedBranchId && (
-                <button
-                  type="button"
-                  onClick={handleInitBranch}
-                  disabled={actionLoading === 'init'}
-                  className="btn btn-secondary btn-sm"
-                >
-                  <Download size={16} />
-                  Load Menu Items
-                </button>
-              )}
               <button type="button" onClick={handleOpenAdd} className="btn btn-primary btn-sm">
                 <Plus size={16} />
                 Add Stock Item
@@ -319,7 +197,7 @@ export default function InventoryPage() {
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '0.75rem', marginBottom: '1rem' }}>
-            {statCard('Total Tracked', summary.total, 'var(--secondary)', Package)}
+            {statCard('Total Items', summary.total, 'var(--secondary)', Package)}
             {statCard('In Stock', summary.in_stock, '#15803d', CheckCircle2)}
             {statCard('Low Stock', summary.low_stock, '#b45309', AlertTriangle)}
             {statCard('Out of Stock', summary.out_of_stock, '#dc2626', XCircle)}
@@ -331,7 +209,7 @@ export default function InventoryPage() {
                 <Search size={18} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
                 <input
                   type="text"
-                  placeholder="Search item, category, branch..."
+                  placeholder="Search salt, ghee, branch..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   style={{ width: '100%', paddingLeft: '38px' }}
@@ -351,7 +229,7 @@ export default function InventoryPage() {
                   <tr>
                     <th style={{ padding: '0.85rem 1rem', textAlign: 'left' }}>ITEM</th>
                     {isAllBranches && <th style={{ padding: '0.85rem 1rem', textAlign: 'left' }}>BRANCH</th>}
-                    <th style={{ padding: '0.85rem 1rem', textAlign: 'left' }}>STOCK</th>
+                    <th style={{ padding: '0.85rem 1rem', textAlign: 'left' }}>QUANTITY LEFT</th>
                     <th style={{ padding: '0.85rem 1rem', textAlign: 'left' }}>LOW ALERT</th>
                     <th style={{ padding: '0.85rem 1rem', textAlign: 'left' }}>STATUS</th>
                     <th style={{ padding: '0.85rem 1rem', textAlign: 'right' }}>ACTIONS</th>
@@ -367,9 +245,7 @@ export default function InventoryPage() {
                   ) : items.length === 0 ? (
                     <tr>
                       <td colSpan={isAllBranches ? 6 : 5} style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>
-                        {isAllBranches
-                          ? 'Koi inventory nahi mili. Branch select karke "Load Menu Items" use karein.'
-                          : 'Is branch mein abhi stock track nahi ho raha. "Load Menu Items" ya "Add Stock Item" se shuru karein.'}
+                        Abhi koi kitchen stock nahi. &quot;Add Stock Item&quot; se Salt, Mirch, Ghee wagaira add karein.
                       </td>
                     </tr>
                   ) : items.map((item) => {
@@ -379,13 +255,15 @@ export default function InventoryPage() {
                       <tr key={item._id} style={{ borderBottom: '1px solid #f1f5f9' }}>
                         <td style={{ padding: '0.85rem 1rem' }}>
                           <div style={{ fontWeight: '700' }}>{item.itemName}</div>
-                          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{item.categoryName || '—'}</div>
+                          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Kitchen Stock</div>
                         </td>
                         {isAllBranches && (
                           <td style={{ padding: '0.85rem 1rem', fontSize: '0.82rem' }}>{item.branchName}</td>
                         )}
                         <td style={{ padding: '0.85rem 1rem' }}>
-                          <strong style={{ fontSize: '1rem' }}>{item.quantity}</strong>
+                          <strong style={{ fontSize: '1rem', color: item.stockStatus === 'out_of_stock' || item.stockStatus === 'low_stock' ? statusMeta.color : undefined }}>
+                            {item.quantity}
+                          </strong>
                           <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginLeft: '0.25rem' }}>{item.unit}</span>
                         </td>
                         <td style={{ padding: '0.85rem 1rem' }}>{item.lowStockThreshold} {item.unit}</td>
@@ -437,7 +315,7 @@ export default function InventoryPage() {
         <div className="modal-overlay" onClick={() => !saving && setShowModal(false)}>
           <div className="modal-card" style={{ maxWidth: '460px' }} onClick={(e) => e.stopPropagation()}>
             <h3 style={{ fontSize: '1.2rem', fontWeight: '800', marginBottom: '1rem' }}>
-              {editingItem ? `Edit Stock — ${editingItem.itemName}` : 'Add Stock Item'}
+              {editingItem ? `Edit Stock — ${editingItem.itemName}` : 'Add Kitchen Stock'}
             </h3>
 
             {modalError && (
@@ -453,7 +331,7 @@ export default function InventoryPage() {
                   <select
                     required
                     value={modalBranchId}
-                    onChange={(e) => handleModalBranchChange(e.target.value)}
+                    onChange={(e) => setModalBranchId(e.target.value)}
                     style={{ width: '100%' }}
                   >
                     <option value="">Select branch</option>
@@ -473,77 +351,26 @@ export default function InventoryPage() {
               )}
 
               {!editingItem && (
-                <>
-                  <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                    <button
-                      type="button"
-                      className={`btn btn-sm ${formData.addMode === 'custom' ? 'btn-primary' : 'btn-secondary'}`}
-                      onClick={() => setFormData({ ...formData, addMode: 'custom', menuItemId: '' })}
-                    >
-                      Custom Item
-                    </button>
-                    <button
-                      type="button"
-                      className={`btn btn-sm ${formData.addMode === 'menu' ? 'btn-primary' : 'btn-secondary'}`}
-                      onClick={() => setFormData({ ...formData, addMode: 'menu', customItemName: '' })}
-                      disabled={untracked.length === 0 && !menuOptionsLoading}
-                    >
-                      Menu Item
-                    </button>
-                  </div>
-
-                  {formData.addMode === 'custom' ? (
-                    <div>
-                      <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', marginBottom: '0.3rem' }}>Item Name *</label>
-                      <input
-                        type="text"
-                        required
-                        value={formData.customItemName}
-                        onChange={(e) => setFormData({ ...formData, customItemName: e.target.value })}
-                        placeholder="e.g. Paneer, Oil, Rice bag, Napkins"
-                        style={{ width: '100%' }}
-                      />
-                      <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.35rem' }}>
-                        Raw material / ingredient jo menu mein na ho — custom add kar sakte hain.
-                      </p>
-                    </div>
-                  ) : (
-                    <div>
-                      <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', marginBottom: '0.3rem' }}>Menu Item *</label>
-                      {menuOptionsLoading ? (
-                        <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Menu items load ho rahe hain...</p>
-                      ) : (
-                        <select
-                          required
-                          value={formData.menuItemId}
-                          onChange={(e) => handleMenuItemPick(e.target.value)}
-                          style={{ width: '100%' }}
-                          disabled={!modalBranchId && branches.length > 1}
-                        >
-                          <option value="">Select menu item</option>
-                          {untracked.map((m) => (
-                            <option key={m._id} value={m._id}>
-                              {m.name}{m.categoryName ? ` (${m.categoryName})` : ''}{m.alreadyTracked ? ' — update stock' : ''}
-                            </option>
-                          ))}
-                        </select>
-                      )}
-                      {untracked.length === 0 && !menuOptionsLoading && (
-                        <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.35rem' }}>
-                          Menu items nahi mile. Branch login se menu banayein, ya Custom Item use karein.
-                        </p>
-                      )}
-                    </div>
-                  )}
-                </>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', marginBottom: '0.3rem' }}>Item Name *</label>
+                  <input
+                    type="text"
+                    required
+                    value={formData.customItemName}
+                    onChange={(e) => setFormData({ ...formData, customItemName: e.target.value })}
+                    placeholder="e.g. Salt, Mirch, Ghee, Haldi, Oil"
+                    style={{ width: '100%' }}
+                  />
+                </div>
               )}
 
               <div className="admin-form-grid-2">
                 <div>
-                  <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', marginBottom: '0.3rem' }}>Current Stock *</label>
+                  <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', marginBottom: '0.3rem' }}>Quantity Left *</label>
                   <input
                     type="number"
                     min="0"
+                    step="any"
                     required
                     value={formData.quantity}
                     onChange={(e) => setFormData({ ...formData, quantity: e.target.value })}
@@ -552,28 +379,34 @@ export default function InventoryPage() {
                 </div>
                 <div>
                   <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', marginBottom: '0.3rem' }}>Unit</label>
-                  <input
-                    type="text"
+                  <select
                     value={formData.unit}
                     onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
-                    placeholder="pcs, kg, plates..."
                     style={{ width: '100%' }}
-                  />
+                  >
+                    {UNITS.map((u) => (
+                      <option key={u} value={u}>{u}</option>
+                    ))}
+                  </select>
                 </div>
               </div>
 
               <div>
                 <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', marginBottom: '0.3rem' }}>
-                  Low Stock Alert (kam se kam itna bache to warning)
+                  Low Stock Alert
                 </label>
                 <input
                   type="number"
                   min="0"
+                  step="any"
                   required
                   value={formData.lowStockThreshold}
                   onChange={(e) => setFormData({ ...formData, lowStockThreshold: e.target.value })}
                   style={{ width: '100%' }}
                 />
+                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.35rem' }}>
+                  Isse kam bache to Low Stock dikhega.
+                </p>
               </div>
 
               <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
@@ -581,7 +414,7 @@ export default function InventoryPage() {
                   Cancel
                 </button>
                 <button type="submit" className="btn btn-primary" disabled={saving}>
-                  {saving ? 'Saving...' : editingItem ? 'Update Stock' : 'Add to Inventory'}
+                  {saving ? 'Saving...' : editingItem ? 'Update Stock' : 'Add Item'}
                 </button>
               </div>
             </form>
