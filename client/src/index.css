@@ -652,6 +652,24 @@ input:focus, select:focus, textarea:focus {
   font-weight: 800;
   font-size: 1.2rem;
   flex-shrink: 0;
+  overflow: hidden;
+  padding: 0;
+}
+
+.admin-sidebar-brand-icon--logo {
+  background: transparent;
+  border-radius: 50%;
+}
+
+.brand-logo {
+  display: block;
+  object-fit: contain;
+  flex-shrink: 0;
+  border-radius: 50%;
+}
+
+.brand-logo--header {
+  flex-shrink: 0;
 }
 
 .admin-sidebar-brand h3 {
@@ -1350,6 +1368,13 @@ input:focus, select:focus, textarea:focus {
   justify-content: center;
 }
 
+.customer-welcome-icon--logo {
+  width: 88px;
+  height: 88px;
+  background: transparent;
+  padding: 0;
+}
+
 .customer-welcome-title {
   font-size: 1.25rem;
   font-weight: 800;
@@ -1431,6 +1456,14 @@ input:focus, select:focus, textarea:focus {
 }
 
 .customer-header__brand {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+}
+
+.customer-header__brand-text {
   flex: 1;
   min-width: 0;
 }
@@ -2524,6 +2557,12 @@ input:focus, select:focus, textarea:focus {
   padding: 1.25rem 1rem 2rem;
 }
 
+.membership-standalone-brand {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 1rem;
+}
+
 .membership-page {
   max-width: 720px;
 }
@@ -3435,6 +3474,15 @@ input:focus, select:focus, textarea:focus {
   background: linear-gradient(135deg, var(--primary) 0%, #ff8c33 100%);
   color: #fff;
   box-shadow: 0 8px 24px rgba(255, 107, 0, 0.35);
+}
+
+.auth-login-icon--logo {
+  width: 96px;
+  height: 96px;
+  background: transparent;
+  box-shadow: none;
+  border-radius: 50%;
+  padding: 0;
 }
 
 .auth-login-brand-name {

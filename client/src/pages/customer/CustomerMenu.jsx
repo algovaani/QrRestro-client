@@ -18,6 +18,7 @@ import CustomerNotificationToast from '../../components/customer/CustomerNotific
 import CustomerSoundEnableBar from '../../components/customer/CustomerSoundEnableBar';
 import { orderMatchesCustomerSession, notifyCustomerOrderStatus, notifyCustomerPaymentPending, notifyCustomerPaymentSuccess, notifyCustomerPaymentRejected } from '../../utils/orderNotifications';
 import { resolveUploadUrl, resolveMenuItemImageUrl } from '../../utils/uploadUrl';
+import BrandLogo from '../../components/common/BrandLogo';
 
 export default function CustomerMenu() {
   const { adminId: routeAdminId, branchId: routeBranchId, tableNumber } = useParams();
@@ -294,7 +295,7 @@ export default function CustomerMenu() {
     return (
       <div className="customer-mobile-wrap" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <div style={{ textAlign: 'center', padding: '2rem' }}>
-          <div style={{ fontSize: '2.5rem' }}>🍽️</div>
+          <BrandLogo size={72} style={{ margin: '0 auto' }} />
           <p style={{ marginTop: '0.5rem', color: 'var(--text-muted)' }}>Loading Digital Menu...</p>
         </div>
       </div>
@@ -337,17 +338,20 @@ export default function CustomerMenu() {
       <div className="customer-header">
         <div className="customer-header__row">
           <div className="customer-header__brand">
-            <h1 style={{ fontSize: '1.15rem', fontWeight: '800', color: 'var(--secondary)' }}>
-              {tableInfo?.settings?.restaurantName || 'Royal Spice'}
-            </h1>
-            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-              Digital QR Menu
-            </span>
-            <span className="customer-header-user-line">
-              {customerName?.trim()
-                ? `Hi, ${customerName.trim()} • ${customerMobile}`
-                : `Logged in • ${customerMobile}`}
-            </span>
+            <BrandLogo size={44} className="brand-logo--header" />
+            <div className="customer-header__brand-text">
+              <h1 style={{ fontSize: '1.15rem', fontWeight: '800', color: 'var(--secondary)' }}>
+                {tableInfo?.settings?.restaurantName || 'Royal Spice'}
+              </h1>
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                Digital QR Menu
+              </span>
+              <span className="customer-header-user-line">
+                {customerName?.trim()
+                  ? `Hi, ${customerName.trim()} • ${customerMobile}`
+                  : `Logged in • ${customerMobile}`}
+              </span>
+            </div>
           </div>
 
           <div className="customer-header-actions">

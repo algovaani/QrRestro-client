@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { getPostLoginPath } from '../../utils/adminAccess';
-import { LogIn, AlertCircle, UtensilsCrossed } from 'lucide-react';
+import { LogIn, AlertCircle } from 'lucide-react';
+import BrandLogo from '../../components/common/BrandLogo';
 
 export default function AdminLogin() {
   const [email, setEmail] = useState('');
@@ -31,8 +32,8 @@ export default function AdminLogin() {
     <div className="auth-login-page">
       <div className="auth-login-card">
         <div className="auth-login-brand">
-          <div className="auth-login-icon">
-            <UtensilsCrossed size={30} strokeWidth={2.25} />
+          <div className="auth-login-icon auth-login-icon--logo">
+            <BrandLogo size={96} />
           </div>
           <div className="auth-login-brand-name">Royal Spice</div>
           <h1 className="auth-login-title">Welcome back</h1>

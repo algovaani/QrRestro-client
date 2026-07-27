@@ -16,6 +16,7 @@ import { getOrderStatusMessage, orderMatchesCustomerSession, notifyCustomerOrder
 import { countReviewWords, MAX_REVIEW_WORDS, sanitizeReviewForSave, isReviewWithinWordLimit } from '../../utils/reviewText';
 import UPIPaymentModal from '../../components/customer/UPIPaymentModal';
 import { ArrowLeft, CheckCircle2, Clock, ChefHat, Sparkles, UtensilsCrossed, QrCode, Star, Send } from 'lucide-react';
+import BrandLogo from '../../components/common/BrandLogo';
 
 export default function OrderStatusPage() {
   const { orderNumber } = useParams();
@@ -260,10 +261,11 @@ export default function OrderStatusPage() {
       <CustomerSoundEnableBar aboveNav />
 
       {/* Top Navigation Bar */}
-      <div style={{ background: '#ffffff', padding: '1rem', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: '1rem', position: 'sticky', top: 0, zIndex: 80 }}>
-        <button onClick={() => navigate(-1)} style={{ padding: '0.4rem', borderRadius: '50%', background: '#f1f5f9' }}>
+      <div style={{ background: '#ffffff', padding: '1rem', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: '0.75rem', position: 'sticky', top: 0, zIndex: 80 }}>
+        <button onClick={() => navigate(-1)} style={{ padding: '0.4rem', borderRadius: '50%', background: '#f1f5f9', flexShrink: 0 }}>
           <ArrowLeft size={18} />
         </button>
+        <BrandLogo size={36} className="brand-logo--header" />
         <div>
           <h2 style={{ fontSize: '1.1rem', fontWeight: '800', color: 'var(--secondary)' }}>Live Table Order Status</h2>
           <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Order #{orderNumber}</span>

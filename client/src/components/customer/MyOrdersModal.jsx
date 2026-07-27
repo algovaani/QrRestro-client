@@ -8,6 +8,7 @@ import { orderMatchesCustomerSession, notifyCustomerOrderStatus, notifyCustomerP
 import { sendOrderBillOnWhatsApp } from '../../utils/billShare';
 import UPIPaymentModal from './UPIPaymentModal';
 import { X, ChevronDown, ChevronUp, QrCode, MessageSquare, Utensils, Loader2, ExternalLink } from 'lucide-react';
+import BrandLogo from '../common/BrandLogo';
 
 function formatOrderTime(createdAt) {
   if (!createdAt) return '';
@@ -276,7 +277,7 @@ export default function MyOrdersModal({ tableNumber, adminId, branchId = '', cus
           </div>
         ) : (
           <div className="my-orders-modal__empty my-orders-modal__empty--icon">
-            <div style={{ fontSize: '2.5rem' }}>🍽️</div>
+            <BrandLogo size={64} style={{ margin: '0 auto' }} />
             <h4>No orders placed yet</h4>
             <p>Add items from the menu to place your first order.</p>
           </div>

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { Phone, UtensilsCrossed, AlertCircle } from 'lucide-react';
+import { Phone, AlertCircle } from 'lucide-react';
 import { unlockOrderChimeAudio } from '../../utils/orderChime';
+import BrandLogo from '../common/BrandLogo';
 
 export default function CustomerWelcome({ tableNumber, restaurantName, onSubmit }) {
   const [mobile, setMobile] = useState('');
@@ -23,8 +24,8 @@ export default function CustomerWelcome({ tableNumber, restaurantName, onSubmit 
     <div className="customer-mobile-wrap customer-welcome-wrap">
       <div className="customer-welcome-card">
         <div style={{ textAlign: 'center', marginBottom: '1.25rem' }}>
-          <div className="customer-welcome-icon">
-            <UtensilsCrossed size={28} color="var(--primary)" />
+          <div className="customer-welcome-icon customer-welcome-icon--logo">
+            <BrandLogo size={88} />
           </div>
           <h1 className="customer-welcome-title">
             Welcome to {restaurantName || 'Our Restaurant'}

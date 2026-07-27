@@ -15,6 +15,7 @@ import { startCustomerPayFlow, getUnpaidOrders } from '../../utils/customerPayFl
 import PayOrderPickerModal from '../../components/customer/PayOrderPickerModal';
 import { orderMatchesCustomerSession, notifyCustomerOrderStatus, notifyCustomerPaymentPending, notifyCustomerPaymentSuccess, notifyCustomerPaymentRejected } from '../../utils/orderNotifications';
 import { CheckCircle2, Clock, Utensils, QrCode } from 'lucide-react';
+import BrandLogo from '../../components/common/BrandLogo';
 
 export default function OrderSuccessPage() {
   const { orderNumber } = useParams();
@@ -175,6 +176,7 @@ export default function OrderSuccessPage() {
       <CustomerSoundEnableBar aboveNav />
       
       <div style={{ textAlign: 'center', marginTop: '1rem' }}>
+        <BrandLogo size={72} style={{ margin: '0 auto 0.75rem' }} />
         <div style={{
           width: '76px',
           height: '76px',

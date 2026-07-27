@@ -12,6 +12,7 @@ import { MapPin } from 'lucide-react';
 
 import { getAdminOrderDetailsPath } from '../../utils/adminNotifications';
 import { useBranch } from '../../context/BranchContext';
+import BrandLogo from './BrandLogo';
 
 export default function Header({ title, hideBranchSelector = false, branchLabel = '' }) {
   const { notifications, removeNotification, isConnected } = useSocket();
@@ -29,6 +30,7 @@ export default function Header({ title, hideBranchSelector = false, branchLabel 
       <header className="admin-header">
         <div className="admin-header-start">
           <AdminMobileMenuButton />
+          <BrandLogo size={32} className="brand-logo--header admin-header-logo" />
           <h2 className="admin-header-title">{title}</h2>
         </div>
 

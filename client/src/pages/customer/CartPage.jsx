@@ -12,6 +12,7 @@ import { startCustomerPayFlow, getUnpaidOrders } from '../../utils/customerPayFl
 import { unlockOrderChimeAudio } from '../../utils/orderChime';
 import PayOrderPickerModal from '../../components/customer/PayOrderPickerModal';
 import { ArrowLeft, Trash2, Plus, Minus, CheckCircle, AlertCircle, User, QrCode, Banknote } from 'lucide-react';
+import BrandLogo from '../../components/common/BrandLogo';
 
 export default function CartPage() {
   const navigate = useNavigate();
@@ -182,6 +183,7 @@ export default function CartPage() {
         >
           <ArrowLeft size={18} />
         </button>
+        <BrandLogo size={36} className="brand-logo--header" />
         <div style={{ flex: 1, minWidth: 0 }}>
           <h2 style={{ fontSize: '1.1rem', fontWeight: '800', color: 'var(--secondary)' }}>Cart & Checkout</h2>
           <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Table {activeTableNumber || 'N/A'}</span>

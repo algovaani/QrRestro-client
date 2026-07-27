@@ -29,6 +29,7 @@ import {
   Phone
 } from 'lucide-react';
 import { getDaysRemaining, formatExpiryDate, getMembershipDaysLabel, resolveMembershipDisplay, isFreePlan } from '../../utils/membershipDays';
+import BrandLogo from '../../components/common/BrandLogo';
 
 export default function AdminMembershipPage({ standalone = false }) {
   const { user, logout, updateUser } = useAuth();
@@ -684,6 +685,9 @@ export default function AdminMembershipPage({ standalone = false }) {
   if (standalone) {
     return (
       <div className="membership-standalone-wrap">
+        <div className="membership-standalone-brand">
+          <BrandLogo size={56} />
+        </div>
         {content}
       </div>
     );

@@ -1,11 +1,13 @@
 import React from 'react';
 import { Clock, Mail, CreditCard } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import BrandLogo from '../../components/common/BrandLogo';
 
 /** When Super Admin has not sent a membership offer yet (deactivated account) */
 export default function MembershipWaitingPage({ standalone = false }) {
   const content = (
     <div className="membership-waiting">
+      <BrandLogo size={64} style={{ margin: '0 auto 1rem' }} />
       <div className="membership-waiting-icon">
         <Clock size={40} color="#64748b" />
       </div>

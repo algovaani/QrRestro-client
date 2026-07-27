@@ -11,6 +11,7 @@ import API from '../../services/api';
 import { UserX, LogOut } from 'lucide-react';
 
 import { getAdminOrderDetailsPath } from '../../utils/adminNotifications';
+import BrandLogo from '../../components/common/BrandLogo';
 
 export default function SubscriptionExpiredPage() {
   const { user, token, authReady, logout, updateUser } = useAuth();
@@ -58,6 +59,7 @@ export default function SubscriptionExpiredPage() {
     return (
       <div className="membership-standalone-wrap">
         <div className="membership-waiting">
+          <BrandLogo size={64} style={{ margin: '0 auto 1rem' }} />
           <div className="membership-waiting-icon">
             <UserX size={40} color="#dc2626" />
           </div>

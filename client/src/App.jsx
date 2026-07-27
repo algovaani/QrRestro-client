@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { CartProvider } from './context/CartContext';
 import { SocketProvider } from './context/SocketContext';
+import BrandLogo from './components/common/BrandLogo';
 
 // Super Admin Pages
 import SuperAdminDashboard from './pages/superAdmin/SuperAdminDashboard';
@@ -36,6 +37,7 @@ function PublicNotFound() {
   return (
     <div className="customer-mobile-wrap" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2rem', minHeight: '100vh' }}>
       <div style={{ textAlign: 'center', background: '#fff', padding: '2rem', borderRadius: '16px', border: '1px solid var(--border)', maxWidth: '360px' }}>
+        <BrandLogo size={72} style={{ margin: '0 auto 1rem' }} />
         <h2 style={{ fontSize: '1.25rem', fontWeight: '800', marginBottom: '0.5rem' }}>Page Not Found</h2>
         <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>Scan your table QR code to open the digital menu.</p>
       </div>

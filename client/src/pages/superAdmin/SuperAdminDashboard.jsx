@@ -3,7 +3,6 @@ import API from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import {
-  ShieldCheck,
   Users,
   Plus,
   RefreshCw,
@@ -41,6 +40,7 @@ import AdminNotificationBell from '../../components/common/AdminNotificationBell
 import UpiQrDisplay from '../../components/common/UpiQrDisplay';
 import { resolveUploadUrl } from '../../utils/uploadUrl';
 import { getSelectedPlanFeatures } from '../../utils/planFeatures';
+import BrandLogo from '../../components/common/BrandLogo';
 
 export default function SuperAdminDashboard() {
   const { user, logout, updateUser } = useAuth();
@@ -635,8 +635,8 @@ export default function SuperAdminDashboard() {
       {/* SUPER ADMIN SIDEBAR */}
       <div className={`admin-sidebar${sidebarOpen ? ' is-open' : ''}`}>
         <div className="admin-sidebar-brand">
-          <div className="admin-sidebar-brand-icon">
-            <ShieldCheck size={24} />
+          <div className="admin-sidebar-brand-icon admin-sidebar-brand-icon--logo">
+            <BrandLogo size={40} />
           </div>
           <div>
             <h3 style={{ color: '#fff' }}>SaaS Master</h3>
@@ -725,6 +725,7 @@ export default function SuperAdminDashboard() {
             <button type="button" className="admin-mobile-menu-btn" onClick={() => setSidebarOpen((v) => !v)} aria-label="Open menu">
               <Menu size={22} />
             </button>
+            <BrandLogo size={32} className="brand-logo--header admin-header-logo" />
             <h2 className="admin-header-title">Super Admin Control Center</h2>
           </div>
 

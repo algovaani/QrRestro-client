@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { getPostLoginPath } from '../../utils/adminAccess';
-import { LogIn, AlertCircle, MapPin } from 'lucide-react';
+import { LogIn, AlertCircle } from 'lucide-react';
+import BrandLogo from '../../components/common/BrandLogo';
 
 export default function BranchLogin() {
   const [email, setEmail] = useState('');
@@ -54,19 +55,7 @@ export default function BranchLogin() {
         boxShadow: '0 20px 40px rgba(0,0,0,0.2)'
       }}>
         <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
-          <div style={{
-            width: '60px',
-            height: '60px',
-            background: 'var(--primary-light)',
-            color: 'var(--primary)',
-            borderRadius: '16px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            margin: '0 auto 1rem auto'
-          }}>
-            <MapPin size={28} />
-          </div>
+          <BrandLogo size={88} style={{ margin: '0 auto 1rem' }} />
           <h2 style={{ fontSize: '1.5rem', fontWeight: '800', color: 'var(--secondary)' }}>
             Branch Login
           </h2>

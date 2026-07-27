@@ -7,6 +7,7 @@ import { canShowMembershipOption } from '../../utils/membershipAccess';
 import { hasPlanFeature } from '../../utils/planFeatures';
 import { resolveMembershipDisplay, getMembershipDaysLabel } from '../../utils/membershipDays';
 import { isBranchAdmin, portalPath, getLoginPath } from '../../utils/adminPaths';
+import BrandLogo from './BrandLogo';
 
 export default function Sidebar() {
   const { user, logout } = useAuth();
@@ -37,7 +38,9 @@ export default function Sidebar() {
 
       <aside className={`admin-sidebar${sidebarOpen ? ' is-open' : ''}`}>
         <div className="admin-sidebar-brand">
-          <div className="admin-sidebar-brand-icon">{branchMode ? '📍' : '🍽️'}</div>
+          <div className="admin-sidebar-brand-icon admin-sidebar-brand-icon--logo">
+            <BrandLogo size={40} />
+          </div>
           <div>
             <h3>{branchMode ? (user?.branchName || 'Branch') : 'Royal Spice'}</h3>
             <span>{branchMode ? 'Branch Portal' : 'Admin Portal'}</span>
