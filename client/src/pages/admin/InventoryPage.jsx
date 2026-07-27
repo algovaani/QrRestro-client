@@ -81,6 +81,20 @@ export default function InventoryPage() {
 
   const showGroupedByBranch = !branchMode && isAllBranches && branches.length > 1;
 
+  const operationalBranches = useMemo(
+    () => branches.filter((b) => b.isActive !== false && !b.suspendedByLimit),
+    [branches]
+  );
+
+  const isBranchStockLocked = useCallback(
+    (branchId) => {
+      const branch = branches.find((b) => String(b._id) === String(branchId));
+      if (!branch) return false;
+      return Boolean(branch.suspendedByLimit) || branch.isActive === false;
+    },
+    [branches]
+  );
+
   const fetchInventory = useCallback(async () => {
     setLoading(true);
     try {
@@ -109,15 +123,27 @@ export default function InventoryPage() {
   }, [fetchInventory]);
 
   const handleOpenAdd = (presetBranchId = '') => {
-    if (branches.length === 0) {
-      alert('Please create a branch first from the Branches page.');
+    if (operationalBranches.length === 0) {
+      alert(
+        branches.some((b) => b.suspendedByLimit)
+          ? 'All extra branches are suspended by plan limit. Delete a branch or ask Super Admin to increase the limit.'
+          : 'Please create a branch first from the Branches page.'
+      );
+      return;
+    }
+    if (presetBranchId && isBranchStockLocked(presetBranchId)) {
+      alert('This branch is suspended because it exceeds your branch limit. Kitchen stock cannot be changed.');
       return;
     }
     const defaultBranch =
       presetBranchId ||
       resolvedBranchId ||
-      (branches.length === 1 ? String(branches[0]._id) : '');
-    setModalBranchId(defaultBranch);
+      (operationalBranches.length === 1 ? String(operationalBranches[0]._id) : '');
+    if (defaultBranch && isBranchStockLocked(defaultBranch)) {
+      setModalBranchId('');
+    } else {
+      setModalBranchId(defaultBranch);
+    }
     setEditingItem(null);
     setFormData(emptyForm);
     setModalError('');
@@ -125,6 +151,10 @@ export default function InventoryPage() {
   };
 
   const handleOpenEdit = (item) => {
+    if (item.suspendedByLimit || isBranchStockLocked(item.branchId)) {
+      alert('This branch is suspended because it exceeds your branch limit. Kitchen stock cannot be changed.');
+      return;
+    }
     setEditingItem(item);
     setModalBranchId(String(item.branchId || ''));
     setFormData({
@@ -170,6 +200,10 @@ export default function InventoryPage() {
   };
 
   const handleAdjust = async (item, adjustment) => {
+    if (item.suspendedByLimit || isBranchStockLocked(item.branchId)) {
+      alert('This branch is suspended because it exceeds your branch limit. Kitchen stock cannot be changed.');
+      return;
+    }
     setActionLoading(item._id);
     try {
       await API.patch(`/inventory/${item._id}/adjust`, { adjustment });
@@ -201,11 +235,14 @@ export default function InventoryPage() {
     list.map((item) => {
       const statusMeta = STATUS_LABELS[item.stockStatus] || STATUS_LABELS.in_stock;
       const StatusIcon = statusMeta.icon;
+      const locked = Boolean(item.suspendedByLimit) || isBranchStockLocked(item.branchId);
       return (
-        <tr key={item._id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+        <tr key={item._id} style={{ borderBottom: '1px solid #f1f5f9', opacity: locked ? 0.65 : 1 }}>
           <td style={{ padding: '0.85rem 1rem' }}>
             <div style={{ fontWeight: '700' }}>{item.itemName}</div>
-            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Kitchen Stock</div>
+            <div style={{ fontSize: '0.75rem', color: locked ? '#b45309' : 'var(--text-muted)' }}>
+              {locked ? 'Suspended branch — stock locked' : 'Kitchen Stock'}
+            </div>
           </td>
           {!showGroupedByBranch && isAllBranches && (
             <td style={{ padding: '0.85rem 1rem', fontSize: '0.82rem' }}>
@@ -245,8 +282,8 @@ export default function InventoryPage() {
               <button
                 type="button"
                 className="btn btn-secondary btn-sm"
-                title="Reduce stock"
-                disabled={actionLoading === item._id}
+                title={locked ? 'Branch suspended' : 'Reduce stock'}
+                disabled={locked || actionLoading === item._id}
                 onClick={() => handleAdjust(item, -1)}
               >
                 <Minus size={14} />
@@ -254,13 +291,19 @@ export default function InventoryPage() {
               <button
                 type="button"
                 className="btn btn-secondary btn-sm"
-                title="Add stock"
-                disabled={actionLoading === item._id}
+                title={locked ? 'Branch suspended' : 'Add stock'}
+                disabled={locked || actionLoading === item._id}
                 onClick={() => handleAdjust(item, 1)}
               >
                 <Plus size={14} />
               </button>
-              <button type="button" className="btn btn-secondary btn-sm" onClick={() => handleOpenEdit(item)}>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                disabled={locked}
+                title={locked ? 'Branch suspended' : 'Edit'}
+                onClick={() => handleOpenEdit(item)}
+              >
                 <Edit2 size={14} />
               </button>
               <button
@@ -268,6 +311,7 @@ export default function InventoryPage() {
                 className="btn btn-secondary btn-sm"
                 onClick={() => handleDelete(item)}
                 style={{ color: 'var(--danger)' }}
+                title="Remove stock item"
               >
                 <Trash2 size={14} />
               </button>
@@ -338,7 +382,22 @@ export default function InventoryPage() {
               <button type="button" onClick={fetchInventory} className="btn btn-secondary btn-sm" title="Refresh">
                 <RefreshCw size={16} />
               </button>
-              <button type="button" onClick={() => handleOpenAdd()} className="btn btn-primary btn-sm">
+              <button
+                type="button"
+                onClick={() => handleOpenAdd()}
+                className="btn btn-primary btn-sm"
+                disabled={
+                  (!branchMode && selectedBranch && isBranchStockLocked(selectedBranch._id)) ||
+                  operationalBranches.length === 0
+                }
+                title={
+                  operationalBranches.length === 0
+                    ? 'No active branches within plan limit'
+                    : selectedBranch && isBranchStockLocked(selectedBranch._id)
+                      ? 'Selected branch is suspended'
+                      : undefined
+                }
+              >
                 <Plus size={16} />
                 Add Stock Item
               </button>
@@ -389,7 +448,9 @@ export default function InventoryPage() {
                 Stock by Branch
               </h3>
               <div className="admin-grid-cards" style={{ marginBottom: '0.5rem' }}>
-                {byBranch.map((branch) => (
+                {byBranch.map((branch) => {
+                  const suspended = Boolean(branch.suspendedByLimit) || branch.branchActive === false;
+                  return (
                   <button
                     key={String(branch.branchId)}
                     type="button"
@@ -397,14 +458,18 @@ export default function InventoryPage() {
                     className="admin-panel admin-panel--padded"
                     style={{
                       textAlign: 'left',
-                      border: '1px solid var(--border)',
+                      border: `1px solid ${suspended ? '#fecaca' : 'var(--border)'}`,
                       cursor: 'pointer',
-                      width: '100%'
+                      width: '100%',
+                      opacity: suspended ? 0.75 : 1
                     }}
                   >
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.5rem' }}>
-                      <MapPin size={16} color="var(--primary)" />
+                      <MapPin size={16} color={suspended ? '#b45309' : 'var(--primary)'} />
                       <strong style={{ fontSize: '0.95rem' }}>{branch.branchName}</strong>
+                      {suspended && (
+                        <span className="badge badge-cancelled" style={{ fontSize: '0.65rem' }}>Suspended</span>
+                      )}
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.35rem', fontSize: '0.8rem' }}>
                       <div>
@@ -420,8 +485,14 @@ export default function InventoryPage() {
                         Out: <strong>{branch.out_of_stock}</strong>
                       </div>
                     </div>
+                    {suspended && (
+                      <div style={{ marginTop: '0.5rem', fontSize: '0.72rem', color: '#b45309', fontWeight: 700 }}>
+                        Over branch limit — stock locked
+                      </div>
+                    )}
                   </button>
-                ))}
+                  );
+                })}
               </div>
               <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
                 Click a branch card to filter that branch only, or keep &quot;All Branches&quot; selected to see the full record below.
@@ -462,8 +533,10 @@ export default function InventoryPage() {
                 Loading inventory...
               </div>
             ) : (
-              byBranch.map((branch) => (
-                <div key={String(branch.branchId)} className="admin-panel" style={{ marginBottom: '1rem' }}>
+              byBranch.map((branch) => {
+                const suspended = Boolean(branch.suspendedByLimit) || branch.branchActive === false;
+                return (
+                <div key={String(branch.branchId)} className="admin-panel" style={{ marginBottom: '1rem', opacity: suspended ? 0.8 : 1 }}>
                   <div
                     style={{
                       display: 'flex',
@@ -473,21 +546,27 @@ export default function InventoryPage() {
                       flexWrap: 'wrap',
                       padding: '0.85rem 1rem',
                       borderBottom: '1px solid var(--border)',
-                      background: '#fff7ed'
+                      background: suspended ? '#fef2f2' : '#fff7ed'
                     }}
                   >
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                      <MapPin size={18} color="var(--primary)" />
+                      <MapPin size={18} color={suspended ? '#b45309' : 'var(--primary)'} />
                       <div>
-                        <div style={{ fontWeight: '800', color: 'var(--secondary)' }}>{branch.branchName}</div>
+                        <div style={{ fontWeight: '800', color: 'var(--secondary)', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                          {branch.branchName}
+                          {suspended && <span className="badge badge-cancelled">Suspended (limit)</span>}
+                        </div>
                         <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
                           {branch.total} item{branch.total === 1 ? '' : 's'} · Low {branch.low_stock} · Out {branch.out_of_stock}
+                          {suspended ? ' · Stock locked' : ''}
                         </div>
                       </div>
                     </div>
                     <button
                       type="button"
                       className="btn btn-primary btn-sm"
+                      disabled={suspended}
+                      title={suspended ? 'Suspended branch — stock locked' : undefined}
                       onClick={() => handleOpenAdd(String(branch.branchId))}
                     >
                       <Plus size={14} />
@@ -498,11 +577,14 @@ export default function InventoryPage() {
                     ? renderTable(branch.items, 5)
                     : (
                       <div style={{ padding: '1.25rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
-                        No stock items in this branch yet.
+                        {suspended
+                          ? 'This branch exceeds your plan limit. Delete it or ask Super Admin to raise the limit.'
+                          : 'No stock items in this branch yet.'}
                       </div>
                     )}
                 </div>
-              ))
+                );
+              })
             ))}
         </div>
       </div>
@@ -543,9 +625,18 @@ export default function InventoryPage() {
                   >
                     <option value="">Select branch</option>
                     {branches.map((branch) => (
-                      <option key={branch._id} value={branch._id} disabled={branch.isActive === false}>
+                      <option
+                        key={branch._id}
+                        value={branch._id}
+                        disabled={branch.isActive === false || branch.suspendedByLimit}
+                      >
                         {branch.branchName}
                         {branch.isDefault ? ' (Default)' : ''}
+                        {branch.suspendedByLimit
+                          ? ' — Suspended (limit)'
+                          : branch.isActive === false
+                            ? ' — Inactive'
+                            : ''}
                       </option>
                     ))}
                   </select>

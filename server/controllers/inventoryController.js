@@ -8,6 +8,7 @@ const {
 const {
   serializeInventoryRow
 } = require('../utils/inventoryUtils');
+const { assertBranchOperationalById, isBranchOperational } = require('../utils/branchLimits');
 
 const canAccessInventory = (user) => user && ['Admin', 'BranchAdmin'].includes(user.role);
 
@@ -16,6 +17,23 @@ const assertBranchOwnership = async (branchId, adminId, res) => {
   if (!branch) {
     if (res) {
       res.status(404).json({ success: false, message: 'Branch not found' });
+    }
+    return null;
+  }
+  return branch;
+};
+
+const assertBranchCanManageStock = async (branchId, adminId, res) => {
+  const branch = await assertBranchOwnership(branchId, adminId, res);
+  if (!branch) return null;
+
+  const check = await assertBranchOperationalById(branch._id);
+  if (!check.ok) {
+    if (res) {
+      res.status(403).json({
+        success: false,
+        message: check.message || 'This branch is suspended. Kitchen stock cannot be managed.'
+      });
     }
     return null;
   }
@@ -40,12 +58,19 @@ const loadInventoryRows = async (adminId, branchFilter = null) => {
 
   const rows = await Inventory.find(query).sort({ updatedAt: -1 });
   const branchIds = [...new Set(rows.map((r) => String(r.branchId)))];
-  const branches = await Branch.find({ _id: { $in: branchIds } }).select('branchName').lean();
+  const branches = await Branch.find({ _id: { $in: branchIds } })
+    .select('branchName isActive suspendedByLimit')
+    .lean();
   const branchMap = Object.fromEntries(branches.map((b) => [String(b._id), b]));
 
-  return rows.map((row) =>
-    serializeInventoryRow(row, null, branchMap[String(row.branchId)])
-  );
+  return rows.map((row) => {
+    const branch = branchMap[String(row.branchId)];
+    return {
+      ...serializeInventoryRow(row, null, branch),
+      suspendedByLimit: Boolean(branch?.suspendedByLimit),
+      branchActive: isBranchOperational(branch)
+    };
+  });
 };
 
 exports.getInventory = async (req, res, next) => {
@@ -88,6 +113,8 @@ exports.getInventory = async (req, res, next) => {
         byBranchMap[key] = {
           branchId: item.branchId,
           branchName: item.branchName || 'Branch',
+          suspendedByLimit: Boolean(item.suspendedByLimit),
+          branchActive: item.branchActive !== false,
           total: 0,
           in_stock: 0,
           low_stock: 0,
@@ -102,19 +129,27 @@ exports.getInventory = async (req, res, next) => {
 
     // Include empty branches for Admin "all branches" view
     if (!branchFilter && req.user.role === 'Admin') {
-      const allBranches = await Branch.find({ adminId }).select('branchName isDefault').sort({ isDefault: -1, branchName: 1 }).lean();
+      const allBranches = await Branch.find({ adminId })
+        .select('branchName isDefault isActive suspendedByLimit')
+        .sort({ isDefault: -1, branchName: 1 })
+        .lean();
       for (const branch of allBranches) {
         const key = String(branch._id);
         if (!byBranchMap[key]) {
           byBranchMap[key] = {
             branchId: branch._id,
             branchName: branch.branchName,
+            suspendedByLimit: Boolean(branch.suspendedByLimit),
+            branchActive: isBranchOperational(branch),
             total: 0,
             in_stock: 0,
             low_stock: 0,
             out_of_stock: 0,
             items: []
           };
+        } else {
+          byBranchMap[key].suspendedByLimit = Boolean(branch.suspendedByLimit);
+          byBranchMap[key].branchActive = isBranchOperational(branch);
         }
       }
     }
@@ -154,7 +189,7 @@ exports.upsertInventory = async (req, res, next) => {
       });
     }
 
-    const branch = await assertBranchOwnership(branchId, adminId, res);
+    const branch = await assertBranchCanManageStock(branchId, adminId, res);
     if (!branch) return;
 
     const qty = Math.max(0, Number(quantity) || 0);
@@ -212,6 +247,9 @@ exports.adjustInventory = async (req, res, next) => {
     }
     if (!assertScopedOwnership(record, req.user, res, 'Not authorized')) return;
 
+    const branch = await assertBranchCanManageStock(record.branchId, adminId, res);
+    if (!branch) return;
+
     const adjustment = Number(req.body.adjustment);
     if (!Number.isFinite(adjustment) || adjustment === 0) {
       return res.status(400).json({ success: false, message: 'Valid adjustment amount is required' });
@@ -222,11 +260,13 @@ exports.adjustInventory = async (req, res, next) => {
     if (adjustment > 0) record.lastRestockedAt = new Date();
     await record.save();
 
-    const branch = await Branch.findById(record.branchId).select('branchName').lean();
-
     res.json({
       success: true,
-      item: serializeInventoryRow(record, null, branch)
+      item: {
+        ...serializeInventoryRow(record, null, branch),
+        suspendedByLimit: false,
+        branchActive: true
+      }
     });
   } catch (error) {
     next(error);
@@ -246,6 +286,7 @@ exports.deleteInventory = async (req, res, next) => {
     }
     if (!assertScopedOwnership(record, req.user, res, 'Not authorized')) return;
 
+    // Allow delete on suspended branches so admin can clean up over-limit stock
     await record.deleteOne();
     res.json({ success: true, message: 'Stock item removed' });
   } catch (error) {

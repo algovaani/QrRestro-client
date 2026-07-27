@@ -16,23 +16,42 @@ export default function KitchenScreen() {
   const [loading, setLoading] = useState(true);
   const { socket } = useSocket();
   const { user } = useAuth();
-  const { branchQueryParams, getBranchName, hasMultipleBranches } = useBranch();
+  const { branchQueryParams, getBranchName, hasMultipleBranches, branches } = useBranch();
+
+  const isOperationalBranch = (branchId) => {
+    if (!branchId) return true;
+    const branch = branches.find((b) => String(b._id) === String(branchId));
+    if (!branch) return true;
+    return branch.isActive !== false && !branch.suspendedByLimit;
+  };
+
+  const filterKitchenOrders = (list) =>
+    (list || []).filter(
+      (o) =>
+        ['New', 'Confirmed', 'Preparing', 'Ready'].includes(o.orderStatus) &&
+        isOperationalBranch(o.branchId)
+    );
 
   useEffect(() => {
     fetchKitchenOrders();
-  }, [user?._id, branchQueryParams.branchId]);
+  }, [user?._id, branchQueryParams.branchId, branches]);
 
   useEffect(() => {
     if (!socket) return;
 
     const handleNewOrder = (newOrder) => {
       if (!belongsToTenant(newOrder, user?._id)) return;
+      if (!isOperationalBranch(newOrder.branchId)) return;
+      if (!['New', 'Confirmed', 'Preparing', 'Ready'].includes(newOrder.orderStatus)) return;
       setOrders((prev) => prependUniqueOrder(prev, newOrder));
     };
 
     const handleStatusUpdate = (updatedOrder) => {
       if (!belongsToTenant(updatedOrder, user?._id)) return;
-      // If completed or cancelled, remove from kitchen screen
+      if (!isOperationalBranch(updatedOrder.branchId)) {
+        setOrders((prev) => prev.filter((o) => o._id !== updatedOrder._id));
+        return;
+      }
       if (['Served', 'Completed', 'Cancelled'].includes(updatedOrder.orderStatus)) {
         setOrders((prev) => prev.filter((o) => o._id !== updatedOrder._id));
       } else {
@@ -47,17 +66,13 @@ export default function KitchenScreen() {
       socket.off('new_order', handleNewOrder);
       socket.off('order_status_update', handleStatusUpdate);
     };
-  }, [socket, user?._id]);
+  }, [socket, user?._id, branches]);
 
   const fetchKitchenOrders = async () => {
     try {
       const res = await API.get('/orders', { params: branchQueryParams });
       if (res.data.success) {
-        // Only show active kitchen orders (New, Confirmed, Preparing, Ready)
-        const kitchenOrders = res.data.orders.filter(o =>
-          ['New', 'Confirmed', 'Preparing', 'Ready'].includes(o.orderStatus)
-        );
-        setOrders(kitchenOrders);
+        setOrders(filterKitchenOrders(res.data.orders));
       }
     } catch (err) {
       console.error('Error loading kitchen screen orders:', err);
