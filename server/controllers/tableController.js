@@ -95,6 +95,15 @@ exports.createTable = async (req, res, next) => {
       table
     });
   } catch (error) {
+    if (error?.code === 11000) {
+      const num = req.body?.tableNumber ?? '';
+      return res.status(400).json({
+        success: false,
+        message: num
+          ? `Table number "${num}" already exists. Use a different number, or pick another branch if this table is in a different location.`
+          : 'This table number already exists for your restaurant.'
+      });
+    }
     next(error);
   }
 };
