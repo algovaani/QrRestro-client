@@ -1,13 +1,15 @@
 import React from 'react';
 import { X, ArrowRight, Bell } from 'lucide-react';
 import { getNotificationActionLabel, getNotificationCardClass } from '../../utils/adminNotifications';
+import { formatAdminNotificationMessage } from '../../utils/orderBranch';
 
 export default function NotificationPanel({
   notifications,
   removeNotification,
   onViewOrder,
   onNavigate,
-  onClose
+  onClose,
+  getBranchName
 }) {
   return (
     <div className="admin-notifications-panel" role="dialog" aria-label="Notifications">
@@ -38,7 +40,9 @@ export default function NotificationPanel({
                 </button>
               </div>
 
-              <p className="admin-notification-message">{n.message}</p>
+              <p className="admin-notification-message">
+                {formatAdminNotificationMessage(n, getBranchName)}
+              </p>
 
               {n.timestamp && (
                 <div className="admin-notification-time">

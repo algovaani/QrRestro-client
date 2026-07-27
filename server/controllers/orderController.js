@@ -1,6 +1,7 @@
 const Order = require('../models/Order');
 const { getTenantAdminId, buildScopedFilter, assertTenantOwnership } = require('../middleware/tenantMiddleware');
 const { emitOrderStatusUpdate, emitPaymentSuccess } = require('../socket/socketHandler');
+const { enrichOrdersWithBranchNames } = require('../utils/orderBranchEnrich');
 
 // @desc Get all orders (filtered strictly by logged in adminId)
 // @route GET /api/orders
@@ -17,11 +18,12 @@ exports.getOrders = async (req, res, next) => {
     }
 
     const orders = await Order.find(filter).sort({ createdAt: -1 });
+    const enrichedOrders = await enrichOrdersWithBranchNames(orders);
 
     res.json({
       success: true,
-      count: orders.length,
-      orders
+      count: enrichedOrders.length,
+      orders: enrichedOrders
     });
   } catch (error) {
     next(error);
@@ -37,9 +39,10 @@ exports.getOrderById = async (req, res, next) => {
       return res.status(404).json({ success: false, message: 'Order not found' });
     }
     if (!assertTenantOwnership(order, req.user, res, 'Not authorized to view this order')) return;
+    const [enrichedOrder] = await enrichOrdersWithBranchNames([order]);
     res.json({
       success: true,
-      order
+      order: enrichedOrder
     });
   } catch (error) {
     next(error);
@@ -154,11 +157,12 @@ exports.getKitchenOrders = async (req, res, next) => {
     filter.orderStatus = { $in: ['New', 'Confirmed', 'Preparing', 'Ready'] };
 
     const orders = await Order.find(filter).sort({ createdAt: 1 });
+    const enrichedOrders = await enrichOrdersWithBranchNames(orders);
 
     res.json({
       success: true,
-      count: orders.length,
-      orders
+      count: enrichedOrders.length,
+      orders: enrichedOrders
     });
   } catch (error) {
     next(error);

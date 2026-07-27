@@ -16,7 +16,7 @@ import { getRestaurantRoom } from '../../utils/socketUrl';
 import CustomerAccountMenu from '../../components/customer/CustomerAccountMenu';
 import CustomerNotificationToast from '../../components/customer/CustomerNotificationToast';
 import CustomerSoundEnableBar from '../../components/customer/CustomerSoundEnableBar';
-import { orderMatchesCustomerSession, notifyCustomerOrderStatus } from '../../utils/orderNotifications';
+import { orderMatchesCustomerSession, notifyCustomerOrderStatus, notifyCustomerPaymentPending, notifyCustomerPaymentSuccess, notifyCustomerPaymentRejected } from '../../utils/orderNotifications';
 import { resolveUploadUrl, resolveMenuItemImageUrl } from '../../utils/uploadUrl';
 
 export default function CustomerMenu() {
@@ -102,7 +102,7 @@ export default function CustomerMenu() {
           },
           onPaymentPending: (updatedOrder) => {
             if (!orderMatchesCustomerSession(updatedOrder, restaurantAdminId, tableNumber, customerMobile, branchId || routeBranchId)) return;
-            setStatusToast(`⏳ Payment submitted for Order #${updatedOrder.orderNumber} — waiting for admin approval`);
+            notifyCustomerPaymentPending(updatedOrder, setStatusToast);
             setTableOrders((prev) =>
               prev.map((o) =>
                 String(o._id) === String(updatedOrder._id) ? updatedOrder : o
@@ -111,7 +111,7 @@ export default function CustomerMenu() {
           },
           onPaymentSuccess: (updatedOrder) => {
             if (!orderMatchesCustomerSession(updatedOrder, restaurantAdminId, tableNumber, customerMobile, branchId || routeBranchId)) return;
-            setStatusToast(`💳 Payment approved for Order #${updatedOrder.orderNumber}!`);
+            notifyCustomerPaymentSuccess(updatedOrder, setStatusToast);
             setTableOrders((prev) =>
               prev.map((o) =>
                 String(o._id) === String(updatedOrder._id) ? updatedOrder : o

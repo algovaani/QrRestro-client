@@ -2,9 +2,10 @@ import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X, ArrowRight } from 'lucide-react';
 import { getNotificationActionLabel, getNotificationCardClass } from '../../utils/adminNotifications';
+import { formatAdminNotificationMessage } from '../../utils/orderBranch';
 
 /** Auto popup when new notification arrives (list stays in bell panel until dismissed) */
-export default function NotificationToasts({ notifications, removeNotification, onViewOrder, onNavigate }) {
+export default function NotificationToasts({ notifications, removeNotification, onViewOrder, onNavigate, getBranchName }) {
   const [popupIds, setPopupIds] = useState([]);
   const prevCountRef = useRef(notifications.length);
 
@@ -42,7 +43,9 @@ export default function NotificationToasts({ notifications, removeNotification, 
             </button>
           </div>
 
-          <p className="admin-notification-message">{n.message}</p>
+          <p className="admin-notification-message">
+            {formatAdminNotificationMessage(n, getBranchName)}
+          </p>
 
           {n.order ? (
             <button

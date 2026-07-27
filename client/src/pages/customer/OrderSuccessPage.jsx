@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import API from '../../services/api';
 import UPIPaymentModal from '../../components/customer/UPIPaymentModal';
@@ -13,7 +13,7 @@ import { useLivePolling, useSocketReconnectRefetch } from '../../hooks/useLivePo
 import { useTableSessionOrders } from '../../hooks/useTableSessionOrders';
 import { startCustomerPayFlow, getUnpaidOrders } from '../../utils/customerPayFlow';
 import PayOrderPickerModal from '../../components/customer/PayOrderPickerModal';
-import { orderMatchesCustomerSession, notifyCustomerOrderStatus } from '../../utils/orderNotifications';
+import { orderMatchesCustomerSession, notifyCustomerOrderStatus, notifyCustomerPaymentPending, notifyCustomerPaymentSuccess, notifyCustomerPaymentRejected } from '../../utils/orderNotifications';
 import { CheckCircle2, Clock, Utensils, QrCode } from 'lucide-react';
 
 export default function OrderSuccessPage() {
@@ -30,6 +30,7 @@ export default function OrderSuccessPage() {
 
   const { initTableCart, customerMobile } = useCart();
   const { socket } = useSocket();
+  const lastStatusRef = useRef(null);
 
   useEffect(() => {
     if (order?.adminId && order?.tableNumber) {
@@ -67,13 +68,13 @@ export default function OrderSuccessPage() {
     try {
       const res = await API.get(`/public/orders/${orderNumber}/status`);
       if (res.data.success) {
-        setOrder((prev) => {
-          const nextOrder = res.data.order;
-          if (prev && prev.orderStatus !== nextOrder.orderStatus) {
-            notifyCustomerOrderStatus(nextOrder, setLiveToast, prev.orderStatus);
-          }
-          return nextOrder;
-        });
+        const nextOrder = res.data.order;
+        const prevStatus = lastStatusRef.current;
+        setOrder(nextOrder);
+        lastStatusRef.current = nextOrder.orderStatus;
+        if (prevStatus && prevStatus !== nextOrder.orderStatus) {
+          notifyCustomerOrderStatus(nextOrder, setLiveToast, prevStatus);
+        }
       }
     } catch (err) {
       console.error(err);
@@ -118,10 +119,11 @@ export default function OrderSuccessPage() {
             }
             setOrder((prev) => {
               if (updatedOrder.paymentStatus === 'Unpaid' && prev?.paymentStatus === 'Pending') {
-                setLiveToast(`Payment for Order #${updatedOrder.orderNumber} was not approved. Please try again.`);
+                notifyCustomerPaymentRejected(updatedOrder, setLiveToast);
                 return updatedOrder;
               }
               notifyCustomerOrderStatus(updatedOrder, setLiveToast, prev?.orderStatus);
+              lastStatusRef.current = updatedOrder.orderStatus;
               return updatedOrder;
             });
           },
@@ -138,7 +140,7 @@ export default function OrderSuccessPage() {
               return;
             }
             setOrder(updatedOrder);
-            setLiveToast(`⏳ Payment submitted for Order #${updatedOrder.orderNumber} — waiting for admin approval`);
+            notifyCustomerPaymentPending(updatedOrder, setLiveToast);
           },
           onPaymentSuccess: (updatedOrder) => {
             if (
@@ -153,7 +155,7 @@ export default function OrderSuccessPage() {
               return;
             }
             setOrder(updatedOrder);
-            setLiveToast(`💳 Payment approved for Order #${updatedOrder.orderNumber}!`);
+            notifyCustomerPaymentSuccess(updatedOrder, setLiveToast);
           }
         }
       : {}

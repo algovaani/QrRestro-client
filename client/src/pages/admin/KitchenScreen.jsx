@@ -5,6 +5,8 @@ import Header from '../../components/common/Header';
 import { useSocket } from '../../context/SocketContext';
 import { prependUniqueOrder, upsertOrder } from '../../utils/orderList';
 import { belongsToTenant } from '../../utils/tenant';
+import OrderBranchBadge from '../../components/admin/OrderBranchBadge';
+import { resolveOrderBranchName } from '../../utils/orderBranch';
 import { useBranch } from '../../context/BranchContext';
 import { ChefHat, CheckCircle2, Clock, PlayCircle } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
@@ -14,7 +16,7 @@ export default function KitchenScreen() {
   const [loading, setLoading] = useState(true);
   const { socket } = useSocket();
   const { user } = useAuth();
-  const { branchQueryParams, isAllBranches } = useBranch();
+  const { branchQueryParams, getBranchName, hasMultipleBranches } = useBranch();
 
   useEffect(() => {
     fetchKitchenOrders();
@@ -99,12 +101,16 @@ export default function KitchenScreen() {
                 <div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', borderBottom: '1px solid var(--border)', paddingBottom: '0.5rem' }}>
                     <div>
-                      <span style={{ fontSize: '1.2rem', fontWeight: '800', color: 'var(--primary)' }}>
-                        Table {order.tableNumber}
-                      </span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: '1.2rem', fontWeight: '800', color: 'var(--primary)' }}>
+                          Table {order.tableNumber}
+                        </span>
+                        {hasMultipleBranches && (
+                          <OrderBranchBadge name={resolveOrderBranchName(order, getBranchName)} compact />
+                        )}
+                      </div>
                       <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
                         #{order.orderNumber} • {new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        {isAllBranches && order.branchName ? ` • ${order.branchName}` : ''}
                       </div>
                     </div>
                     <span className={`badge badge-${order.orderStatus.toLowerCase()}`}>

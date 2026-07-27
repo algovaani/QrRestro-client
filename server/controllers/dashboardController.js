@@ -3,6 +3,7 @@ const Table = require('../models/Table');
 const MenuItem = require('../models/MenuItem');
 const Category = require('../models/Category');
 const { getTenantAdminId, buildScopedFilter } = require('../middleware/tenantMiddleware');
+const { enrichOrdersWithBranchNames } = require('../utils/orderBranchEnrich');
 
 // @desc Get Admin Dashboard Analytics Stats
 // @route GET /api/dashboard/stats
@@ -54,9 +55,10 @@ exports.getDashboardStats = async (req, res, next) => {
     const totalMenuItems = await MenuItem.countDocuments(adminFilter);
     const totalCategories = await Category.countDocuments(adminFilter);
 
-    const recentOrders = await Order.find(queryFilter)
+    const recentOrdersRaw = await Order.find(queryFilter)
       .sort({ createdAt: -1 })
       .limit(5);
+    const recentOrders = await enrichOrdersWithBranchNames(recentOrdersRaw);
 
     const topItemsAgg = await Order.aggregate([
       { $match: queryFilter },
@@ -115,9 +117,10 @@ exports.getRecentOrders = async (req, res, next) => {
       };
     }
 
-    const recentOrders = await Order.find({ ...adminFilter, ...dateFilter })
+    const recentOrdersRaw = await Order.find({ ...adminFilter, ...dateFilter })
       .sort({ createdAt: -1 })
       .limit(10);
+    const recentOrders = await enrichOrdersWithBranchNames(recentOrdersRaw);
 
     res.json({ success: true, recentOrders });
   } catch (error) {

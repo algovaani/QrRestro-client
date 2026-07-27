@@ -3,7 +3,7 @@ import { Bell } from 'lucide-react';
 import { useSocket } from '../../context/SocketContext';
 import NotificationPanel from './NotificationPanel';
 
-export default function AdminNotificationBell({ onViewOrder, onNavigate }) {
+export default function AdminNotificationBell({ onViewOrder, onNavigate, getBranchName }) {
   const { notifications, removeNotification } = useSocket();
   const [panelOpen, setPanelOpen] = useState(false);
   const wrapRef = useRef(null);
@@ -52,6 +52,7 @@ export default function AdminNotificationBell({ onViewOrder, onNavigate }) {
           <NotificationPanel
             notifications={notifications}
             removeNotification={removeNotification}
+            getBranchName={getBranchName}
             onViewOrder={(order) => {
               setPanelOpen(false);
               onViewOrder?.(order);

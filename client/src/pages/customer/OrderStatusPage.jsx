@@ -12,7 +12,7 @@ import CustomerNotificationToast from '../../components/customer/CustomerNotific
 import CustomerSoundEnableBar from '../../components/customer/CustomerSoundEnableBar';
 import CustomerBottomNav from '../../components/customer/CustomerBottomNav';
 import MyOrdersModal from '../../components/customer/MyOrdersModal';
-import { getOrderStatusMessage, orderMatchesCustomerSession, notifyCustomerOrderStatus } from '../../utils/orderNotifications';
+import { getOrderStatusMessage, orderMatchesCustomerSession, notifyCustomerOrderStatus, notifyCustomerPaymentPending, notifyCustomerPaymentSuccess, notifyCustomerPaymentRejected } from '../../utils/orderNotifications';
 import { countReviewWords, MAX_REVIEW_WORDS, sanitizeReviewForSave, isReviewWithinWordLimit } from '../../utils/reviewText';
 import UPIPaymentModal from '../../components/customer/UPIPaymentModal';
 import { ArrowLeft, CheckCircle2, Clock, ChefHat, Sparkles, UtensilsCrossed, QrCode, Star, Send } from 'lucide-react';
@@ -132,7 +132,7 @@ export default function OrderStatusPage() {
               return;
             }
             setOrder(updatedOrder);
-            setLiveToast(`⏳ Payment submitted for Order #${updatedOrder.orderNumber} — waiting for admin approval`);
+            notifyCustomerPaymentPending(updatedOrder, setLiveToast);
           },
           onPaymentSuccess: (updatedOrder) => {
             if (
@@ -154,7 +154,7 @@ export default function OrderStatusPage() {
               return;
             }
             setOrder(updatedOrder);
-            setLiveToast(`💳 Payment approved for Order #${updatedOrder.orderNumber}!`);
+            notifyCustomerPaymentSuccess(updatedOrder, setLiveToast);
           },
           onStatusUpdate: (updatedOrder) => {
             if (
@@ -177,10 +177,11 @@ export default function OrderStatusPage() {
             }
             setOrder(updatedOrder);
             if (updatedOrder.paymentStatus === 'Unpaid' && order?.paymentStatus === 'Pending') {
-              setLiveToast(`Payment for Order #${updatedOrder.orderNumber} was not approved. Please try again.`);
+              notifyCustomerPaymentRejected(updatedOrder, setLiveToast);
               return;
             }
             notifyCustomerOrderStatus(updatedOrder, setLiveToast, order?.orderStatus);
+            lastStatusRef.current = updatedOrder.orderStatus;
           }
         }
       : {}

@@ -9,6 +9,9 @@ const toPayload = (order) => {
   if (payload.branchId) {
     payload.branchId = String(payload.branchId._id || payload.branchId);
   }
+  if (payload.branchName) {
+    payload.branchName = String(payload.branchName).trim();
+  }
   if (payload.tableNumber !== undefined && payload.tableNumber !== null) {
     payload.tableNumber = String(payload.tableNumber);
   }

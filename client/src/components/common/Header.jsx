@@ -11,10 +11,12 @@ import { isBranchAdmin } from '../../utils/adminPaths';
 import { MapPin } from 'lucide-react';
 
 import { getAdminOrderDetailsPath } from '../../utils/adminNotifications';
+import { useBranch } from '../../context/BranchContext';
 
 export default function Header({ title }) {
   const { notifications, removeNotification, isConnected } = useSocket();
   const { user } = useAuth();
+  const { getBranchName } = useBranch();
   const navigate = useNavigate();
   const branchMode = isBranchAdmin(user);
 
@@ -50,6 +52,7 @@ export default function Header({ title }) {
           <AdminNotificationBell
             onViewOrder={goToOrder}
             onNavigate={(path) => navigate(path)}
+            getBranchName={getBranchName}
           />
         </div>
       </header>
@@ -57,6 +60,7 @@ export default function Header({ title }) {
       <NotificationToasts
         notifications={notifications}
         removeNotification={removeNotification}
+        getBranchName={getBranchName}
         onViewOrder={goToOrder}
         onNavigate={(path) => navigate(path)}
       />

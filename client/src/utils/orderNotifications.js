@@ -14,7 +14,7 @@ export const normalizeBranchId = (value) => (value ? String(value) : '');
 
 /** Order must match this table session — scoped by branch when branch is known. */
 export const orderMatchesCustomerSession = (order, adminId, tableNumber, customerMobile, branchId = '') => {
-  if (!order || !adminId || !tableNumber || !customerMobile) return false;
+  if (!order || !adminId || !tableNumber) return false;
   if (String(order.adminId) !== String(adminId)) return false;
   if (!tableNumbersMatch(order.tableNumber, tableNumber)) return false;
 
@@ -24,7 +24,9 @@ export const orderMatchesCustomerSession = (order, adminId, tableNumber, custome
     if (!orderBranch || orderBranch !== sessionBranch) return false;
   }
 
-  return mobilesMatch(order.customerMobile, customerMobile);
+  const sessionMobile = customerMobile || order.customerMobile;
+  if (!sessionMobile || !order.customerMobile) return false;
+  return mobilesMatch(order.customerMobile, sessionMobile);
 };
 
 const NOTIFY_STATUSES = new Set(['Confirmed', 'Preparing', 'Ready', 'Served', 'Completed']);
@@ -59,6 +61,15 @@ export const getOrderStatusMessage = (order) => {
   }
 };
 
+export const getPaymentPendingMessage = (order) =>
+  `⏳ Payment submitted for Order #${order?.orderNumber || ''} — waiting for admin approval`;
+
+export const getPaymentSuccessMessage = (order) =>
+  `💳 Payment approved for Order #${order?.orderNumber || ''}!`;
+
+export const getPaymentRejectedMessage = (order) =>
+  `Payment for Order #${order?.orderNumber || ''} was not approved. Please try again.`;
+
 export const vibrateCustomerAlert = () => {
   if (typeof navigator !== 'undefined' && navigator.vibrate) {
     navigator.vibrate([120, 60, 120]);
@@ -66,7 +77,24 @@ export const vibrateCustomerAlert = () => {
 };
 
 const CUSTOMER_ALERT_COOLDOWN_MS = 2500;
+const CUSTOMER_TOAST_COOLDOWN_MS = 3000;
 const recentCustomerAlerts = new Map();
+const recentCustomerToasts = new Map();
+
+const shouldSkipDuplicateToast = (key) => {
+  const now = Date.now();
+  const last = recentCustomerToasts.get(key);
+  if (last != null && now - last < CUSTOMER_TOAST_COOLDOWN_MS) return true;
+  recentCustomerToasts.set(key, now);
+  return false;
+};
+
+/** Show toast once — skips duplicate socket + polling updates within a few seconds. */
+export function showCustomerToast(message, setToast, dedupeKey) {
+  if (!message || !setToast) return;
+  if (dedupeKey && shouldSkipDuplicateToast(dedupeKey)) return;
+  setToast(message);
+}
 
 /** Play chime + vibrate only when a live order status notification is shown. */
 export async function playCustomerOrderAlert(order, prevStatus) {
@@ -91,6 +119,21 @@ export async function playCustomerOrderAlert(order, prevStatus) {
 /** Show toast + optional sound together for order status updates only. */
 export function notifyCustomerOrderStatus(order, setToast, prevStatus) {
   if (!shouldShowStatusToast(order, prevStatus)) return;
-  setToast(getOrderStatusMessage(order));
+  const message = getOrderStatusMessage(order);
+  const dedupeKey = `status:${order._id || order.orderNumber}:${order.orderStatus}`;
+  if (shouldSkipDuplicateToast(dedupeKey)) return;
+  setToast(message);
   void playCustomerOrderAlert(order, prevStatus);
+}
+
+export function notifyCustomerPaymentPending(order, setToast) {
+  showCustomerToast(getPaymentPendingMessage(order), setToast, `pay-pending:${order._id || order.orderNumber}`);
+}
+
+export function notifyCustomerPaymentSuccess(order, setToast) {
+  showCustomerToast(getPaymentSuccessMessage(order), setToast, `pay-success:${order._id || order.orderNumber}`);
+}
+
+export function notifyCustomerPaymentRejected(order, setToast) {
+  showCustomerToast(getPaymentRejectedMessage(order), setToast, `pay-reject:${order._id || order.orderNumber}`);
 }

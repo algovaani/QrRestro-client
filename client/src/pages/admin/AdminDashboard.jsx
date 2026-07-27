@@ -26,6 +26,8 @@ import { formatExpiryDate, getMembershipDaysLabel, resolveMembershipDisplay } fr
 import { belongsToTenant } from '../../utils/tenant';
 import { useBranch } from '../../context/BranchContext';
 import { isBranchAdmin, portalPath } from '../../utils/adminPaths';
+import OrderBranchBadge from '../../components/admin/OrderBranchBadge';
+import { resolveOrderBranchName } from '../../utils/orderBranch';
 
 const toLocalDateStr = (date) => {
   const y = date.getFullYear();
@@ -47,7 +49,7 @@ const isOrderInDateRange = (order, start, end) => {
 export default function AdminDashboard() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { branchQueryParams } = useBranch();
+  const { branchQueryParams, getBranchName, hasMultipleBranches } = useBranch();
   const branchMode = isBranchAdmin(user);
   const p = (segment) => portalPath(user, segment);
 
@@ -553,6 +555,7 @@ export default function AdminDashboard() {
                     <thead>
                       <tr style={{ borderBottom: '1px solid var(--border)', color: 'var(--text-muted)', fontSize: '0.8rem' }}>
                         <th style={{ padding: '0.6rem 0' }}>ORDER ID</th>
+                        {hasMultipleBranches && <th style={{ padding: '0.6rem 0' }}>BRANCH</th>}
                         <th style={{ padding: '0.6rem 0' }}>TABLE</th>
                         <th style={{ padding: '0.6rem 0' }}>ITEMS</th>
                         <th style={{ padding: '0.6rem 0' }}>TOTAL</th>
@@ -569,6 +572,11 @@ export default function AdminDashboard() {
                           onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
                         >
                           <td style={{ padding: '0.8rem 0', fontWeight: '700', color: 'var(--primary)' }}>{order.orderNumber}</td>
+                          {hasMultipleBranches && (
+                            <td style={{ padding: '0.8rem 0' }}>
+                              <OrderBranchBadge name={resolveOrderBranchName(order, getBranchName)} compact />
+                            </td>
+                          )}
                           <td style={{ padding: '0.8rem 0' }}>Table {order.tableNumber}</td>
                           <td style={{ padding: '0.8rem 0', color: 'var(--text-muted)' }}>
                             {order.items?.map(i => `${i.itemName} (${i.quantity})`).join(', ')}
@@ -583,7 +591,7 @@ export default function AdminDashboard() {
                       ))}
                       {recentOrders.length === 0 && (
                         <tr>
-                          <td colSpan="5" style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
+                          <td colSpan={hasMultipleBranches ? 6 : 5} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
                             No orders found for selected date range.
                           </td>
                         </tr>

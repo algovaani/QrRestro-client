@@ -87,7 +87,7 @@ export const SocketProvider = ({ children }) => {
         id: `${order._id || order.orderNumber}_pending_${Date.now()}`,
         type: 'payment_pending',
         title: '⏳ PAYMENT APPROVAL PENDING',
-        message: `Table ${order.tableNumber} submitted ₹${order.grandTotal} for Order #${order.orderNumber}${order.transactionId ? ` (TXN: ${order.transactionId})` : ''}`,
+        message: `Table ${order.tableNumber}${order.branchName ? ` · ${order.branchName}` : ''} submitted ₹${order.grandTotal} for Order #${order.orderNumber}${order.transactionId ? ` (TXN: ${order.transactionId})` : ''}`,
         order,
         timestamp: new Date()
       };
@@ -107,7 +107,7 @@ export const SocketProvider = ({ children }) => {
         id: `${order._id || order.orderNumber}_pay_${Date.now()}`,
         type: 'payment',
         title: '💳 PAYMENT RECEIVED!',
-        message: `Table ${order.tableNumber} paid ₹${order.grandTotal} for Order #${order.orderNumber}`,
+        message: `Table ${order.tableNumber}${order.branchName ? ` · ${order.branchName}` : ''} paid ₹${order.grandTotal} for Order #${order.orderNumber}`,
         order,
         timestamp: new Date()
       };
@@ -132,7 +132,7 @@ export const SocketProvider = ({ children }) => {
         id: `${order._id || order.orderNumber}_rating_${Date.now()}`,
         type: 'order_rating',
         title: 'NEW CUSTOMER RATING',
-        message: `Order #${order.orderNumber} rated ${order.rating}/5${reviewNote}`,
+        message: `Order #${order.orderNumber}${order.branchName ? ` · ${order.branchName}` : ''} rated ${order.rating}/5${reviewNote}`,
         order,
         timestamp: new Date()
       };

@@ -4,7 +4,7 @@ import API from '../../services/api';
 import { useSocket } from '../../context/SocketContext';
 import { useTableRoomSocket } from '../../hooks/useTableRoomSocket';
 import CustomerNotificationToast from './CustomerNotificationToast';
-import { orderMatchesCustomerSession, notifyCustomerOrderStatus } from '../../utils/orderNotifications';
+import { orderMatchesCustomerSession, notifyCustomerOrderStatus, notifyCustomerPaymentPending, notifyCustomerPaymentSuccess } from '../../utils/orderNotifications';
 import { sendOrderBillOnWhatsApp } from '../../utils/billShare';
 import UPIPaymentModal from './UPIPaymentModal';
 import { X, ChevronDown, ChevronUp, QrCode, MessageSquare, Utensils, Loader2, ExternalLink } from 'lucide-react';
@@ -78,7 +78,7 @@ export default function MyOrdersModal({ tableNumber, adminId, branchId = '', cus
         setTableOrders((prev) =>
           prev.map((o) => (String(o._id) === String(updatedOrder._id) ? updatedOrder : o))
         );
-        setStatusToast(`⏳ Payment submitted for Order #${updatedOrder.orderNumber} — waiting for admin approval`);
+        notifyCustomerPaymentPending(updatedOrder, setStatusToast);
       },
       onPaymentSuccess: (updatedOrder) => {
         if (!orderMatchesCustomerSession(updatedOrder, adminId, tableNumber, customerMobile, branchId)) {
@@ -87,7 +87,7 @@ export default function MyOrdersModal({ tableNumber, adminId, branchId = '', cus
         setTableOrders((prev) =>
           prev.map((o) => (String(o._id) === String(updatedOrder._id) ? updatedOrder : o))
         );
-        setStatusToast(`💳 Payment approved for Order #${updatedOrder.orderNumber}!`);
+        notifyCustomerPaymentSuccess(updatedOrder, setStatusToast);
       }
     }
   );

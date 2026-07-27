@@ -11,6 +11,8 @@ import { sendOrderBillOnWhatsApp } from '../../utils/billShare';
 import { belongsToTenant } from '../../utils/tenant';
 import { useBranch } from '../../context/BranchContext';
 import OrderRatingDisplay from '../../components/admin/OrderRatingDisplay';
+import OrderBranchBadge from '../../components/admin/OrderBranchBadge';
+import { resolveOrderBranchName, formatOrderTableLabel } from '../../utils/orderBranch';
 import { Printer, Eye, RefreshCw, MessageSquare, Search, ArrowUpDown, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, CheckCircle2, XCircle, Loader2 } from 'lucide-react';
 
 export default function OrdersPage() {
@@ -40,7 +42,7 @@ export default function OrdersPage() {
 
   const { socket, isConnected } = useSocket();
   const { user } = useAuth();
-  const { branchQueryParams, isAllBranches } = useBranch();
+  const { branchQueryParams, getBranchName, hasMultipleBranches } = useBranch();
   const [billSendingId, setBillSendingId] = useState(null);
   const [restaurantBillInfo, setRestaurantBillInfo] = useState({
     contactNumber: '',
@@ -120,44 +122,54 @@ export default function OrdersPage() {
     stripOrderFromUrl();
   }, [location.search, orders, loading]);
 
+  const enrichOrderBranch = (order) => {
+    if (!order) return order;
+    const branchName = resolveOrderBranchName(order, getBranchName);
+    return branchName && branchName !== order.branchName ? { ...order, branchName } : order;
+  };
+
   // Real-time WebSocket handlers - HAND TO HAND SOCKET PROCESS
   useEffect(() => {
     if (!socket) return;
 
     const handleNewOrder = (newOrder) => {
       if (!belongsToTenant(newOrder, user?._id)) return;
-      setOrders((prev) => prependUniqueOrder(prev, newOrder));
+      setOrders((prev) => prependUniqueOrder(prev, enrichOrderBranch(newOrder)));
     };
 
     const handleStatusUpdate = (updatedOrder) => {
       if (!belongsToTenant(updatedOrder, user?._id)) return;
-      setOrders((prev) => upsertOrder(prev, updatedOrder));
-      if (selectedOrder && getOrderId(selectedOrder) === getOrderId(updatedOrder)) {
-        setSelectedOrder(updatedOrder);
+      const enriched = enrichOrderBranch(updatedOrder);
+      setOrders((prev) => upsertOrder(prev, enriched));
+      if (selectedOrder && getOrderId(selectedOrder) === getOrderId(enriched)) {
+        setSelectedOrder(enriched);
       }
     };
 
     const handlePaymentPending = (updatedOrder) => {
       if (!belongsToTenant(updatedOrder, user?._id)) return;
-      setOrders((prev) => upsertOrder(prev, updatedOrder));
-      if (selectedOrder && getOrderId(selectedOrder) === getOrderId(updatedOrder)) {
-        setSelectedOrder(updatedOrder);
+      const enriched = enrichOrderBranch(updatedOrder);
+      setOrders((prev) => upsertOrder(prev, enriched));
+      if (selectedOrder && getOrderId(selectedOrder) === getOrderId(enriched)) {
+        setSelectedOrder(enriched);
       }
     };
 
     const handlePaymentSuccess = (updatedOrder) => {
       if (!belongsToTenant(updatedOrder, user?._id)) return;
-      setOrders((prev) => upsertOrder(prev, updatedOrder));
-      if (selectedOrder && getOrderId(selectedOrder) === getOrderId(updatedOrder)) {
-        setSelectedOrder(updatedOrder);
+      const enriched = enrichOrderBranch(updatedOrder);
+      setOrders((prev) => upsertOrder(prev, enriched));
+      if (selectedOrder && getOrderId(selectedOrder) === getOrderId(enriched)) {
+        setSelectedOrder(enriched);
       }
     };
 
     const handleOrderRating = (updatedOrder) => {
       if (!belongsToTenant(updatedOrder, user?._id)) return;
-      setOrders((prev) => upsertOrder(prev, updatedOrder));
-      if (selectedOrder && getOrderId(selectedOrder) === getOrderId(updatedOrder)) {
-        setSelectedOrder(updatedOrder);
+      const enriched = enrichOrderBranch(updatedOrder);
+      setOrders((prev) => upsertOrder(prev, enriched));
+      if (selectedOrder && getOrderId(selectedOrder) === getOrderId(enriched)) {
+        setSelectedOrder(enriched);
       }
     };
 
@@ -174,7 +186,7 @@ export default function OrdersPage() {
       socket.off('payment_success', handlePaymentSuccess);
       socket.off('order_rating', handleOrderRating);
     };
-  }, [socket, selectedOrder, user?._id]);
+  }, [socket, selectedOrder, user?._id, getBranchName]);
 
   const fetchOrders = async () => {
     try {
@@ -182,7 +194,7 @@ export default function OrdersPage() {
         params: { status: statusFilter, paymentStatus: paymentFilter, ...branchQueryParams }
       });
       if (res.data.success) {
-        setOrders(res.data.orders);
+        setOrders((res.data.orders || []).map((order) => enrichOrderBranch(order)));
       }
     } catch (err) {
       console.error(err);
@@ -324,10 +336,12 @@ export default function OrdersPage() {
   const filteredOrders = useMemo(() => {
     return orders.filter(order => {
       const query = searchTerm.toLowerCase();
+      const branchName = resolveOrderBranchName(order, getBranchName).toLowerCase();
       return (
         order.orderNumber.toLowerCase().includes(query) ||
         `table ${order.tableNumber}`.toLowerCase().includes(query) ||
         order.tableNumber.toString().includes(query) ||
+        branchName.includes(query) ||
         order.customerName.toLowerCase().includes(query) ||
         (order.customerMobile && order.customerMobile.includes(query)) ||
         order.orderStatus.toLowerCase().includes(query) ||
@@ -337,7 +351,7 @@ export default function OrdersPage() {
         (order.review && order.review.toLowerCase().includes(query))
       );
     });
-  }, [orders, searchTerm]);
+  }, [orders, searchTerm, getBranchName]);
 
   const sortedOrders = useMemo(() => {
     return [...filteredOrders].sort((a, b) => {
@@ -398,6 +412,7 @@ export default function OrdersPage() {
   const handlePrint = (order, type) => {
     const printWindow = window.open('', '_blank');
     const isKitchen = type === 'kitchen';
+    const branchName = resolveOrderBranchName(order, getBranchName);
 
     printWindow.document.write(`
       <html>
@@ -417,6 +432,7 @@ export default function OrdersPage() {
           <div class="divider"></div>
           <div>Order #: <strong>${order.orderNumber}</strong></div>
           <div>Table #: <strong>Table ${order.tableNumber}</strong></div>
+          ${branchName ? `<div>Branch: <strong>${branchName}</strong></div>` : ''}
           <div>Date: ${new Date(order.createdAt).toLocaleString()}</div>
           ${!isKitchen ? `<div>Customer: ${order.customerName} (${order.customerMobile || 'N/A'})</div>` : ''}
           <div class="divider"></div>
@@ -529,7 +545,7 @@ export default function OrdersPage() {
                       ORDER # <ArrowUpDown size={12} />
                     </div>
                   </th>
-                  {isAllBranches && (
+                  {hasMultipleBranches && (
                     <th style={{ padding: '0.8rem 1rem' }}>BRANCH</th>
                   )}
                   <th onClick={() => handleSort('tableNumber')} style={{ padding: '0.8rem 1rem', cursor: 'pointer' }}>
@@ -578,9 +594,9 @@ export default function OrdersPage() {
                       {order.orderNumber}
                     </td>
 
-                    {isAllBranches && (
-                      <td style={{ padding: '0.85rem 1rem', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                        {order.branchName || '—'}
+                    {hasMultipleBranches && (
+                      <td style={{ padding: '0.85rem 1rem' }}>
+                        <OrderBranchBadge name={resolveOrderBranchName(order, getBranchName)} />
                       </td>
                     )}
 
@@ -774,7 +790,7 @@ export default function OrdersPage() {
               Payment Status Change
             </h3>
             <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)', marginBottom: '0.35rem', lineHeight: 1.5 }}>
-              Order <strong>#{paymentConfirm.order.orderNumber}</strong> (Table {paymentConfirm.order.tableNumber})
+              Order <strong>#{paymentConfirm.order.orderNumber}</strong> ({formatOrderTableLabel(paymentConfirm.order, getBranchName)})
             </p>
             <p style={{ fontSize: '0.95rem', fontWeight: '700', color: 'var(--secondary)', marginBottom: '1.25rem' }}>
               {paymentConfirm.newStatus === 'Paid'
@@ -812,7 +828,14 @@ export default function OrdersPage() {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
               <div>
                 <h3 style={{ fontSize: '1.25rem', fontWeight: '800' }}>Order #{selectedOrder.orderNumber}</h3>
-                <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Table {selectedOrder.tableNumber} • {new Date(selectedOrder.createdAt).toLocaleTimeString()}</span>
+                <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                  {formatOrderTableLabel(selectedOrder, getBranchName)} • {new Date(selectedOrder.createdAt).toLocaleTimeString()}
+                </span>
+                {hasMultipleBranches && (
+                  <div style={{ marginTop: '0.35rem' }}>
+                    <OrderBranchBadge name={resolveOrderBranchName(selectedOrder, getBranchName)} />
+                  </div>
+                )}
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <span className={`badge badge-${selectedOrder.orderStatus.toLowerCase()}`}>
