@@ -1,28 +1,47 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useLocation, useSearchParams } from 'react-router-dom';
 import API from '../../services/api';
 import Sidebar from '../../components/common/Sidebar';
 import Header from '../../components/common/Header';
 import { useBranch } from '../../context/BranchContext';
+import { useAuth } from '../../context/AuthContext';
 import { getCustomerMenuPath } from '../../context/CartContext';
-import { Plus, Search, QrCode, Download, Printer, ExternalLink, RefreshCw, Edit2, Trash2, MapPin, AlertCircle } from 'lucide-react';
+import {
+  Plus,
+  Search,
+  Download,
+  Printer,
+  ExternalLink,
+  RefreshCw,
+  Edit2,
+  Trash2,
+  MapPin,
+  AlertCircle,
+  ArrowLeft,
+  ArrowRight,
+  Loader2
+} from 'lucide-react';
 
 export default function TablesPage() {
+  const location = useLocation();
   const [searchParams] = useSearchParams();
+  const { user } = useAuth();
   const {
-    branchQueryParams,
-    isAllBranches,
     branches,
+    setSelectedBranchId,
     getBranchName,
-    selectedBranch,
-    setSelectedBranchId
+    hasMultipleBranches,
+    isBranchLocked
   } = useBranch();
-  const [tables, setTables] = useState([]);
+
+  const [tablesBranchId, setTablesBranchId] = useState(null);
+  const [branchTables, setBranchTables] = useState([]);
+  const [pickerGroups, setPickerGroups] = useState([]);
+  const [pickerLoading, setPickerLoading] = useState(false);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [loading, setLoading] = useState(true);
 
-  // Modal State for Add/Edit
   const [showModal, setShowModal] = useState(false);
   const [editingTable, setEditingTable] = useState(null);
   const [formData, setFormData] = useState({
@@ -34,75 +53,178 @@ export default function TablesPage() {
     branchId: ''
   });
   const [modalError, setModalError] = useState('');
-
-  // QR Preview Modal State
   const [previewTable, setPreviewTable] = useState(null);
+
+  const showBranchPicker = hasMultipleBranches && !isBranchLocked && !tablesBranchId;
+  const selectedBranchName = tablesBranchId ? getBranchName(tablesBranchId) : '';
+
+  const selectedBranchMeta = useMemo(
+    () => branches.find((b) => String(b._id) === String(tablesBranchId)) || null,
+    [branches, tablesBranchId]
+  );
+  const branchLocked = Boolean(
+    selectedBranchMeta?.suspendedByLimit || selectedBranchMeta?.isActive === false
+  );
 
   useEffect(() => {
     const fromUrl = searchParams.get('branchId');
     if (fromUrl) {
-      setSelectedBranchId(fromUrl);
+      setTablesBranchId(String(fromUrl));
+      setSelectedBranchId(String(fromUrl));
+      return;
     }
-  }, [searchParams, setSelectedBranchId]);
+
+    if (isBranchLocked && user?.branchId) {
+      setTablesBranchId(String(user.branchId));
+      return;
+    }
+
+    if (!hasMultipleBranches && branches.length === 1) {
+      setTablesBranchId(String(branches[0]._id));
+      return;
+    }
+
+    if (hasMultipleBranches && !isBranchLocked) {
+      setTablesBranchId(null);
+      setSelectedBranchId('all');
+      setBranchTables([]);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.pathname]);
 
   useEffect(() => {
-    fetchTables();
-  }, [search, statusFilter, branchQueryParams.branchId]);
-
-  const tablesByBranch = useMemo(() => {
-    if (!isAllBranches) return null;
-    const groups = {};
-    for (const table of tables) {
-      const key = String(table.branchId || 'unknown');
-      if (!groups[key]) {
-        groups[key] = {
-          branchId: table.branchId,
-          branchName: getBranchName(table.branchId) || 'Branch',
-          tables: []
-        };
-      }
-      groups[key].tables.push(table);
+    if (searchParams.get('branchId')) return;
+    if (isBranchLocked && user?.branchId) {
+      setTablesBranchId(String(user.branchId));
+      return;
     }
-    return Object.values(groups).sort((a, b) => a.branchName.localeCompare(b.branchName));
-  }, [tables, isAllBranches, getBranchName]);
+    if (!hasMultipleBranches && branches.length === 1 && !tablesBranchId) {
+      setTablesBranchId(String(branches[0]._id));
+    }
+  }, [isBranchLocked, hasMultipleBranches, branches, user?.branchId, searchParams, tablesBranchId]);
 
-  const fetchTables = async () => {
+  const isStaleQr = (table) => {
+    if (!table?.qrUrl) return true;
+    if (!table.qrUrl.includes('/branch/')) return true;
+    return /localhost|127\.0\.0\.1|:5000\//.test(table.qrUrl);
+  };
+
+  useEffect(() => {
+    if (!showBranchPicker) return;
+    setPickerLoading(true);
+    API.get('/tables')
+      .then((res) => {
+        if (!res.data.success) return;
+        const allTables = res.data.tables || [];
+        const groups = (branches.length ? branches : []).map((branch) => {
+          const branchTables = allTables.filter((t) => String(t.branchId) === String(branch._id));
+          const activeCount = branchTables.filter((t) => t.status === 'Active').length;
+          const staleCount = branchTables.filter(isStaleQr).length;
+          return {
+            branchId: String(branch._id),
+            branchName: branch.branchName,
+            suspendedByLimit: Boolean(branch.suspendedByLimit),
+            isActive: branch.isActive !== false,
+            total: branchTables.length,
+            active: activeCount,
+            inactive: branchTables.length - activeCount,
+            staleQr: staleCount
+          };
+        });
+        setPickerGroups(groups);
+      })
+      .catch(console.error)
+      .finally(() => setPickerLoading(false));
+  }, [showBranchPicker, user?._id, branches]);
+
+  const fetchTables = useCallback(async () => {
+    if (!tablesBranchId) {
+      setBranchTables([]);
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
     try {
       const res = await API.get('/tables', {
-        params: { search, status: statusFilter, ...branchQueryParams }
+        params: { branchId: tablesBranchId }
       });
       if (res.data.success) {
-        setTables(res.data.tables || []);
+        setBranchTables(res.data.tables || []);
       }
     } catch (err) {
       console.error('Error fetching tables:', err);
-      setTables([]);
+      setBranchTables([]);
     } finally {
       setLoading(false);
     }
+  }, [tablesBranchId]);
+
+  const tables = useMemo(() => {
+    let list = branchTables;
+    if (statusFilter) {
+      list = list.filter((t) => t.status === statusFilter);
+    }
+    if (search.trim()) {
+      const q = search.trim().toLowerCase();
+      list = list.filter(
+        (t) =>
+          String(t.tableName || '').toLowerCase().includes(q) ||
+          String(t.tableNumber || '').toLowerCase().includes(q) ||
+          String(t.section || '').toLowerCase().includes(q)
+      );
+    }
+    return list;
+  }, [branchTables, statusFilter, search]);
+
+  useEffect(() => {
+    if (showBranchPicker) return;
+    fetchTables();
+  }, [fetchTables, showBranchPicker]);
+
+  const handleSelectBranch = (branchId) => {
+    setTablesBranchId(String(branchId));
+    setSelectedBranchId(String(branchId));
+    setSearch('');
+    setStatusFilter('');
+  };
+
+  const handleChangeBranch = () => {
+    setTablesBranchId(null);
+    setSelectedBranchId('all');
+    setBranchTables([]);
+    setSearch('');
+    setStatusFilter('');
   };
 
   const handleOpenAdd = () => {
-    if (isAllBranches && branches.length > 1) {
-      alert('Please select a branch from the header first. Each branch has its own tables and QR codes.');
+    if (!tablesBranchId) {
+      alert('Please select a branch first.');
+      return;
+    }
+    if (branchLocked) {
+      alert('This branch is suspended because it exceeds your branch limit. Tables cannot be added.');
       return;
     }
     setEditingTable(null);
-    const nextNum = (tables.length + 1).toString();
-    const defaultBranch = branches.find((b) => b.isDefault) || branches[0];
+    const nextNum = (branchTables.length + 1).toString();
     setFormData({
       tableName: `Table ${nextNum}`,
       tableNumber: nextNum,
       section: 'Main Hall',
       capacity: 4,
       status: 'Active',
-      branchId: branchQueryParams.branchId || defaultBranch?._id || ''
+      branchId: tablesBranchId
     });
     setModalError('');
     setShowModal(true);
   };
 
   const handleOpenEdit = (table) => {
+    if (branchLocked) {
+      alert('This branch is suspended. Tables cannot be edited.');
+      return;
+    }
     setEditingTable(table);
     setFormData({
       tableName: table.tableName,
@@ -110,7 +232,7 @@ export default function TablesPage() {
       section: table.section || 'Main Hall',
       capacity: table.capacity || 4,
       status: table.status,
-      branchId: table.branchId || ''
+      branchId: table.branchId || tablesBranchId
     });
     setModalError('');
     setShowModal(true);
@@ -119,15 +241,9 @@ export default function TablesPage() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setModalError('');
-    const payload = { ...formData };
-    if (!editingTable && !payload.branchId && branchQueryParams.branchId) {
-      payload.branchId = branchQueryParams.branchId;
-    }
-    if (!editingTable && !payload.branchId && branches.length === 1) {
-      payload.branchId = branches[0]._id;
-    }
+    const payload = { ...formData, branchId: formData.branchId || tablesBranchId };
     if (!editingTable && !payload.branchId) {
-      setModalError('Please select a branch — each table belongs to a specific branch.');
+      setModalError('Please select a branch first.');
       return;
     }
     try {
@@ -154,19 +270,29 @@ export default function TablesPage() {
   };
 
   const handleRegenerateQR = async (id) => {
+    if (branchLocked) {
+      alert('This branch is suspended. QR codes cannot be regenerated.');
+      return;
+    }
     try {
       await API.post(`/tables/${id}/regenerate-qr`);
       fetchTables();
       alert('QR Code regenerated successfully');
     } catch (err) {
-      alert('Error regenerating QR Code');
+      alert(err.response?.data?.message || 'Error regenerating QR Code');
     }
   };
 
   const handleRegenerateAllQR = async () => {
-    if (!window.confirm('Regenerate all QR codes with the current network URL? You must download/print the new codes after this.')) return;
+    if (branchLocked) {
+      alert('This branch is suspended. QR codes cannot be regenerated.');
+      return;
+    }
+    if (!window.confirm('Regenerate all QR codes for this branch with the current network URL? You must download/print the new codes after this.')) return;
     try {
-      const res = await API.post('/tables/regenerate-all-qrs');
+      const res = await API.post('/tables/regenerate-all-qrs', null, {
+        params: tablesBranchId ? { branchId: tablesBranchId } : {}
+      });
       fetchTables();
       alert(res.data?.message || 'All QR codes regenerated');
     } catch (err) {
@@ -174,13 +300,8 @@ export default function TablesPage() {
     }
   };
 
-  const isStaleQr = (table) => {
-    if (!table?.qrUrl) return true;
-    if (!table.qrUrl.includes('/branch/')) return true;
-    return /localhost|127\.0\.0\.1|:5000\//.test(table.qrUrl);
-  };
-
-  const hasStaleQrCodes = tables.some(isStaleQr);
+  const hasStaleQrCodes = branchTables.some(isStaleQr);
+  const activeCount = branchTables.filter((t) => t.status === 'Active').length;
 
   const downloadQR = (table) => {
     const qrSrc = table.qrCodeImage || table.qrCode;
@@ -230,18 +351,27 @@ export default function TablesPage() {
 
   const renderTableCard = (table) => {
     const qrSrc = table.qrCodeImage || table.qrCode;
-    const branchLabel = getBranchName(table.branchId);
 
     return (
-      <div key={table._id} style={{ background: 'var(--bg-surface)', borderRadius: 'var(--radius)', border: '1px solid var(--border)', padding: '1.25rem', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', boxShadow: 'var(--shadow-sm)' }}>
+      <div
+        key={table._id}
+        style={{
+          background: 'var(--bg-surface)',
+          borderRadius: 'var(--radius)',
+          border: '1px solid var(--border)',
+          padding: '1.25rem',
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'space-between',
+          boxShadow: 'var(--shadow-sm)',
+          opacity: branchLocked ? 0.75 : 1
+        }}
+      >
         <div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem' }}>
             <div>
               <h3 style={{ fontSize: '1.1rem', fontWeight: '700', color: 'var(--secondary)' }}>{table.tableName}</h3>
               <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                {isAllBranches && branchLabel ? (
-                  <span style={{ color: 'var(--primary)', fontWeight: '600' }}>{branchLabel} • </span>
-                ) : null}
                 {table.section} • {table.capacity} Seats
               </span>
             </div>
@@ -293,13 +423,28 @@ export default function TablesPage() {
               <ExternalLink size={14} /> Open Menu
             </a>
 
-            <button onClick={() => handleRegenerateQR(table._id)} className="btn btn-secondary btn-sm" title="Regenerate QR Code">
+            <button
+              onClick={() => handleRegenerateQR(table._id)}
+              className="btn btn-secondary btn-sm"
+              title="Regenerate QR Code"
+              disabled={branchLocked}
+            >
               <RefreshCw size={14} />
             </button>
-            <button onClick={() => handleOpenEdit(table)} className="btn btn-secondary btn-sm" title="Edit Table">
+            <button
+              onClick={() => handleOpenEdit(table)}
+              className="btn btn-secondary btn-sm"
+              title="Edit Table"
+              disabled={branchLocked}
+            >
               <Edit2 size={14} />
             </button>
-            <button onClick={() => handleDelete(table._id)} className="btn btn-secondary btn-sm" title="Delete Table" style={{ color: 'var(--danger)' }}>
+            <button
+              onClick={() => handleDelete(table._id)}
+              className="btn btn-secondary btn-sm"
+              title="Delete Table"
+              style={{ color: 'var(--danger)' }}
+            >
               <Trash2 size={14} />
             </button>
           </div>
@@ -312,109 +457,211 @@ export default function TablesPage() {
     <div className="admin-layout">
       <Sidebar />
       <div className="admin-main">
-        <Header title={selectedBranch ? `Tables & QR — ${selectedBranch.branchName}` : 'Tables & QR Codes'} />
+        <Header
+          title={showBranchPicker ? 'Select Branch' : `Tables & QR — ${selectedBranchName || user?.branchName || 'Branch'}`}
+          hideBranchSelector
+          branchLabel={showBranchPicker ? '' : (selectedBranchName || user?.branchName || '')}
+        />
         <div className="admin-content">
 
-          {hasStaleQrCodes && (
-            <div className="admin-panel admin-panel--padded" style={{ marginBottom: '1rem', display: 'flex', gap: '0.75rem', alignItems: 'flex-start', background: '#fff7ed', borderColor: '#fed7aa' }}>
-              <AlertCircle size={20} style={{ color: '#b45309', flexShrink: 0, marginTop: '0.1rem' }} />
-              <div style={{ flex: 1 }}>
-                <div style={{ fontWeight: '700', fontSize: '0.9rem', marginBottom: '0.25rem', color: '#92400e' }}>
-                  Old QR codes detected
-                </div>
-                <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', margin: '0 0 0.75rem' }}>
-                  Printed or saved QR codes may still open an old URL like <code>:5000</code> or a previous IP.
-                  Regenerate all codes, then download or print the new QR images from this page.
-                </p>
-                <button type="button" onClick={handleRegenerateAllQR} className="btn btn-primary btn-sm">
-                  <RefreshCw size={14} /> Regenerate All QR Codes
-                </button>
-              </div>
-            </div>
-          )}
-
-          {isAllBranches && branches.length > 1 && (
-            <div className="admin-panel admin-panel--padded" style={{ marginBottom: '1rem', display: 'flex', gap: '0.75rem', alignItems: 'flex-start', background: '#fff7ed', borderColor: '#fed7aa' }}>
-              <AlertCircle size={20} style={{ color: 'var(--primary)', flexShrink: 0, marginTop: '0.1rem' }} />
-              <div>
-                <div style={{ fontWeight: '700', fontSize: '0.9rem', marginBottom: '0.25rem' }}>
-                  Each branch has separate Tables &amp; QR Codes
-                </div>
-                <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', margin: 0 }}>
-                  To add a new table or QR code, select a branch from the header, or click &quot;Manage Tables &amp; QR&quot; on the <strong>Branches</strong> page.
-                </p>
-              </div>
-            </div>
-          )}
-
-          {!isAllBranches && selectedBranch && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '1rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-              <MapPin size={15} style={{ color: 'var(--primary)' }} />
-              <span>Managing tables for: <strong style={{ color: 'var(--secondary)' }}>{selectedBranch.branchName}</strong> — separate QR codes for this branch</span>
-            </div>
-          )}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', gap: '1rem', flexWrap: 'wrap' }}>
-            <div style={{ display: 'flex', gap: '1rem', flex: 1, maxWidth: '450px' }}>
-              <div style={{ position: 'relative', flex: 1 }}>
-                <Search size={18} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
-                <input
-                  type="text"
-                  placeholder="Search table name or number..."
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  style={{ width: '100%', paddingLeft: '38px' }}
-                />
-              </div>
-
-              <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-                <option value="">All Statuses</option>
-                <option value="Active">Active</option>
-                <option value="Inactive">Inactive</option>
-              </select>
-            </div>
-
-            <button onClick={handleOpenAdd} className="btn btn-primary">
-              <Plus size={18} />
-              <span>Add Table</span>
-            </button>
-            <button onClick={handleRegenerateAllQR} className="btn btn-secondary" type="button">
-              <RefreshCw size={16} />
-              <span>Regenerate All QRs</span>
-            </button>
-          </div>
-
-          {/* Table Grid Cards */}
-          {isAllBranches && tablesByBranch && tablesByBranch.length > 0 ? (
-            tablesByBranch.map((group) => (
-              <div key={group.branchId} style={{ marginBottom: '2rem' }}>
-                <h3 style={{ fontSize: '1rem', fontWeight: '800', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                  <MapPin size={16} style={{ color: 'var(--primary)' }} />
-                  {group.branchName}
-                  <span style={{ fontSize: '0.75rem', fontWeight: '600', color: 'var(--text-muted)' }}>({group.tables.length} tables)</span>
+          {showBranchPicker ? (
+            <div>
+              <div className="admin-panel admin-panel--padded" style={{ marginBottom: '1.25rem' }}>
+                <h3 style={{ fontSize: '1.1rem', fontWeight: 800, marginBottom: '0.35rem', color: 'var(--secondary)' }}>
+                  Select a branch to manage tables &amp; QR codes
                 </h3>
-                <div className="admin-grid-cards">
-                  {group.tables.map((table) => renderTableCard(table))}
+                <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', margin: 0 }}>
+                  Tables and QR codes are shown one branch at a time. Choose the branch you want to manage.
+                </p>
+              </div>
+
+              {pickerLoading ? (
+                <div className="admin-panel admin-panel--padded" style={{ textAlign: 'center', color: 'var(--text-muted)' }}>
+                  <Loader2 size={24} className="animate-spin" style={{ margin: '0 auto 0.5rem' }} />
+                  Loading branches...
+                </div>
+              ) : (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1rem' }}>
+                  {pickerGroups.map((group) => {
+                    const isSuspended = Boolean(group.suspendedByLimit) || group.isActive === false;
+                    return (
+                      <button
+                        key={group.branchId}
+                        type="button"
+                        onClick={() => !isSuspended && handleSelectBranch(group.branchId)}
+                        disabled={isSuspended}
+                        className="admin-panel admin-panel--padded"
+                        style={{
+                          textAlign: 'left',
+                          cursor: isSuspended ? 'not-allowed' : 'pointer',
+                          opacity: isSuspended ? 0.65 : 1,
+                          border: `1px solid ${isSuspended ? '#fecaca' : 'var(--border)'}`,
+                          transition: 'border-color 0.15s ease, box-shadow 0.15s ease',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '0.75rem'
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <MapPin size={18} color={isSuspended ? '#b45309' : 'var(--primary)'} />
+                            <span style={{ fontWeight: 800, fontSize: '1.05rem', color: 'var(--secondary)' }}>
+                              {group.branchName}
+                            </span>
+                          </div>
+                          {!isSuspended && <ArrowRight size={18} color="var(--primary)" />}
+                        </div>
+
+                        {isSuspended && (
+                          <div style={{ fontSize: '0.78rem', color: '#b45309', fontWeight: 700 }}>
+                            Suspended — exceeds branch limit. Tables &amp; QR locked.
+                          </div>
+                        )}
+
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', fontSize: '0.78rem' }}>
+                          <div style={{ background: '#f0fdf4', padding: '0.55rem 0.65rem', borderRadius: '8px' }}>
+                            <div style={{ color: 'var(--text-muted)', fontWeight: 700 }}>Active</div>
+                            <div style={{ fontWeight: 800, color: '#15803d' }}>{group.active} tables</div>
+                          </div>
+                          <div style={{ background: '#eff6ff', padding: '0.55rem 0.65rem', borderRadius: '8px' }}>
+                            <div style={{ color: 'var(--text-muted)', fontWeight: 700 }}>Total</div>
+                            <div style={{ fontWeight: 800, color: '#1d4ed8' }}>{group.total} tables</div>
+                          </div>
+                        </div>
+
+                        {group.staleQr > 0 && !isSuspended && (
+                          <div style={{ fontSize: '0.78rem', color: '#b45309', fontWeight: 600 }}>
+                            {group.staleQr} old QR code{group.staleQr === 1 ? '' : 's'} — regenerate after opening
+                          </div>
+                        )}
+
+                        <span
+                          className={`btn btn-sm ${isSuspended ? 'btn-secondary' : 'btn-primary'}`}
+                          style={{ alignSelf: 'flex-start' }}
+                        >
+                          {isSuspended ? 'Not Available' : 'View Tables'}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
+              {!pickerLoading && pickerGroups.length === 0 && (
+                <div className="admin-panel admin-panel--padded" style={{ textAlign: 'center', color: 'var(--text-muted)' }}>
+                  No branches found. Add branches from the Branches page.
+                </div>
+              )}
+            </div>
+          ) : (
+            <>
+              {hasMultipleBranches && !isBranchLocked && (
+                <button
+                  type="button"
+                  onClick={handleChangeBranch}
+                  className="btn btn-secondary btn-sm"
+                  style={{ marginBottom: '1rem', display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
+                >
+                  <ArrowLeft size={16} /> Change Branch
+                </button>
+              )}
+
+              {branchLocked && (
+                <div className="admin-panel admin-panel--padded" style={{ marginBottom: '1rem', background: '#fef2f2', borderColor: '#fecaca' }}>
+                  <p style={{ fontSize: '0.85rem', color: '#b45309', fontWeight: 700, margin: 0 }}>
+                    This branch is suspended (over plan limit). Tables are view-only — delete the branch or ask Super Admin to increase limit.
+                  </p>
+                </div>
+              )}
+
+              {hasStaleQrCodes && !branchLocked && (
+                <div className="admin-panel admin-panel--padded" style={{ marginBottom: '1rem', display: 'flex', gap: '0.75rem', alignItems: 'flex-start', background: '#fff7ed', borderColor: '#fed7aa' }}>
+                  <AlertCircle size={20} style={{ color: '#b45309', flexShrink: 0, marginTop: '0.1rem' }} />
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: '700', fontSize: '0.9rem', marginBottom: '0.25rem', color: '#92400e' }}>
+                      Old QR codes detected in this branch
+                    </div>
+                    <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', margin: '0 0 0.75rem' }}>
+                      Regenerate all codes for <strong>{selectedBranchName}</strong>, then download or print the new QR images.
+                    </p>
+                    <button type="button" onClick={handleRegenerateAllQR} className="btn btn-primary btn-sm">
+                      <RefreshCw size={14} /> Regenerate All QR Codes
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '0.75rem', marginBottom: '1rem' }}>
+                <div className="admin-panel admin-panel--padded" style={{ borderLeft: '4px solid var(--primary)' }}>
+                  <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 700 }}>Total Tables</div>
+                  <div style={{ fontSize: '1.2rem', fontWeight: 800 }}>{branchTables.length}</div>
+                </div>
+                <div className="admin-panel admin-panel--padded" style={{ borderLeft: '4px solid #15803d' }}>
+                  <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 700 }}>Active</div>
+                  <div style={{ fontSize: '1.2rem', fontWeight: 800, color: '#15803d' }}>{activeCount}</div>
+                </div>
+                <div className="admin-panel admin-panel--padded" style={{ borderLeft: '4px solid #b45309' }}>
+                  <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 700 }}>Old QR Codes</div>
+                  <div style={{ fontSize: '1.2rem', fontWeight: 800, color: '#b45309' }}>{branchTables.filter(isStaleQr).length}</div>
                 </div>
               </div>
-            ))
-          ) : (
-            <div className="admin-grid-cards">
-              {tables.map((table) => renderTableCard(table))}
-            </div>
-          )}
 
-          {tables.length === 0 && !loading && (
-            <div style={{ textAlign: 'center', padding: '4rem', background: '#fff', borderRadius: '12px', color: 'var(--text-muted)' }}>
-              {isAllBranches && branches.length > 1
-                ? 'No tables found. Select a branch and add a new table.'
-                : 'No tables in this branch yet. Click "+ Add Table" to get started.'}
-            </div>
-          )}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', gap: '1rem', flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', gap: '1rem', flex: 1, maxWidth: '450px' }}>
+                  <div style={{ position: 'relative', flex: 1 }}>
+                    <Search size={18} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+                    <input
+                      type="text"
+                      placeholder="Search table name or number..."
+                      value={search}
+                      onChange={(e) => setSearch(e.target.value)}
+                      style={{ width: '100%', paddingLeft: '38px' }}
+                    />
+                  </div>
 
+                  <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+                    <option value="">All Statuses</option>
+                    <option value="Active">Active</option>
+                    <option value="Inactive">Inactive</option>
+                  </select>
+                </div>
+
+                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                  <button onClick={fetchTables} className="btn btn-secondary btn-sm" type="button" title="Refresh">
+                    <RefreshCw size={16} />
+                  </button>
+                  <button onClick={handleOpenAdd} className="btn btn-primary" disabled={branchLocked || !tablesBranchId}>
+                    <Plus size={18} />
+                    <span>Add Table</span>
+                  </button>
+                  <button onClick={handleRegenerateAllQR} className="btn btn-secondary" type="button" disabled={branchLocked || branchTables.length === 0}>
+                    <RefreshCw size={16} />
+                    <span>Regenerate All QRs</span>
+                  </button>
+                </div>
+              </div>
+
+              {loading ? (
+                <div className="admin-panel admin-panel--padded" style={{ textAlign: 'center', color: 'var(--text-muted)' }}>
+                  <Loader2 size={24} className="animate-spin" style={{ margin: '0 auto 0.5rem' }} />
+                  Loading tables...
+                </div>
+              ) : (
+                <div className="admin-grid-cards">
+                  {tables.map((table) => renderTableCard(table))}
+                </div>
+              )}
+
+              {branchTables.length === 0 && !loading && (
+                <div style={{ textAlign: 'center', padding: '4rem', background: '#fff', borderRadius: '12px', color: 'var(--text-muted)' }}>
+                  No tables in {selectedBranchName || 'this branch'} yet. Click &quot;Add Table&quot; to get started.
+                </div>
+              )}
+            </>
+          )}
         </div>
       </div>
 
-      {/* Add / Edit Table Modal */}
       {showModal && (
         <div className="modal-overlay">
           <div className="modal-card">
@@ -429,27 +676,9 @@ export default function TablesPage() {
             )}
 
             <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              {!editingTable && isAllBranches && branches.length > 1 && (
-                <div style={{ fontSize: '0.85rem', color: 'var(--danger)' }}>
-                  Select a branch from the header, then add a table.
-                </div>
-              )}
-
-              {!editingTable && !isAllBranches && selectedBranch && (
-                <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', padding: '0.5rem 0.75rem', background: '#f8fafc', borderRadius: '8px' }}>
-                  Branch: <strong>{selectedBranch.branchName}</strong> — QR code will be generated for this branch
-                </div>
-              )}
-
-              {!editingTable && isAllBranches && branches.length === 1 && branches[0] && (
-                <input type="hidden" value={formData.branchId || branches[0]._id} readOnly />
-              )}
-
-              {editingTable && editingTable.branchId && (
-                <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-                  Branch: <strong>{getBranchName(editingTable.branchId)}</strong>
-                </div>
-              )}
+              <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', padding: '0.5rem 0.75rem', background: '#f8fafc', borderRadius: '8px' }}>
+                Branch: <strong>{selectedBranchName || user?.branchName || 'Branch'}</strong> — QR code will be generated for this branch
+              </div>
 
               <div>
                 <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', marginBottom: '0.3rem' }}>Table Display Name *</label>
@@ -524,13 +753,12 @@ export default function TablesPage() {
         </div>
       )}
 
-      {/* QR Code Full Modal Preview */}
       {previewTable && (
         <div className="modal-overlay" onClick={() => setPreviewTable(null)}>
           <div className="modal-card" onClick={(e) => e.stopPropagation()} style={{ textAlign: 'center', maxWidth: '380px' }}>
             <h3 style={{ fontSize: '1.25rem', fontWeight: '800' }}>{previewTable.tableName}</h3>
             <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>
-              {getBranchName(previewTable.branchId) ? `${getBranchName(previewTable.branchId)} • ` : ''}
+              {selectedBranchName ? `${selectedBranchName} • ` : ''}
               Scan QR Code to open digital menu for Table {previewTable.tableNumber}
             </p>
 
