@@ -1,12 +1,16 @@
 const Category = require('../models/Category');
-const { getTenantAdminId, buildTenantFilter, assertTenantOwnership } = require('../middleware/tenantMiddleware');
+const {
+  getTenantAdminId,
+  buildBranchRequiredFilter,
+  assertScopedOwnership
+} = require('../middleware/tenantMiddleware');
 const { persistUploadedImage } = require('../utils/persistUpload');
 
-// @desc Get all categories (filtered strictly by logged-in adminId)
-// @route GET /api/categories
+// @desc Get all categories for a branch
+// @route GET /api/categories?branchId=
 exports.getCategories = async (req, res, next) => {
   try {
-    const filter = buildTenantFilter(req.user, res);
+    const filter = buildBranchRequiredFilter(req.user, req, res);
     if (!filter) return;
 
     const categories = await Category.find(filter).sort({ displayOrder: 1 });
@@ -28,6 +32,8 @@ exports.getCategoryById = async (req, res, next) => {
     if (!category) {
       return res.status(404).json({ success: false, message: 'Category not found' });
     }
+    if (!assertScopedOwnership(category, req.user, res, 'Not authorized to view this category')) return;
+
     res.json({
       success: true,
       category
@@ -37,14 +43,13 @@ exports.getCategoryById = async (req, res, next) => {
   }
 };
 
-// @desc Create category for logged-in Restaurant Admin
-// @route POST /api/categories
+// @desc Create category for a branch
+// @route POST /api/categories?branchId=
 exports.createCategory = async (req, res, next) => {
   try {
-    const adminId = getTenantAdminId(req.user);
-    if (!adminId) {
-      return res.status(403).json({ success: false, message: 'Restaurant tenant access required' });
-    }
+    const filter = buildBranchRequiredFilter(req.user, req, res);
+    if (!filter) return;
+
     const { name, description, displayOrder, status } = req.body;
     let image = '';
 
@@ -53,7 +58,8 @@ exports.createCategory = async (req, res, next) => {
     }
 
     const category = await Category.create({
-      adminId,
+      adminId: filter.adminId,
+      branchId: filter.branchId,
       name,
       image,
       description,
@@ -66,6 +72,9 @@ exports.createCategory = async (req, res, next) => {
       category
     });
   } catch (error) {
+    if (error?.code === 11000) {
+      return res.status(400).json({ success: false, message: 'A category with this name already exists in this branch' });
+    }
     next(error);
   }
 };
@@ -80,10 +89,7 @@ exports.updateCategory = async (req, res, next) => {
       return res.status(404).json({ success: false, message: 'Category not found' });
     }
 
-    const adminId = getTenantAdminId(req.user);
-    if (adminId && category.adminId.toString() !== adminId.toString()) {
-      return res.status(403).json({ success: false, message: 'Not authorized to modify another restaurant data' });
-    }
+    if (!assertScopedOwnership(category, req.user, res, 'Not authorized to modify another restaurant data')) return;
 
     const { name, description, displayOrder, status } = req.body;
 
@@ -103,6 +109,9 @@ exports.updateCategory = async (req, res, next) => {
       category
     });
   } catch (error) {
+    if (error?.code === 11000) {
+      return res.status(400).json({ success: false, message: 'A category with this name already exists in this branch' });
+    }
     next(error);
   }
 };
@@ -117,10 +126,7 @@ exports.deleteCategory = async (req, res, next) => {
       return res.status(404).json({ success: false, message: 'Category not found' });
     }
 
-    const adminId = getTenantAdminId(req.user);
-    if (adminId && category.adminId.toString() !== adminId.toString()) {
-      return res.status(403).json({ success: false, message: 'Not authorized to delete another restaurant data' });
-    }
+    if (!assertScopedOwnership(category, req.user, res, 'Not authorized to delete another restaurant data')) return;
 
     await category.deleteOne();
 

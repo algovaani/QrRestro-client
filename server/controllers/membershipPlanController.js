@@ -69,6 +69,10 @@ const applyPlanFields = (plan, body) => {
   } else if (plan.featureKeys?.length) {
     plan.features = keysToFeatureLabels(plan.featureKeys);
   }
+
+  if (body.maxBranches !== undefined && body.maxBranches !== '') {
+    plan.maxBranches = Number(body.maxBranches);
+  }
 };
 
 // @desc Get all Membership Plans
@@ -112,7 +116,8 @@ exports.createPlan = async (req, res, next) => {
       featureKeys: featureKeys.length ? featureKeys : undefined,
       features: featureKeys.length ? keysToFeatureLabels(featureKeys) : (processedFeatures.length > 0 ? processedFeatures : keysToFeatureLabels(DEFAULT_FEATURE_KEYS)),
       status: req.body.status || 'Active',
-      upiId: req.body.upiId ? String(req.body.upiId).trim() : ''
+      upiId: req.body.upiId ? String(req.body.upiId).trim() : '',
+      maxBranches: req.body.maxBranches !== undefined && req.body.maxBranches !== '' ? Number(req.body.maxBranches) : 1
     });
 
     applyPlanFields(plan, req.body);

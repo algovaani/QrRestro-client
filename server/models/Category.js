@@ -6,6 +6,11 @@ const categorySchema = new mongoose.Schema({
     ref: 'User',
     required: true
   },
+  branchId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Branch',
+    required: true
+  },
   name: {
     type: String,
     required: true,
@@ -32,6 +37,7 @@ const categorySchema = new mongoose.Schema({
   timestamps: true
 });
 
-categorySchema.index({ adminId: 1, name: 1 }, { unique: true });
+categorySchema.index({ adminId: 1, branchId: 1, name: 1 }, { unique: true });
+categorySchema.index({ adminId: 1, branchId: 1 });
 
 module.exports = mongoose.model('Category', categorySchema);

@@ -80,13 +80,26 @@ const findTableForOrder = async (tableNumber, adminId, branchId) => {
 
 const buildMenuResponse = async (table) => {
   const adminId = table.adminId;
-  let branch = null;
-  if (table.branchId) {
-    branch = await Branch.findById(table.branchId).select('branchName address city mobile isActive');
+  let branchId = table.branchId;
+  if (!branchId) {
+    const defaultBranch = await ensureDefaultBranch(adminId);
+    branchId = defaultBranch?._id || null;
   }
 
-  const categories = await Category.find({ adminId, status: 'Active' }).sort({ displayOrder: 1 });
-  const menuItems = await MenuItem.find({ adminId, status: 'Active', isAvailable: true })
+  let branch = null;
+  if (branchId) {
+    branch = await Branch.findById(branchId).select('branchName address city mobile isActive');
+  }
+
+  const categoryFilter = { adminId, status: 'Active' };
+  const menuFilter = { adminId, status: 'Active', isAvailable: true };
+  if (branchId) {
+    categoryFilter.branchId = branchId;
+    menuFilter.branchId = branchId;
+  }
+
+  const categories = await Category.find(categoryFilter).sort({ displayOrder: 1 });
+  const menuItems = await MenuItem.find(menuFilter)
     .select('+imageData')
     .populate('category');
 
@@ -110,7 +123,7 @@ const buildMenuResponse = async (table) => {
     table,
     tableNumber: table.tableNumber,
     adminId,
-    branchId: table.branchId || null,
+    branchId: table.branchId || branchId || null,
     branchName: branch?.branchName || '',
     branch,
     categories,

@@ -84,7 +84,7 @@ export default function TablesPage() {
 
   const handleOpenAdd = () => {
     if (isAllBranches && branches.length > 1) {
-      alert('Pehle header se ek branch select karein. Har branch ke apne alag tables & QR codes hote hain.');
+      alert('Please select a branch from the header first. Each branch has its own tables and QR codes.');
       return;
     }
     setEditingTable(null);
@@ -127,7 +127,7 @@ export default function TablesPage() {
       payload.branchId = branches[0]._id;
     }
     if (!editingTable && !payload.branchId) {
-      setModalError('Branch select karein — har table ek specific branch se judi hoti hai.');
+      setModalError('Please select a branch — each table belongs to a specific branch.');
       return;
     }
     try {
@@ -162,6 +162,25 @@ export default function TablesPage() {
       alert('Error regenerating QR Code');
     }
   };
+
+  const handleRegenerateAllQR = async () => {
+    if (!window.confirm('Regenerate all QR codes with the current network URL? You must download/print the new codes after this.')) return;
+    try {
+      const res = await API.post('/tables/regenerate-all-qrs');
+      fetchTables();
+      alert(res.data?.message || 'All QR codes regenerated');
+    } catch (err) {
+      alert(err.response?.data?.message || 'Error regenerating QR codes');
+    }
+  };
+
+  const isStaleQr = (table) => {
+    if (!table?.qrUrl) return true;
+    if (!table.qrUrl.includes('/branch/')) return true;
+    return /localhost|127\.0\.0\.1|:5000\//.test(table.qrUrl);
+  };
+
+  const hasStaleQrCodes = tables.some(isStaleQr);
 
   const downloadQR = (table) => {
     const qrSrc = table.qrCodeImage || table.qrCode;
@@ -245,9 +264,9 @@ export default function TablesPage() {
             <div style={{ fontSize: '0.75rem', color: 'var(--primary)', fontWeight: '600', marginTop: '0.25rem' }}>
               Table #{table.tableNumber}
             </div>
-            {branchLabel && !isAllBranches && (
-              <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.15rem' }}>
-                {branchLabel}
+            {isStaleQr(table) && (
+              <div style={{ fontSize: '0.72rem', color: '#b45309', fontWeight: '700', marginTop: '0.35rem' }}>
+                Old QR — regenerate &amp; download again
               </div>
             )}
           </div>
@@ -296,15 +315,33 @@ export default function TablesPage() {
         <Header title={selectedBranch ? `Tables & QR — ${selectedBranch.branchName}` : 'Tables & QR Codes'} />
         <div className="admin-content">
 
+          {hasStaleQrCodes && (
+            <div className="admin-panel admin-panel--padded" style={{ marginBottom: '1rem', display: 'flex', gap: '0.75rem', alignItems: 'flex-start', background: '#fff7ed', borderColor: '#fed7aa' }}>
+              <AlertCircle size={20} style={{ color: '#b45309', flexShrink: 0, marginTop: '0.1rem' }} />
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: '700', fontSize: '0.9rem', marginBottom: '0.25rem', color: '#92400e' }}>
+                  Old QR codes detected
+                </div>
+                <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', margin: '0 0 0.75rem' }}>
+                  Printed or saved QR codes may still open an old URL like <code>:5000</code> or a previous IP.
+                  Regenerate all codes, then download or print the new QR images from this page.
+                </p>
+                <button type="button" onClick={handleRegenerateAllQR} className="btn btn-primary btn-sm">
+                  <RefreshCw size={14} /> Regenerate All QR Codes
+                </button>
+              </div>
+            </div>
+          )}
+
           {isAllBranches && branches.length > 1 && (
             <div className="admin-panel admin-panel--padded" style={{ marginBottom: '1rem', display: 'flex', gap: '0.75rem', alignItems: 'flex-start', background: '#fff7ed', borderColor: '#fed7aa' }}>
               <AlertCircle size={20} style={{ color: 'var(--primary)', flexShrink: 0, marginTop: '0.1rem' }} />
               <div>
                 <div style={{ fontWeight: '700', fontSize: '0.9rem', marginBottom: '0.25rem' }}>
-                  Har branch ke alag Tables & QR Codes
+                  Each branch has separate Tables &amp; QR Codes
                 </div>
                 <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', margin: 0 }}>
-                  Nayi table ya QR banane ke liye header se branch select karein, ya <strong>Branches</strong> page se &quot;Manage Tables & QR&quot; par click karein.
+                  To add a new table or QR code, select a branch from the header, or click &quot;Manage Tables &amp; QR&quot; on the <strong>Branches</strong> page.
                 </p>
               </div>
             </div>
@@ -313,7 +350,7 @@ export default function TablesPage() {
           {!isAllBranches && selectedBranch && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '1rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
               <MapPin size={15} style={{ color: 'var(--primary)' }} />
-              <span>Managing tables for: <strong style={{ color: 'var(--secondary)' }}>{selectedBranch.branchName}</strong> — is branch ke apne QR codes</span>
+              <span>Managing tables for: <strong style={{ color: 'var(--secondary)' }}>{selectedBranch.branchName}</strong> — separate QR codes for this branch</span>
             </div>
           )}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', gap: '1rem', flexWrap: 'wrap' }}>
@@ -340,6 +377,10 @@ export default function TablesPage() {
               <Plus size={18} />
               <span>Add Table</span>
             </button>
+            <button onClick={handleRegenerateAllQR} className="btn btn-secondary" type="button">
+              <RefreshCw size={16} />
+              <span>Regenerate All QRs</span>
+            </button>
           </div>
 
           {/* Table Grid Cards */}
@@ -365,8 +406,8 @@ export default function TablesPage() {
           {tables.length === 0 && !loading && (
             <div style={{ textAlign: 'center', padding: '4rem', background: '#fff', borderRadius: '12px', color: 'var(--text-muted)' }}>
               {isAllBranches && branches.length > 1
-                ? 'Koi table nahi mili. Branch select karke nayi table add karein.'
-                : 'Is branch mein abhi koi table nahi. "+ Add Table" se shuru karein.'}
+                ? 'No tables found. Select a branch and add a new table.'
+                : 'No tables in this branch yet. Click "+ Add Table" to get started.'}
             </div>
           )}
 
@@ -390,13 +431,13 @@ export default function TablesPage() {
             <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               {!editingTable && isAllBranches && branches.length > 1 && (
                 <div style={{ fontSize: '0.85rem', color: 'var(--danger)' }}>
-                  Branch select karein header se, phir table add karein.
+                  Select a branch from the header, then add a table.
                 </div>
               )}
 
               {!editingTable && !isAllBranches && selectedBranch && (
                 <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', padding: '0.5rem 0.75rem', background: '#f8fafc', borderRadius: '8px' }}>
-                  Branch: <strong>{selectedBranch.branchName}</strong> — QR is branch ke liye generate hoga
+                  Branch: <strong>{selectedBranch.branchName}</strong> — QR code will be generated for this branch
                 </div>
               )}
 

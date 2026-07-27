@@ -117,7 +117,7 @@ export async function sendOrderBillOnWhatsApp(order, options = {}) {
     ...restaurantInfo,
     hint: options.forAdmin
       ? null
-      : 'WhatsApp khul gaya hai. Send dabayein — aapko bill link milega.'
+      : 'WhatsApp opened. Tap Send to share the bill link.'
   };
 }
 

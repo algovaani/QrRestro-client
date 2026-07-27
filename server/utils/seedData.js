@@ -38,6 +38,7 @@ const seedData = async () => {
         name: '5-Day Free Trial',
         price: 0,
         durationDays: 5,
+        maxBranches: 1,
         description: 'Complete trial pack to test all features with zero risk',
         features: ['Unlimited Table QR Scans', 'Real-Time Kitchen KDS', 'Dynamic UPI QR Payment', 'WhatsApp Tax Receipt'],
         status: 'Active'
@@ -46,6 +47,7 @@ const seedData = async () => {
         name: 'Monthly Plan',
         price: 999,
         durationDays: 30,
+        maxBranches: 3,
         description: 'Standard monthly subscription for small & medium restaurants',
         features: ['Unlimited Orders & Items', 'Datatables & Live Search', 'Date Range Sales Reports', 'WhatsApp Receipt & Audio Chimes'],
         status: 'Active'
@@ -54,6 +56,7 @@ const seedData = async () => {
         name: 'Quarterly Plan',
         price: 2499,
         durationDays: 90,
+        maxBranches: 5,
         description: 'Popular 3-month savings plan for busy food outlets',
         features: ['All Monthly Features', 'Priority Support', 'Custom Tax & Currency Setup', 'Multi-Session Table Totals'],
         status: 'Active'
@@ -62,6 +65,7 @@ const seedData = async () => {
         name: 'Annual Plan',
         price: 7999,
         durationDays: 365,
+        maxBranches: 0,
         description: 'VIP annual membership with maximum savings & 24/7 dedicated support',
         features: ['All Premium Features Unlocked', 'VIP Dedicated Support', 'Unlimited Staff & Tables', 'Free System Upgrades'],
         status: 'Active'

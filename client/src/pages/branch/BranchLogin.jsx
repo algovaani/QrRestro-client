@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { getPostLoginPath } from '../../utils/adminAccess';
 import { LogIn, AlertCircle, MapPin } from 'lucide-react';
@@ -27,7 +27,7 @@ export default function BranchLogin() {
     if (res && res.success) {
       if (res.user?.role !== 'BranchAdmin') {
         logout();
-        setError('Ye login sirf branch managers ke liye hai. Restaurant admin ke liye admin login use karein.');
+        setError('This login is for branch managers only. Please use admin login for restaurant owners.');
         return;
       }
       navigate('/branch/dashboard');
@@ -45,7 +45,7 @@ export default function BranchLogin() {
       background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
       padding: '1rem'
     }}>
-      <div style={{
+      <div className="auth-login-card" style={{
         background: '#ffffff',
         borderRadius: '20px',
         padding: '2.5rem',
@@ -71,7 +71,7 @@ export default function BranchLogin() {
             Branch Login
           </h2>
           <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginTop: '0.25rem' }}>
-            Apni branch ke orders, tables & reports manage karein
+            Manage orders, tables, and reports for your branch
           </p>
         </div>
 
@@ -131,13 +131,6 @@ export default function BranchLogin() {
             <span>{loading ? 'Signing in...' : 'Branch Sign In'}</span>
           </button>
         </form>
-
-        <p style={{ textAlign: 'center', marginTop: '1.25rem', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-          Restaurant owner?{' '}
-          <Link to="/admin/login" style={{ color: 'var(--primary)', fontWeight: '600' }}>
-            Admin Login
-          </Link>
-        </p>
       </div>
     </div>
   );

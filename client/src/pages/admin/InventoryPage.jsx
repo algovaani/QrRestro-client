@@ -1,8 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import API from '../../services/api';
 import Sidebar from '../../components/common/Sidebar';
 import Header from '../../components/common/Header';
 import { useBranch } from '../../context/BranchContext';
+import { useAuth } from '../../context/AuthContext';
+import { isBranchAdmin } from '../../utils/adminPaths';
 import {
   Package,
   Plus,
@@ -13,7 +16,8 @@ import {
   Search,
   AlertTriangle,
   CheckCircle2,
-  XCircle
+  XCircle,
+  MapPin
 } from 'lucide-react';
 
 const UNITS = ['kg', 'g', 'L', 'ml', 'pcs', 'packet', 'dozen', 'box'];
@@ -32,8 +36,20 @@ const emptyForm = {
 };
 
 export default function InventoryPage() {
-  const { branchQueryParams, selectedBranchId, isAllBranches, branches } = useBranch();
+  const [searchParams] = useSearchParams();
+  const { user } = useAuth();
+  const branchMode = isBranchAdmin(user);
+  const {
+    branchQueryParams,
+    selectedBranchId,
+    isAllBranches,
+    branches,
+    setSelectedBranchId,
+    getBranchName,
+    selectedBranch
+  } = useBranch();
   const [items, setItems] = useState([]);
+  const [byBranch, setByBranch] = useState([]);
   const [summary, setSummary] = useState({ total: 0, in_stock: 0, low_stock: 0, out_of_stock: 0 });
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState('all');
@@ -46,6 +62,13 @@ export default function InventoryPage() {
   const [actionLoading, setActionLoading] = useState('');
   const [modalBranchId, setModalBranchId] = useState('');
 
+  useEffect(() => {
+    const fromUrl = searchParams.get('branchId');
+    if (fromUrl) {
+      setSelectedBranchId(fromUrl);
+    }
+  }, [searchParams, setSelectedBranchId]);
+
   const resolvedBranchId = useMemo(() => {
     if (!isAllBranches && selectedBranchId && selectedBranchId !== 'all') {
       return String(selectedBranchId);
@@ -55,6 +78,8 @@ export default function InventoryPage() {
     }
     return '';
   }, [isAllBranches, selectedBranchId, branches]);
+
+  const showGroupedByBranch = !branchMode && isAllBranches && branches.length > 1;
 
   const fetchInventory = useCallback(async () => {
     setLoading(true);
@@ -67,10 +92,13 @@ export default function InventoryPage() {
       const res = await API.get('/inventory', { params });
       if (res.data.success) {
         setItems(res.data.items || []);
+        setByBranch(res.data.byBranch || []);
         setSummary(res.data.summary || { total: 0, in_stock: 0, low_stock: 0, out_of_stock: 0 });
       }
     } catch (err) {
       console.error(err);
+      setItems([]);
+      setByBranch([]);
     } finally {
       setLoading(false);
     }
@@ -80,12 +108,15 @@ export default function InventoryPage() {
     fetchInventory();
   }, [fetchInventory]);
 
-  const handleOpenAdd = () => {
+  const handleOpenAdd = (presetBranchId = '') => {
     if (branches.length === 0) {
-      alert('Pehle Branches page se ek branch banayein.');
+      alert('Please create a branch first from the Branches page.');
       return;
     }
-    const defaultBranch = resolvedBranchId || (branches.length === 1 ? String(branches[0]._id) : '');
+    const defaultBranch =
+      presetBranchId ||
+      resolvedBranchId ||
+      (branches.length === 1 ? String(branches[0]._id) : '');
     setModalBranchId(defaultBranch);
     setEditingItem(null);
     setFormData(emptyForm);
@@ -110,12 +141,12 @@ export default function InventoryPage() {
     e.preventDefault();
     const branchId = editingItem?.branchId || modalBranchId || resolvedBranchId;
     if (!branchId) {
-      setModalError('Pehle branch select karein.');
+      setModalError('Please select a branch first.');
       return;
     }
     const name = formData.customItemName.trim();
     if (!name) {
-      setModalError('Item ka naam likhein (e.g. Salt, Mirch, Ghee).');
+      setModalError('Please enter an item name (e.g. Salt, Pepper, Ghee).');
       return;
     }
 
@@ -151,7 +182,7 @@ export default function InventoryPage() {
   };
 
   const handleDelete = async (item) => {
-    if (!window.confirm(`"${item.itemName}" stock se hata den?`)) return;
+    if (!window.confirm(`Remove "${item.itemName}" from stock?`)) return;
     try {
       await API.delete(`/inventory/${item._id}`);
       await fetchInventory();
@@ -160,13 +191,132 @@ export default function InventoryPage() {
     }
   };
 
-  const statCard = (label, value, color, Icon) => (
-    <div className="admin-panel admin-panel--padded" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-      <div>
-        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: '600' }}>{label}</div>
-        <div style={{ fontSize: '1.5rem', fontWeight: '800', color }}>{value}</div>
-      </div>
-      <Icon size={22} color={color} />
+  const pageTitle = branchMode
+    ? `Kitchen Stock — ${user?.branchName || 'Branch'}`
+    : selectedBranch
+      ? `Kitchen Stock — ${selectedBranch.branchName}`
+      : 'Kitchen Stock — All Branches';
+
+  const renderItemRows = (list) =>
+    list.map((item) => {
+      const statusMeta = STATUS_LABELS[item.stockStatus] || STATUS_LABELS.in_stock;
+      const StatusIcon = statusMeta.icon;
+      return (
+        <tr key={item._id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+          <td style={{ padding: '0.85rem 1rem' }}>
+            <div style={{ fontWeight: '700' }}>{item.itemName}</div>
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Kitchen Stock</div>
+          </td>
+          {!showGroupedByBranch && isAllBranches && (
+            <td style={{ padding: '0.85rem 1rem', fontSize: '0.82rem' }}>
+              {item.branchName || getBranchName(item.branchId)}
+            </td>
+          )}
+          <td style={{ padding: '0.85rem 1rem' }}>
+            <strong
+              style={{
+                fontSize: '1rem',
+                color:
+                  item.stockStatus === 'out_of_stock' || item.stockStatus === 'low_stock'
+                    ? statusMeta.color
+                    : undefined
+              }}
+            >
+              {item.quantity}
+            </strong>
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginLeft: '0.25rem' }}>
+              {item.unit}
+            </span>
+          </td>
+          <td style={{ padding: '0.85rem 1rem' }}>
+            {item.lowStockThreshold} {item.unit}
+          </td>
+          <td style={{ padding: '0.85rem 1rem' }}>
+            <span
+              className={`badge ${statusMeta.className}`}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}
+            >
+              <StatusIcon size={12} />
+              {statusMeta.label}
+            </span>
+          </td>
+          <td style={{ padding: '0.85rem 1rem', textAlign: 'right' }}>
+            <div style={{ display: 'flex', gap: '0.35rem', justifyContent: 'flex-end' }}>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                title="Reduce stock"
+                disabled={actionLoading === item._id}
+                onClick={() => handleAdjust(item, -1)}
+              >
+                <Minus size={14} />
+              </button>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                title="Add stock"
+                disabled={actionLoading === item._id}
+                onClick={() => handleAdjust(item, 1)}
+              >
+                <Plus size={14} />
+              </button>
+              <button type="button" className="btn btn-secondary btn-sm" onClick={() => handleOpenEdit(item)}>
+                <Edit2 size={14} />
+              </button>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={() => handleDelete(item)}
+                style={{ color: 'var(--danger)' }}
+              >
+                <Trash2 size={14} />
+              </button>
+            </div>
+          </td>
+        </tr>
+      );
+    });
+
+  const renderTable = (list, colSpan) => (
+    <div className="admin-table-wrap">
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+        <thead
+          style={{
+            background: '#f8fafc',
+            borderBottom: '1px solid var(--border)',
+            color: 'var(--text-muted)',
+            fontSize: '0.75rem'
+          }}
+        >
+          <tr>
+            <th style={{ padding: '0.85rem 1rem', textAlign: 'left' }}>ITEM</th>
+            {!showGroupedByBranch && isAllBranches && (
+              <th style={{ padding: '0.85rem 1rem', textAlign: 'left' }}>BRANCH</th>
+            )}
+            <th style={{ padding: '0.85rem 1rem', textAlign: 'left' }}>QUANTITY LEFT</th>
+            <th style={{ padding: '0.85rem 1rem', textAlign: 'left' }}>LOW ALERT</th>
+            <th style={{ padding: '0.85rem 1rem', textAlign: 'left' }}>STATUS</th>
+            <th style={{ padding: '0.85rem 1rem', textAlign: 'right' }}>ACTIONS</th>
+          </tr>
+        </thead>
+        <tbody>
+          {loading ? (
+            <tr>
+              <td colSpan={colSpan} style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+                Loading inventory...
+              </td>
+            </tr>
+          ) : list.length === 0 ? (
+            <tr>
+              <td colSpan={colSpan} style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+                No kitchen stock yet. Use &quot;Add Stock Item&quot; to add items like salt, pepper, or ghee.
+              </td>
+            </tr>
+          ) : (
+            renderItemRows(list)
+          )}
+        </tbody>
+      </table>
     </div>
   );
 
@@ -174,39 +324,118 @@ export default function InventoryPage() {
     <div className="admin-layout">
       <Sidebar />
       <div className="admin-main">
-        <Header title="Branch Inventory" />
+        <Header title={pageTitle} />
         <div className="admin-content">
-
           <div className="admin-action-bar" style={{ marginBottom: '1rem', alignItems: 'flex-start' }}>
-            <div style={{ maxWidth: '640px' }}>
+            <div style={{ maxWidth: '720px' }}>
               <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '0.5rem' }}>
-                Har branch ka kitchen stock yahan manage karein — Salt, Mirch, Ghee, Haldi wagaira.
-                Menu dishes se alag. Quantity add/remove karke track karein kitna bacha hai.
-                {isAllBranches && branches.length > 1 && ' Header se branch filter kar sakte hain.'}
+                {branchMode
+                  ? 'Manage kitchen stock for your branch — salt, oil, ghee, and similar items.'
+                  : 'View and manage kitchen stock for every branch. Each branch has its own inventory record.'}
               </p>
             </div>
             <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
               <button type="button" onClick={fetchInventory} className="btn btn-secondary btn-sm" title="Refresh">
                 <RefreshCw size={16} />
               </button>
-              <button type="button" onClick={handleOpenAdd} className="btn btn-primary btn-sm">
+              <button type="button" onClick={() => handleOpenAdd()} className="btn btn-primary btn-sm">
                 <Plus size={16} />
                 Add Stock Item
               </button>
             </div>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '0.75rem', marginBottom: '1rem' }}>
-            {statCard('Total Items', summary.total, 'var(--secondary)', Package)}
-            {statCard('In Stock', summary.in_stock, '#15803d', CheckCircle2)}
-            {statCard('Low Stock', summary.low_stock, '#b45309', AlertTriangle)}
-            {statCard('Out of Stock', summary.out_of_stock, '#dc2626', XCircle)}
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+              gap: '0.75rem',
+              marginBottom: '1rem'
+            }}
+          >
+            <div className="admin-panel admin-panel--padded" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: '600' }}>Total Items</div>
+                <div style={{ fontSize: '1.5rem', fontWeight: '800' }}>{summary.total}</div>
+              </div>
+              <Package size={22} color="var(--secondary)" />
+            </div>
+            <div className="admin-panel admin-panel--padded" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: '600' }}>In Stock</div>
+                <div style={{ fontSize: '1.5rem', fontWeight: '800', color: '#15803d' }}>{summary.in_stock}</div>
+              </div>
+              <CheckCircle2 size={22} color="#15803d" />
+            </div>
+            <div className="admin-panel admin-panel--padded" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: '600' }}>Low Stock</div>
+                <div style={{ fontSize: '1.5rem', fontWeight: '800', color: '#b45309' }}>{summary.low_stock}</div>
+              </div>
+              <AlertTriangle size={22} color="#b45309" />
+            </div>
+            <div className="admin-panel admin-panel--padded" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: '600' }}>Out of Stock</div>
+                <div style={{ fontSize: '1.5rem', fontWeight: '800', color: '#dc2626' }}>{summary.out_of_stock}</div>
+              </div>
+              <XCircle size={22} color="#dc2626" />
+            </div>
           </div>
 
-          <div className="admin-panel">
+          {showGroupedByBranch && (
+            <div style={{ marginBottom: '1.25rem' }}>
+              <h3 style={{ fontSize: '0.95rem', fontWeight: '800', marginBottom: '0.75rem', color: 'var(--secondary)' }}>
+                Stock by Branch
+              </h3>
+              <div className="admin-grid-cards" style={{ marginBottom: '0.5rem' }}>
+                {byBranch.map((branch) => (
+                  <button
+                    key={String(branch.branchId)}
+                    type="button"
+                    onClick={() => setSelectedBranchId(String(branch.branchId))}
+                    className="admin-panel admin-panel--padded"
+                    style={{
+                      textAlign: 'left',
+                      border: '1px solid var(--border)',
+                      cursor: 'pointer',
+                      width: '100%'
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.5rem' }}>
+                      <MapPin size={16} color="var(--primary)" />
+                      <strong style={{ fontSize: '0.95rem' }}>{branch.branchName}</strong>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.35rem', fontSize: '0.8rem' }}>
+                      <div>
+                        Items: <strong>{branch.total}</strong>
+                      </div>
+                      <div style={{ color: '#15803d' }}>
+                        In stock: <strong>{branch.in_stock}</strong>
+                      </div>
+                      <div style={{ color: '#b45309' }}>
+                        Low: <strong>{branch.low_stock}</strong>
+                      </div>
+                      <div style={{ color: '#dc2626' }}>
+                        Out: <strong>{branch.out_of_stock}</strong>
+                      </div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+              <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                Click a branch card to filter that branch only, or keep &quot;All Branches&quot; selected to see the full record below.
+              </p>
+            </div>
+          )}
+
+          <div className="admin-panel" style={{ marginBottom: showGroupedByBranch ? '1rem' : 0 }}>
             <div className="admin-panel--padded admin-toolbar" style={{ borderBottom: '1px solid var(--border)' }}>
               <div className="admin-toolbar-search">
-                <Search size={18} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+                <Search
+                  size={18}
+                  style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }}
+                />
                 <input
                   type="text"
                   placeholder="Search salt, ghee, branch..."
@@ -223,91 +452,58 @@ export default function InventoryPage() {
               </select>
             </div>
 
-            <div className="admin-table-wrap">
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
-                <thead style={{ background: '#f8fafc', borderBottom: '1px solid var(--border)', color: 'var(--text-muted)', fontSize: '0.75rem' }}>
-                  <tr>
-                    <th style={{ padding: '0.85rem 1rem', textAlign: 'left' }}>ITEM</th>
-                    {isAllBranches && <th style={{ padding: '0.85rem 1rem', textAlign: 'left' }}>BRANCH</th>}
-                    <th style={{ padding: '0.85rem 1rem', textAlign: 'left' }}>QUANTITY LEFT</th>
-                    <th style={{ padding: '0.85rem 1rem', textAlign: 'left' }}>LOW ALERT</th>
-                    <th style={{ padding: '0.85rem 1rem', textAlign: 'left' }}>STATUS</th>
-                    <th style={{ padding: '0.85rem 1rem', textAlign: 'right' }}>ACTIONS</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {loading ? (
-                    <tr>
-                      <td colSpan={isAllBranches ? 6 : 5} style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>
-                        Loading inventory...
-                      </td>
-                    </tr>
-                  ) : items.length === 0 ? (
-                    <tr>
-                      <td colSpan={isAllBranches ? 6 : 5} style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>
-                        Abhi koi kitchen stock nahi. &quot;Add Stock Item&quot; se Salt, Mirch, Ghee wagaira add karein.
-                      </td>
-                    </tr>
-                  ) : items.map((item) => {
-                    const statusMeta = STATUS_LABELS[item.stockStatus] || STATUS_LABELS.in_stock;
-                    const StatusIcon = statusMeta.icon;
-                    return (
-                      <tr key={item._id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                        <td style={{ padding: '0.85rem 1rem' }}>
-                          <div style={{ fontWeight: '700' }}>{item.itemName}</div>
-                          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Kitchen Stock</div>
-                        </td>
-                        {isAllBranches && (
-                          <td style={{ padding: '0.85rem 1rem', fontSize: '0.82rem' }}>{item.branchName}</td>
-                        )}
-                        <td style={{ padding: '0.85rem 1rem' }}>
-                          <strong style={{ fontSize: '1rem', color: item.stockStatus === 'out_of_stock' || item.stockStatus === 'low_stock' ? statusMeta.color : undefined }}>
-                            {item.quantity}
-                          </strong>
-                          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginLeft: '0.25rem' }}>{item.unit}</span>
-                        </td>
-                        <td style={{ padding: '0.85rem 1rem' }}>{item.lowStockThreshold} {item.unit}</td>
-                        <td style={{ padding: '0.85rem 1rem' }}>
-                          <span className={`badge ${statusMeta.className}`} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
-                            <StatusIcon size={12} />
-                            {statusMeta.label}
-                          </span>
-                        </td>
-                        <td style={{ padding: '0.85rem 1rem', textAlign: 'right' }}>
-                          <div style={{ display: 'flex', gap: '0.35rem', justifyContent: 'flex-end' }}>
-                            <button
-                              type="button"
-                              className="btn btn-secondary btn-sm"
-                              title="Reduce stock"
-                              disabled={actionLoading === item._id}
-                              onClick={() => handleAdjust(item, -1)}
-                            >
-                              <Minus size={14} />
-                            </button>
-                            <button
-                              type="button"
-                              className="btn btn-secondary btn-sm"
-                              title="Add stock"
-                              disabled={actionLoading === item._id}
-                              onClick={() => handleAdjust(item, 1)}
-                            >
-                              <Plus size={14} />
-                            </button>
-                            <button type="button" className="btn btn-secondary btn-sm" onClick={() => handleOpenEdit(item)}>
-                              <Edit2 size={14} />
-                            </button>
-                            <button type="button" className="btn btn-secondary btn-sm" onClick={() => handleDelete(item)} style={{ color: 'var(--danger)' }}>
-                              <Trash2 size={14} />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+            {!showGroupedByBranch &&
+              renderTable(items, isAllBranches && !showGroupedByBranch ? 6 : 5)}
           </div>
+
+          {showGroupedByBranch &&
+            (loading ? (
+              <div className="admin-panel admin-panel--padded" style={{ textAlign: 'center', color: 'var(--text-muted)' }}>
+                Loading inventory...
+              </div>
+            ) : (
+              byBranch.map((branch) => (
+                <div key={String(branch.branchId)} className="admin-panel" style={{ marginBottom: '1rem' }}>
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      gap: '0.75rem',
+                      flexWrap: 'wrap',
+                      padding: '0.85rem 1rem',
+                      borderBottom: '1px solid var(--border)',
+                      background: '#fff7ed'
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <MapPin size={18} color="var(--primary)" />
+                      <div>
+                        <div style={{ fontWeight: '800', color: 'var(--secondary)' }}>{branch.branchName}</div>
+                        <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                          {branch.total} item{branch.total === 1 ? '' : 's'} · Low {branch.low_stock} · Out {branch.out_of_stock}
+                        </div>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      className="btn btn-primary btn-sm"
+                      onClick={() => handleOpenAdd(String(branch.branchId))}
+                    >
+                      <Plus size={14} />
+                      Add to {branch.branchName}
+                    </button>
+                  </div>
+                  {branch.items?.length
+                    ? renderTable(branch.items, 5)
+                    : (
+                      <div style={{ padding: '1.25rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+                        No stock items in this branch yet.
+                      </div>
+                    )}
+                </div>
+              ))
+            ))}
         </div>
       </div>
 
@@ -319,15 +515,26 @@ export default function InventoryPage() {
             </h3>
 
             {modalError && (
-              <div style={{ background: '#fee2e2', color: '#991b1b', padding: '0.6rem 0.8rem', borderRadius: '8px', fontSize: '0.85rem', marginBottom: '1rem' }}>
+              <div
+                style={{
+                  background: '#fee2e2',
+                  color: '#991b1b',
+                  padding: '0.6rem 0.8rem',
+                  borderRadius: '8px',
+                  fontSize: '0.85rem',
+                  marginBottom: '1rem'
+                }}
+              >
                 {modalError}
               </div>
             )}
 
             <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              {!editingItem && branches.length > 1 && (
+              {!editingItem && !branchMode && branches.length > 1 && (
                 <div>
-                  <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', marginBottom: '0.3rem' }}>Branch *</label>
+                  <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', marginBottom: '0.3rem' }}>
+                    Branch *
+                  </label>
                   <select
                     required
                     value={modalBranchId}
@@ -337,28 +544,44 @@ export default function InventoryPage() {
                     <option value="">Select branch</option>
                     {branches.map((branch) => (
                       <option key={branch._id} value={branch._id} disabled={branch.isActive === false}>
-                        {branch.branchName}{branch.isDefault ? ' (Default)' : ''}
+                        {branch.branchName}
+                        {branch.isDefault ? ' (Default)' : ''}
                       </option>
                     ))}
                   </select>
                 </div>
               )}
 
-              {!editingItem && branches.length === 1 && (
-                <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', padding: '0.5rem 0.75rem', background: '#f8fafc', borderRadius: '8px' }}>
-                  Branch: <strong>{branches[0].branchName}</strong>
+              {!editingItem && (branchMode || branches.length === 1) && (
+                <div
+                  style={{
+                    fontSize: '0.85rem',
+                    color: 'var(--text-muted)',
+                    padding: '0.5rem 0.75rem',
+                    background: '#f8fafc',
+                    borderRadius: '8px'
+                  }}
+                >
+                  Branch:{' '}
+                  <strong>
+                    {branchMode
+                      ? user?.branchName || 'Your Branch'
+                      : branches[0]?.branchName}
+                  </strong>
                 </div>
               )}
 
               {!editingItem && (
                 <div>
-                  <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', marginBottom: '0.3rem' }}>Item Name *</label>
+                  <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', marginBottom: '0.3rem' }}>
+                    Item Name *
+                  </label>
                   <input
                     type="text"
                     required
                     value={formData.customItemName}
                     onChange={(e) => setFormData({ ...formData, customItemName: e.target.value })}
-                    placeholder="e.g. Salt, Mirch, Ghee, Haldi, Oil"
+                    placeholder="e.g. Salt, Pepper, Ghee, Turmeric, Oil"
                     style={{ width: '100%' }}
                   />
                 </div>
@@ -366,7 +589,9 @@ export default function InventoryPage() {
 
               <div className="admin-form-grid-2">
                 <div>
-                  <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', marginBottom: '0.3rem' }}>Quantity Left *</label>
+                  <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', marginBottom: '0.3rem' }}>
+                    Quantity Left *
+                  </label>
                   <input
                     type="number"
                     min="0"
@@ -378,14 +603,18 @@ export default function InventoryPage() {
                   />
                 </div>
                 <div>
-                  <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', marginBottom: '0.3rem' }}>Unit</label>
+                  <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', marginBottom: '0.3rem' }}>
+                    Unit
+                  </label>
                   <select
                     value={formData.unit}
                     onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
                     style={{ width: '100%' }}
                   >
                     {UNITS.map((u) => (
-                      <option key={u} value={u}>{u}</option>
+                      <option key={u} value={u}>
+                        {u}
+                      </option>
                     ))}
                   </select>
                 </div>
@@ -405,7 +634,7 @@ export default function InventoryPage() {
                   style={{ width: '100%' }}
                 />
                 <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.35rem' }}>
-                  Isse kam bache to Low Stock dikhega.
+                  Items below this threshold will show as Low Stock.
                 </p>
               </div>
 

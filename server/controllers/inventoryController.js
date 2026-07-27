@@ -2,12 +2,14 @@ const Inventory = require('../models/Inventory');
 const Branch = require('../models/Branch');
 const {
   getTenantAdminId,
-  assertTenantOwnership
+  getTenantBranchId,
+  assertScopedOwnership
 } = require('../middleware/tenantMiddleware');
 const {
-  getStockStatus,
   serializeInventoryRow
 } = require('../utils/inventoryUtils');
+
+const canAccessInventory = (user) => user && ['Admin', 'BranchAdmin'].includes(user.role);
 
 const assertBranchOwnership = async (branchId, adminId, res) => {
   const branch = await Branch.findOne({ _id: branchId, adminId });
@@ -18,6 +20,13 @@ const assertBranchOwnership = async (branchId, adminId, res) => {
     return null;
   }
   return branch;
+};
+
+const resolveBranchFilter = (user, requestedBranchId) => {
+  const forcedBranchId = getTenantBranchId(user);
+  if (forcedBranchId) return forcedBranchId;
+  if (requestedBranchId && requestedBranchId !== 'all') return requestedBranchId;
+  return null;
 };
 
 const loadInventoryRows = async (adminId, branchFilter = null) => {
@@ -42,13 +51,12 @@ const loadInventoryRows = async (adminId, branchFilter = null) => {
 exports.getInventory = async (req, res, next) => {
   try {
     const adminId = getTenantAdminId(req.user);
-    if (!adminId || req.user.role !== 'Admin') {
-      return res.status(403).json({ success: false, message: 'Restaurant admin access required' });
+    if (!adminId || !canAccessInventory(req.user)) {
+      return res.status(403).json({ success: false, message: 'Restaurant access required' });
     }
 
-    const branchId = req.query.branchId;
     const status = req.query.status;
-    const branchFilter = branchId && branchId !== 'all' ? branchId : null;
+    const branchFilter = resolveBranchFilter(req.user, req.query.branchId);
 
     let items = await loadInventoryRows(adminId, branchFilter);
 
@@ -72,7 +80,50 @@ exports.getInventory = async (req, res, next) => {
       out_of_stock: items.filter((i) => i.stockStatus === 'out_of_stock').length
     };
 
-    res.json({ success: true, count: items.length, summary, items });
+    // Branch-wise breakdown so restaurant admin can compare every branch
+    const byBranchMap = {};
+    for (const item of items) {
+      const key = String(item.branchId || 'unknown');
+      if (!byBranchMap[key]) {
+        byBranchMap[key] = {
+          branchId: item.branchId,
+          branchName: item.branchName || 'Branch',
+          total: 0,
+          in_stock: 0,
+          low_stock: 0,
+          out_of_stock: 0,
+          items: []
+        };
+      }
+      byBranchMap[key].total += 1;
+      byBranchMap[key][item.stockStatus] += 1;
+      byBranchMap[key].items.push(item);
+    }
+
+    // Include empty branches for Admin "all branches" view
+    if (!branchFilter && req.user.role === 'Admin') {
+      const allBranches = await Branch.find({ adminId }).select('branchName isDefault').sort({ isDefault: -1, branchName: 1 }).lean();
+      for (const branch of allBranches) {
+        const key = String(branch._id);
+        if (!byBranchMap[key]) {
+          byBranchMap[key] = {
+            branchId: branch._id,
+            branchName: branch.branchName,
+            total: 0,
+            in_stock: 0,
+            low_stock: 0,
+            out_of_stock: 0,
+            items: []
+          };
+        }
+      }
+    }
+
+    const byBranch = Object.values(byBranchMap).sort((a, b) =>
+      String(a.branchName || '').localeCompare(String(b.branchName || ''))
+    );
+
+    res.json({ success: true, count: items.length, summary, byBranch, items });
   } catch (error) {
     next(error);
   }
@@ -81,15 +132,20 @@ exports.getInventory = async (req, res, next) => {
 exports.upsertInventory = async (req, res, next) => {
   try {
     const adminId = getTenantAdminId(req.user);
-    if (!adminId || req.user.role !== 'Admin') {
-      return res.status(403).json({ success: false, message: 'Restaurant admin access required' });
+    if (!adminId || !canAccessInventory(req.user)) {
+      return res.status(403).json({ success: false, message: 'Restaurant access required' });
     }
 
-    const { branchId, customItemName, itemName, quantity, lowStockThreshold, unit, isTracked } = req.body;
+    const { customItemName, itemName, quantity, lowStockThreshold, unit, isTracked } = req.body;
+    const forcedBranchId = getTenantBranchId(req.user);
+    const branchId = forcedBranchId || req.body.branchId;
     const cleanName = String(customItemName || itemName || '').trim();
 
     if (!branchId) {
       return res.status(400).json({ success: false, message: 'Branch is required' });
+    }
+    if (forcedBranchId && String(branchId) !== String(forcedBranchId)) {
+      return res.status(403).json({ success: false, message: 'Not authorized for this branch' });
     }
     if (!cleanName) {
       return res.status(400).json({
@@ -146,15 +202,15 @@ exports.upsertInventory = async (req, res, next) => {
 exports.adjustInventory = async (req, res, next) => {
   try {
     const adminId = getTenantAdminId(req.user);
-    if (!adminId || req.user.role !== 'Admin') {
-      return res.status(403).json({ success: false, message: 'Restaurant admin access required' });
+    if (!adminId || !canAccessInventory(req.user)) {
+      return res.status(403).json({ success: false, message: 'Restaurant access required' });
     }
 
     const record = await Inventory.findById(req.params.id);
     if (!record) {
       return res.status(404).json({ success: false, message: 'Inventory record not found' });
     }
-    if (!assertTenantOwnership(record, req.user, res, 'Not authorized')) return;
+    if (!assertScopedOwnership(record, req.user, res, 'Not authorized')) return;
 
     const adjustment = Number(req.body.adjustment);
     if (!Number.isFinite(adjustment) || adjustment === 0) {
@@ -180,15 +236,15 @@ exports.adjustInventory = async (req, res, next) => {
 exports.deleteInventory = async (req, res, next) => {
   try {
     const adminId = getTenantAdminId(req.user);
-    if (!adminId || req.user.role !== 'Admin') {
-      return res.status(403).json({ success: false, message: 'Restaurant admin access required' });
+    if (!adminId || !canAccessInventory(req.user)) {
+      return res.status(403).json({ success: false, message: 'Restaurant access required' });
     }
 
     const record = await Inventory.findById(req.params.id);
     if (!record) {
       return res.status(404).json({ success: false, message: 'Inventory record not found' });
     }
-    if (!assertTenantOwnership(record, req.user, res, 'Not authorized')) return;
+    if (!assertScopedOwnership(record, req.user, res, 'Not authorized')) return;
 
     await record.deleteOne();
     res.json({ success: true, message: 'Stock item removed' });
@@ -200,11 +256,12 @@ exports.deleteInventory = async (req, res, next) => {
 exports.getInventorySummary = async (req, res, next) => {
   try {
     const adminId = getTenantAdminId(req.user);
-    if (!adminId || req.user.role !== 'Admin') {
-      return res.status(403).json({ success: false, message: 'Restaurant admin access required' });
+    if (!adminId || !canAccessInventory(req.user)) {
+      return res.status(403).json({ success: false, message: 'Restaurant access required' });
     }
 
-    const items = await loadInventoryRows(adminId, null);
+    const branchFilter = resolveBranchFilter(req.user, req.query.branchId);
+    const items = await loadInventoryRows(adminId, branchFilter);
     const byBranch = {};
 
     for (const item of items) {

@@ -2,8 +2,11 @@ const Branch = require('../models/Branch');
 const Table = require('../models/Table');
 const Order = require('../models/Order');
 const User = require('../models/User');
+const Category = require('../models/Category');
+const MenuItem = require('../models/MenuItem');
 const { getTenantAdminId, assertTenantOwnership } = require('../middleware/tenantMiddleware');
 const { ensureDefaultBranch } = require('../utils/branchUtils');
+const { canCreateBranch, getMaxBranchesForAdmin } = require('../utils/branchLimits');
 
 exports.getBranches = async (req, res, next) => {
   try {
@@ -91,7 +94,16 @@ exports.getBranches = async (req, res, next) => {
       { tableCount: 0, activeTables: 0, todayOrders: 0, todayRevenue: 0, pendingOrders: 0 }
     );
 
-    res.json({ success: true, count: branches.length, branches: branchesWithStats, totals });
+    res.json({
+      success: true,
+      count: branches.length,
+      branches: branchesWithStats,
+      totals,
+      branchLimits: {
+        maxBranches: await getMaxBranchesForAdmin(adminId),
+        currentBranches: branches.length
+      }
+    });
   } catch (error) {
     next(error);
   }
@@ -113,6 +125,14 @@ exports.createBranch = async (req, res, next) => {
     const exists = await Branch.findOne({ adminId, branchName: name });
     if (exists) {
       return res.status(400).json({ success: false, message: 'A branch with this name already exists' });
+    }
+
+    const limitCheck = await canCreateBranch(adminId);
+    if (!limitCheck.allowed) {
+      return res.status(400).json({
+        success: false,
+        message: `Branch limit reached. Your plan allows maximum ${limitCheck.maxBranches} branch(es). Contact Super Admin to increase the limit.`
+      });
     }
 
     const count = await Branch.countDocuments({ adminId });
@@ -206,6 +226,8 @@ exports.deleteBranch = async (req, res, next) => {
     }
 
     await Table.deleteMany({ adminId: branch.adminId, branchId: branch._id });
+    await Category.deleteMany({ adminId: branch.adminId, branchId: branch._id });
+    await MenuItem.deleteMany({ adminId: branch.adminId, branchId: branch._id });
     await require('../models/Inventory').deleteMany({ adminId: branch.adminId, branchId: branch._id });
     await User.deleteMany({ branchId: branch._id, role: 'BranchAdmin' });
     await branch.deleteOne();
@@ -317,7 +339,7 @@ exports.upsertBranchManager = async (req, res, next) => {
         email: manager.email,
         isActive: manager.isActive
       },
-      loginUrl: '/branch/login'
+      loginUrl: '/admin/login'
     });
   } catch (error) {
     next(error);

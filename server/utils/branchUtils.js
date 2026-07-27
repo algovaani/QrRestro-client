@@ -1,6 +1,8 @@
 const Branch = require('../models/Branch');
 const Table = require('../models/Table');
 const Order = require('../models/Order');
+const Category = require('../models/Category');
+const MenuItem = require('../models/MenuItem');
 
 const ensureDefaultBranch = async (adminId, hintName = 'Main Branch') => {
   if (!adminId) return null;
@@ -42,10 +44,22 @@ const migrateBranchesForTenant = async (adminId) => {
     { $set: { branchId, branchName: branch.branchName } }
   );
 
+  const categoryResult = await Category.updateMany(
+    { adminId, $or: [{ branchId: { $exists: false } }, { branchId: null }] },
+    { $set: { branchId } }
+  );
+
+  const menuResult = await MenuItem.updateMany(
+    { adminId, $or: [{ branchId: { $exists: false } }, { branchId: null }] },
+    { $set: { branchId } }
+  );
+
   return {
     branchId,
     tables: tableResult.modifiedCount || 0,
-    orders: orderResult.modifiedCount || 0
+    orders: orderResult.modifiedCount || 0,
+    categories: categoryResult.modifiedCount || 0,
+    menuItems: menuResult.modifiedCount || 0
   };
 };
 
@@ -59,8 +73,8 @@ const migrateAllBranches = async ({ log = false } = {}) => {
     const result = await migrateBranchesForTenant(admin._id);
     totalTables += result.tables;
     totalOrders += result.orders;
-    if (log && result.tables + result.orders > 0) {
-      console.log(`[branches] migrated admin ${admin._id}: tables=${result.tables}, orders=${result.orders}`);
+    if (log && result.tables + result.orders + result.categories + result.menuItems > 0) {
+      console.log(`[branches] migrated admin ${admin._id}: tables=${result.tables}, orders=${result.orders}, categories=${result.categories}, menuItems=${result.menuItems}`);
     }
   }
 

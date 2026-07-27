@@ -142,11 +142,10 @@ API.interceptors.response.use(
       localStorage.removeItem('token');
       localStorage.removeItem('user');
       const path = window.location.pathname;
-      if (path.startsWith('/branch')) {
-        if (path !== '/branch/login') {
-          window.location.href = '/branch/login';
-        }
-      } else if (path.startsWith('/admin') && path !== '/admin/login') {
+      if (
+        (path.startsWith('/admin') || path.startsWith('/branch') || path.startsWith('/super-admin'))
+        && path !== '/admin/login'
+      ) {
         window.location.href = '/admin/login';
       }
     }

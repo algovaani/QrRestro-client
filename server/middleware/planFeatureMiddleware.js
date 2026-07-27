@@ -2,8 +2,13 @@ const { adminHasPlanFeature } = require('../utils/planFeatures');
 
 exports.requirePlanFeature = (featureKey) => async (req, res, next) => {
   try {
-    if (!req.user || req.user.role !== 'Admin') {
-      return res.status(403).json({ success: false, message: 'Restaurant admin access required' });
+    if (!req.user || !['Admin', 'BranchAdmin'].includes(req.user.role)) {
+      return res.status(403).json({ success: false, message: 'Restaurant access required' });
+    }
+
+    // Inventory is always available for restaurant admin / branch manager
+    if (featureKey === 'inventory') {
+      return next();
     }
 
     const allowed = await adminHasPlanFeature(req.user, featureKey);
@@ -12,7 +17,7 @@ exports.requirePlanFeature = (featureKey) => async (req, res, next) => {
         success: false,
         code: 'PLAN_FEATURE_LOCKED',
         featureKey,
-        message: 'Ye feature aapke membership plan mein included nahi hai. Super Admin se plan upgrade karwayein.'
+        message: 'This feature is not included in your membership plan. Please contact Super Admin to upgrade your plan.'
       });
     }
 

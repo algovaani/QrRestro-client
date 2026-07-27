@@ -11,7 +11,7 @@ const {
 } = require('../controllers/inventoryController');
 
 router.use(protect);
-router.use(authorize('Admin'));
+router.use(authorize('Admin', 'BranchAdmin'));
 router.use(requirePlanFeature('inventory'));
 
 router.get('/summary', getInventorySummary);

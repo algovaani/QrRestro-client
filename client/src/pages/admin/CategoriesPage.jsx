@@ -2,10 +2,12 @@ import React, { useState, useEffect } from 'react';
 import API from '../../services/api';
 import Sidebar from '../../components/common/Sidebar';
 import Header from '../../components/common/Header';
+import { useBranch } from '../../context/BranchContext';
 import { Plus, Edit2, Trash2, Image, Layers } from 'lucide-react';
 import { resolveUploadUrl } from '../../utils/uploadUrl';
 
 export default function CategoriesPage() {
+  const { branchQueryParams, selectedBranch } = useBranch();
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -23,12 +25,14 @@ export default function CategoriesPage() {
   const [modalError, setModalError] = useState('');
 
   useEffect(() => {
+    if (!branchQueryParams.branchId) return;
     fetchCategories();
-  }, []);
+  }, [branchQueryParams.branchId]);
 
   const fetchCategories = async () => {
+    if (!branchQueryParams.branchId) return;
     try {
-      const res = await API.get('/categories');
+      const res = await API.get('/categories', { params: branchQueryParams });
       if (res.data.success) {
         setCategories(res.data.categories);
       }
@@ -90,9 +94,9 @@ export default function CategoriesPage() {
 
     try {
       if (editingCategory) {
-        await API.put(`/categories/${editingCategory._id}`, data);
+        await API.put(`/categories/${editingCategory._id}`, data, { params: branchQueryParams });
       } else {
-        await API.post('/categories', data);
+        await API.post('/categories', data, { params: branchQueryParams });
       }
       setShowModal(false);
       fetchCategories();
@@ -104,7 +108,7 @@ export default function CategoriesPage() {
   const handleDelete = async (id) => {
     if (!window.confirm('Are you sure you want to delete this category?')) return;
     try {
-      await API.delete(`/categories/${id}`);
+      await API.delete(`/categories/${id}`, { params: branchQueryParams });
       fetchCategories();
     } catch (err) {
       alert(err.response?.data?.message || 'Error deleting category');
@@ -120,7 +124,9 @@ export default function CategoriesPage() {
 
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
             <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
-              Organize food menu categories for QR digital menu.
+              {selectedBranch?.branchName
+                ? `Organize menu categories for ${selectedBranch.branchName} branch only.`
+                : 'Organize food menu categories for QR digital menu.'}
             </p>
             <button onClick={handleOpenAdd} className="btn btn-primary">
               <Plus size={18} />

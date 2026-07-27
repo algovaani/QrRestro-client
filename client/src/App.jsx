@@ -21,10 +21,8 @@ import SubscriptionExpiredPage from './pages/admin/SubscriptionExpiredPage';
 import AdminMembershipRoute from './pages/admin/AdminMembershipRoute';
 import BranchesPage from './pages/admin/BranchesPage';
 import InventoryPage from './pages/admin/InventoryPage';
-import BranchLogin from './pages/branch/BranchLogin';
 import { isAdminDashboardBlocked, getPostLoginPath } from './utils/adminAccess';
 import { isBranchOnlyAdminPath } from './utils/adminPaths';
-import { hasPlanFeature } from './utils/planFeatures';
 import { AdminLayoutProvider } from './context/AdminLayoutContext';
 import { BranchProvider } from './context/BranchContext';
 
@@ -107,10 +105,6 @@ const ProtectedRoute = ({ children, allowedRoles, allowExpired = false }) => {
     return <Navigate to="/admin/dashboard" replace />;
   }
 
-  if (user.role === 'Admin' && window.location.pathname === '/admin/inventory' && !hasPlanFeature(user, 'inventory')) {
-    return <Navigate to="/admin/dashboard" replace />;
-  }
-
   if (allowedRoles && !allowedRoles.includes(user.role)) {
     return <Navigate to={getPostLoginPath(user)} replace />;
   }
@@ -130,7 +124,7 @@ const BranchProtectedRoute = ({ children }) => {
   }
 
   if (!token || !user) {
-    return <Navigate to="/branch/login" replace />;
+    return <Navigate to="/admin/login" replace />;
   }
 
   if (user.role !== 'BranchAdmin') {
@@ -159,7 +153,7 @@ export default function App() {
 
               {/* Admin Auth Route */}
               <Route path="/admin/login" element={<AdminLogin />} />
-              <Route path="/branch/login" element={<BranchLogin />} />
+              <Route path="/branch/login" element={<Navigate to="/admin/login" replace />} />
 
               {/* Subscription Expired Route */}
               <Route path="/subscription-expired" element={<SubscriptionExpiredPage />} />
@@ -211,6 +205,36 @@ export default function App() {
                   <ProtectedRoute allowedRoles={['Admin']}>
                     <AdminRoute>
                       <BranchesPage />
+                    </AdminRoute>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/tables"
+                element={
+                  <ProtectedRoute allowedRoles={['Admin']}>
+                    <AdminRoute>
+                      <TablesPage />
+                    </AdminRoute>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/menu"
+                element={
+                  <ProtectedRoute allowedRoles={['Admin']}>
+                    <AdminRoute>
+                      <MenuPage />
+                    </AdminRoute>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/categories"
+                element={
+                  <ProtectedRoute allowedRoles={['Admin']}>
+                    <AdminRoute>
+                      <CategoriesPage />
                     </AdminRoute>
                   </ProtectedRoute>
                 }
@@ -291,6 +315,16 @@ export default function App() {
                   <BranchProtectedRoute>
                     <BranchRoute>
                       <TablesPage />
+                    </BranchRoute>
+                  </BranchProtectedRoute>
+                }
+              />
+              <Route
+                path="/branch/inventory"
+                element={
+                  <BranchProtectedRoute>
+                    <BranchRoute>
+                      <InventoryPage />
                     </BranchRoute>
                   </BranchProtectedRoute>
                 }

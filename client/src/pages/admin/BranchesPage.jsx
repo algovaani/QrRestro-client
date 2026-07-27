@@ -1,9 +1,12 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import API from '../../services/api';
 import Sidebar from '../../components/common/Sidebar';
 import Header from '../../components/common/Header';
 import { useBranch } from '../../context/BranchContext';
-import { Plus, Edit2, Trash2, MapPin, Star, RefreshCw, QrCode, ShoppingBag, IndianRupee, Clock, LayoutGrid, KeyRound, UserPlus, Copy, Check } from 'lucide-react';
+import { Plus, Edit2, Trash2, MapPin, Star, RefreshCw, QrCode, ShoppingBag, IndianRupee, Clock, LayoutGrid, KeyRound, UserPlus, Copy, Check, Package } from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
+import { portalPath } from '../../utils/adminPaths';
 
 const emptyForm = {
   branchName: '',
@@ -22,9 +25,12 @@ const emptyManagerForm = {
 };
 
 export default function BranchesPage() {
-  const { refreshBranches } = useBranch();
+  const navigate = useNavigate();
+  const { user } = useAuth();
+  const { refreshBranches, setSelectedBranchId } = useBranch();
   const [branches, setBranches] = useState([]);
   const [totals, setTotals] = useState(null);
+  const [branchLimits, setBranchLimits] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingBranch, setEditingBranch] = useState(null);
@@ -37,7 +43,8 @@ export default function BranchesPage() {
   const [managerSaving, setManagerSaving] = useState(false);
   const [copiedLogin, setCopiedLogin] = useState(false);
 
-  const branchLoginUrl = `${window.location.origin}/branch/login`;
+  const branchLoginUrl = `${window.location.origin}/admin/login`;
+  const showInventory = true;
 
   const fetchBranches = async () => {
     setLoading(true);
@@ -46,6 +53,7 @@ export default function BranchesPage() {
       if (res.data.success) {
         setBranches(res.data.branches || []);
         setTotals(res.data.totals || null);
+        setBranchLimits(res.data.branchLimits || null);
       }
     } catch (err) {
       console.error(err);
@@ -110,8 +118,22 @@ export default function BranchesPage() {
     }
   };
 
-  const openBranchTablesHint = () => {
-    window.alert(`Tables & QR codes ab branch manager ${branchLoginUrl} se manage honge.\n\nPehle "Create Branch Login" se branch manager ka account banayein.`);
+  const openBranchTables = (branch) => {
+    if (branch?._id) {
+      setSelectedBranchId(String(branch._id));
+      navigate(`/admin/tables?branchId=${branch._id}`);
+      return;
+    }
+    navigate('/admin/tables');
+  };
+
+  const openBranchInventory = (branch) => {
+    if (branch?._id) {
+      setSelectedBranchId(String(branch._id));
+      navigate(`${portalPath(user, '/inventory')}?branchId=${branch._id}`);
+      return;
+    }
+    navigate(portalPath(user, '/inventory'));
   };
 
   const handleOpenManager = (branch) => {
@@ -160,7 +182,7 @@ export default function BranchesPage() {
 
   const handleDeleteManager = async () => {
     if (!managerBranch?.branchManager) return;
-    if (!window.confirm(`Remove branch login for "${managerBranch.branchName}"? Branch manager sign-in band ho jayega.`)) return;
+    if (!window.confirm(`Remove branch login for "${managerBranch.branchName}"? The branch manager will no longer be able to sign in.`)) return;
     setManagerSaving(true);
     try {
       await API.delete(`/branches/${managerBranch._id}/manager`);
@@ -183,6 +205,10 @@ export default function BranchesPage() {
     }
   };
 
+  const maxBranches = branchLimits?.maxBranches ?? 0;
+  const currentBranches = branchLimits?.currentBranches ?? branches.length;
+  const isBranchLimitReached = maxBranches > 0 && currentBranches >= maxBranches;
+
   const statBox = (label, value, icon, color = 'var(--primary)') => (
     <div style={{ background: '#f8fafc', borderRadius: '10px', padding: '0.65rem 0.75rem', minWidth: 0 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '0.2rem' }}>
@@ -203,9 +229,16 @@ export default function BranchesPage() {
           <div className="admin-action-bar" style={{ marginBottom: '1.25rem', alignItems: 'flex-start' }}>
             <div style={{ maxWidth: '620px' }}>
               <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '0.75rem' }}>
-                Har branch alag location hai — uske apne <strong>Tables & QR Codes</strong>, <strong>Menu</strong>, <strong>Kitchen</strong> aur alag <strong>Branch Login</strong> hote hain.
-                Yahan se branches aur branch logins manage karein; daily ops branch manager karega.
+                Each branch is a separate location with its own <strong>Tables &amp; QR Codes</strong>, <strong>Menu</strong>, <strong>Kitchen</strong>, and <strong>Branch Login</strong>.
+                Manage branches and branch logins here; day-to-day operations are handled by the branch manager.
               </p>
+              {branchLimits && (
+                <p style={{ fontSize: '0.82rem', color: isBranchLimitReached ? '#b45309' : 'var(--text-muted)', marginBottom: '0.75rem' }}>
+                  Branch limit: <strong>{currentBranches}</strong>
+                  {maxBranches > 0 ? ` / ${maxBranches}` : ' / Unlimited'}
+                  {isBranchLimitReached && ' — limit reached. Contact Super Admin to increase your limit.'}
+                </p>
+              )}
               {totals && branches.length > 1 && (
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '0.5rem' }}>
                   {statBox('Total Tables', totals.tableCount, <LayoutGrid size={13} />)}
@@ -219,7 +252,13 @@ export default function BranchesPage() {
               <button type="button" onClick={fetchBranches} className="btn btn-secondary btn-sm" title="Refresh">
                 <RefreshCw size={16} />
               </button>
-              <button type="button" onClick={handleOpenAdd} className="btn btn-primary">
+              <button
+                type="button"
+                onClick={handleOpenAdd}
+                className="btn btn-primary"
+                disabled={isBranchLimitReached}
+                title={isBranchLimitReached ? 'Branch limit reached' : 'Add new branch'}
+              >
                 <Plus size={18} />
                 <span>Add Branch</span>
               </button>
@@ -233,7 +272,7 @@ export default function BranchesPage() {
               <MapPin size={40} style={{ color: 'var(--primary)', marginBottom: '0.75rem' }} />
               <h3 style={{ marginBottom: '0.5rem' }}>No branches yet</h3>
               <p style={{ color: 'var(--text-muted)', marginBottom: '1rem' }}>Create your first branch to get started.</p>
-              <button type="button" onClick={handleOpenAdd} className="btn btn-primary">Add Branch</button>
+              <button type="button" onClick={handleOpenAdd} className="btn btn-primary" disabled={isBranchLimitReached}>Add Branch</button>
             </div>
           ) : (
             <div className="admin-grid-cards">
@@ -307,7 +346,7 @@ export default function BranchesPage() {
                           )}
                         </>
                       ) : (
-                        <div style={{ color: 'var(--text-muted)' }}>Abhi branch manager login nahi bana</div>
+                        <div style={{ color: 'var(--text-muted)' }}>No branch manager login created yet</div>
                       )}
                     </div>
 
@@ -323,13 +362,25 @@ export default function BranchesPage() {
 
                     <button
                       type="button"
-                      onClick={openBranchTablesHint}
+                      onClick={() => openBranchTables(branch)}
                       className="btn btn-primary btn-sm"
                       style={{ width: '100%', marginTop: '0.25rem' }}
                     >
                       <QrCode size={15} />
-                      Tables & QR — Branch Login se manage
+                      Manage Tables &amp; QR
                     </button>
+
+                    {showInventory && (
+                      <button
+                        type="button"
+                        onClick={() => openBranchInventory(branch)}
+                        className="btn btn-secondary btn-sm"
+                        style={{ width: '100%', marginTop: '0.25rem' }}
+                      >
+                        <Package size={15} />
+                        Manage Inventory
+                      </button>
+                    )}
                   </div>
                 );
               })}
@@ -434,7 +485,7 @@ export default function BranchesPage() {
               Branch Login — {managerBranch.branchName}
             </h3>
             <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '1rem' }}>
-              Is branch ke manager alag email/password se login karenge. Sirf is branch ke orders, tables & reports dikhenge.
+              The branch manager signs in with a separate email and password. They will only see orders, tables, and reports for this branch.
             </p>
 
             <div style={{
@@ -493,7 +544,7 @@ export default function BranchesPage() {
                   minLength={6}
                   value={managerForm.password}
                   onChange={(e) => setManagerForm({ ...managerForm, password: e.target.value })}
-                  placeholder={managerBranch.branchManager ? 'Change karne ke liye likhein' : 'Minimum 6 characters'}
+                  placeholder={managerBranch.branchManager ? 'Enter new password to change' : 'Minimum 6 characters'}
                   style={{ width: '100%' }}
                 />
               </div>

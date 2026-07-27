@@ -46,6 +46,7 @@ if (!fs.existsSync(uploadDir)) {
 connectDB()
   .then(() => require('./utils/migrateMenuImages').migrateMenuImages({ log: true }))
   .then(() => require('./utils/branchUtils').migrateAllBranches({ log: true }))
+  .then(() => require('./utils/tableQrUtils').migrateTableQrUrls({ log: true }))
   .catch((err) => {
     if (err?.message) console.error('[startup]', err.message);
   });
@@ -130,21 +131,50 @@ app.use('/api', (req, res) => {
 
 // Development — API server (:5000) does not host the React app; redirect menu links to Vite (:5173)
 if (!isProduction) {
-  const clientDevBase = getClientUrl();
-  const customerPathPattern = /^\/(menu|cart|order-success|order-status)(\/|$)/;
+  const Table = require('./models/Table');
+  const { ensureDefaultBranch } = require('./utils/branchUtils');
 
-  app.get(customerPathPattern, (req, res) => {
+  const resolveDevClientOrigin = (req) => {
+    const clientDevBase = getClientUrl();
     const host = req.get('host') || '';
-    let targetOrigin = clientDevBase;
-
     if (host && !clientDevBase.includes('localhost')) {
       const clientUrl = new URL(clientDevBase);
       const port = clientUrl.port || '5173';
-      targetOrigin = `${req.protocol}://${host.split(':')[0]}:${port}`;
-    } else if (host.includes(':5000')) {
-      targetOrigin = `${req.protocol}://${host.replace(':5000', ':5173')}`;
+      return `${req.protocol}://${host.split(':')[0]}:${port}`;
     }
+    if (host.includes(':5000')) {
+      return `${req.protocol}://${host.replace(':5000', ':5173')}`;
+    }
+    return clientDevBase.replace(/\/$/, '');
+  };
 
+  // Legacy QR format without branch — upgrade to branch-scoped URL on Vite
+  app.get('/menu/:adminId/table/:tableNumber', async (req, res, next) => {
+    try {
+      const { adminId, tableNumber } = req.params;
+      const tables = await Table.find({ adminId, tableNumber, status: 'Active' });
+      if (!tables.length) {
+        return res.redirect(302, `${resolveDevClientOrigin(req)}${req.originalUrl}`);
+      }
+
+      let table = tables[0];
+      if (tables.length > 1) {
+        const defaultBranch = await ensureDefaultBranch(adminId);
+        table = tables.find((t) => String(t.branchId) === String(defaultBranch?._id)) || tables[0];
+      }
+
+      const targetOrigin = resolveDevClientOrigin(req);
+      const branchPath = `/menu/${table.adminId}/branch/${table.branchId}/table/${table.tableNumber}`;
+      return res.redirect(302, `${targetOrigin}${branchPath}`);
+    } catch (error) {
+      return next(error);
+    }
+  });
+
+  const customerPathPattern = /^\/(menu|cart|order-success|order-status)(\/|$)/;
+
+  app.get(customerPathPattern, (req, res) => {
+    const targetOrigin = resolveDevClientOrigin(req);
     res.redirect(302, `${targetOrigin.replace(/\/$/, '')}${req.originalUrl}`);
   });
 }

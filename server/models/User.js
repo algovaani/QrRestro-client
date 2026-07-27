@@ -107,6 +107,12 @@ const userSchema = new mongoose.Schema({
   freeTrialUsed: {
     type: Boolean,
     default: false
+  },
+  /** Super Admin override: max branches for this restaurant. null = use plan limit */
+  maxBranches: {
+    type: Number,
+    default: null,
+    min: 0
   }
 }, {
   timestamps: true

@@ -1,5 +1,8 @@
 const MenuItem = require('../models/MenuItem');
-const { getTenantAdminId, buildTenantFilter, assertTenantOwnership } = require('../middleware/tenantMiddleware');
+const {
+  buildBranchRequiredFilter,
+  assertScopedOwnership
+} = require('../middleware/tenantMiddleware');
 const {
   parseDataUrl,
   getMenuItemPhotoPath,
@@ -36,11 +39,11 @@ const parseBool = (val, defaultVal = false) => {
   return defaultVal;
 };
 
-// @desc Get all menu items (filtered strictly by logged-in adminId)
-// @route GET /api/menu
+// @desc Get all menu items for a branch
+// @route GET /api/menu?branchId=
 exports.getMenuItems = async (req, res, next) => {
   try {
-    const filter = buildTenantFilter(req.user, res);
+    const filter = buildBranchRequiredFilter(req.user, req, res);
     if (!filter) return;
     
     if (req.query.category) {
@@ -68,6 +71,7 @@ exports.getMenuItemById = async (req, res, next) => {
     if (!item) {
       return res.status(404).json({ success: false, message: 'Menu item not found' });
     }
+    if (!assertScopedOwnership(item, req.user, res, 'Not authorized to view this menu item')) return;
     await hydrateMenuItemImages(item);
     res.json({
       success: true,
@@ -82,10 +86,9 @@ exports.getMenuItemById = async (req, res, next) => {
 // @route POST /api/menu
 exports.createMenuItem = async (req, res, next) => {
   try {
-    const adminId = getTenantAdminId(req.user);
-    if (!adminId) {
-      return res.status(403).json({ success: false, message: 'Restaurant tenant access required' });
-    }
+    const filter = buildBranchRequiredFilter(req.user, req, res);
+    if (!filter) return;
+
     const { name, category, description, foodType, priceType, halfPrice, fullPrice, fixedPrice, preparationTime, isAvailable, isFeatured, status } = req.body;
 
     let imageData = '';
@@ -98,7 +101,8 @@ exports.createMenuItem = async (req, res, next) => {
     }
 
     const item = await MenuItem.create({
-      adminId,
+      adminId: filter.adminId,
+      branchId: filter.branchId,
       name,
       category,
       description,
@@ -139,11 +143,7 @@ exports.updateMenuItem = async (req, res, next) => {
       return res.status(404).json({ success: false, message: 'Menu item not found' });
     }
 
-    const adminId = getTenantAdminId(req.user);
-    if (adminId && item.adminId.toString() !== adminId.toString()) {
-      return res.status(403).json({ success: false, message: 'Not authorized to modify another restaurant menu item' });
-    }
-
+    if (!assertScopedOwnership(item, req.user, res, 'Not authorized to modify another restaurant menu item')) return;
     const fieldsToUpdate = [
       'name', 'category', 'description', 'foodType', 'priceType',
       'halfPrice', 'fullPrice', 'fixedPrice', 'preparationTime',
@@ -197,10 +197,7 @@ exports.deleteMenuItem = async (req, res, next) => {
       return res.status(404).json({ success: false, message: 'Menu item not found' });
     }
 
-    const adminId = getTenantAdminId(req.user);
-    if (adminId && item.adminId.toString() !== adminId.toString()) {
-      return res.status(403).json({ success: false, message: 'Not authorized to delete another restaurant menu item' });
-    }
+    if (!assertScopedOwnership(item, req.user, res, 'Not authorized to delete another restaurant menu item')) return;
 
     await item.deleteOne();
 
@@ -223,10 +220,7 @@ exports.toggleAvailability = async (req, res, next) => {
       return res.status(404).json({ success: false, message: 'Menu item not found' });
     }
 
-    const adminId = getTenantAdminId(req.user);
-    if (adminId && item.adminId.toString() !== adminId.toString()) {
-      return res.status(403).json({ success: false, message: 'Not authorized to modify another restaurant item' });
-    }
+    if (!assertScopedOwnership(item, req.user, res, 'Not authorized to modify another restaurant item')) return;
 
     const nextAvailable = !item.isAvailable;
     await MenuItem.updateOne({ _id: item._id }, { $set: { isAvailable: nextAvailable } });

@@ -69,8 +69,13 @@ const serializeAuthUser = async (user, isExpired = false) => {
     const branch = await Branch.findById(user.branchId).select('branchName');
     base.branchName = branch?.branchName || '';
     if (user.restaurantAdminId) {
-      const parent = await User.findById(user.restaurantAdminId).select('restaurantName');
+      const parent = await User.findById(user.restaurantAdminId).select('restaurantName planName');
       if (parent?.restaurantName) base.restaurantName = parent.restaurantName;
+      if (parent?.planName) {
+        const planFeatures = await resolvePlanFeaturesByName(parent.planName);
+        base.planFeatureKeys = planFeatures.featureKeys;
+        base.planFeatures = planFeatures.features;
+      }
     }
   }
 

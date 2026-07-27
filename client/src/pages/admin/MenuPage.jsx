@@ -2,10 +2,12 @@ import React, { useState, useEffect, useMemo } from 'react';
 import API from '../../services/api';
 import Sidebar from '../../components/common/Sidebar';
 import Header from '../../components/common/Header';
+import { useBranch } from '../../context/BranchContext';
 import { Plus, Search, Edit2, Trash2, Star, ArrowUpDown, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
 import { resolveUploadUrl, resolveMenuItemImageUrl } from '../../utils/uploadUrl';
 
 export default function MenuPage() {
+  const { branchQueryParams, selectedBranch } = useBranch();
   const [menuItems, setMenuItems] = useState([]);
   const [categories, setCategories] = useState([]);
   const [categoryFilter, setCategoryFilter] = useState('');
@@ -42,16 +44,19 @@ export default function MenuPage() {
   const [modalError, setModalError] = useState('');
 
   useEffect(() => {
+    if (!branchQueryParams.branchId) return;
     fetchCategories();
-  }, []);
+  }, [branchQueryParams.branchId]);
 
   useEffect(() => {
+    if (!branchQueryParams.branchId) return;
     fetchMenuItems();
-  }, [categoryFilter, foodTypeFilter]);
+  }, [categoryFilter, foodTypeFilter, branchQueryParams.branchId]);
 
   const fetchCategories = async () => {
+    if (!branchQueryParams.branchId) return;
     try {
-      const res = await API.get('/categories');
+      const res = await API.get('/categories', { params: branchQueryParams });
       if (res.data.success) setCategories(res.data.categories || []);
     } catch (err) {
       console.error(err);
@@ -60,9 +65,10 @@ export default function MenuPage() {
   };
 
   const fetchMenuItems = async () => {
+    if (!branchQueryParams.branchId) return;
     try {
       const res = await API.get('/menu', {
-        params: { category: categoryFilter, foodType: foodTypeFilter }
+        params: { category: categoryFilter, foodType: foodTypeFilter, ...branchQueryParams }
       });
       if (res.data.success) {
         setMenuItems(res.data.items || res.data.menuItems || []);
@@ -201,8 +207,8 @@ export default function MenuPage() {
 
     try {
       const res = editingItem
-        ? await API.put(`/menu/${editingItem._id}`, data)
-        : await API.post('/menu', data);
+        ? await API.put(`/menu/${editingItem._id}`, data, { params: branchQueryParams })
+        : await API.post('/menu', data, { params: branchQueryParams });
 
       const saved = res.data?.item;
       if (imageFile && saved && !saved.image) {
@@ -223,7 +229,7 @@ export default function MenuPage() {
   const handleDelete = async (id) => {
     if (!window.confirm('Are you sure you want to delete this menu item?')) return;
     try {
-      await API.delete(`/menu/${id}`);
+      await API.delete(`/menu/${id}`, { params: branchQueryParams });
       fetchMenuItems();
     } catch (err) {
       alert(err.response?.data?.message || 'Error deleting item');
@@ -232,7 +238,7 @@ export default function MenuPage() {
 
   const toggleAvailability = async (id) => {
     try {
-      await API.patch(`/menu/${id}/availability`);
+      await API.patch(`/menu/${id}/availability`, null, { params: branchQueryParams });
       fetchMenuItems();
     } catch (err) {
       alert('Error updating availability');
@@ -243,7 +249,7 @@ export default function MenuPage() {
     <div className="admin-layout">
       <Sidebar />
       <div className="admin-main">
-        <Header title="Menu Items Datatable" />
+        <Header title={selectedBranch?.branchName ? `${selectedBranch.branchName} — Menu` : 'Menu Items Datatable'} />
         <div className="admin-content">
 
           {/* DATATABLE TOP CONTROLS */}

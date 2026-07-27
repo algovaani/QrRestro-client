@@ -1,14 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { getPostLoginPath } from '../../utils/adminAccess';
-import { LogIn, AlertCircle } from 'lucide-react';
+import { LogIn, AlertCircle, UtensilsCrossed } from 'lucide-react';
 
 export default function AdminLogin() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
-  const { user, token, authReady, login, logout, loading } = useAuth();
+  const { user, token, authReady, login, loading } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -21,11 +21,6 @@ export default function AdminLogin() {
     setError('');
     const res = await login(email, password);
     if (res && res.success) {
-      if (res.user?.role === 'BranchAdmin') {
-        logout();
-        setError('Branch login ke liye /branch/login page use karein.');
-        return;
-      }
       navigate(getPostLoginPath(res.user));
     } else {
       setError(res?.message || 'Invalid email or password');
@@ -33,108 +28,62 @@ export default function AdminLogin() {
   };
 
   return (
-    <div style={{
-      minHeight: '100vh',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
-      padding: '1rem'
-    }}>
-      <div style={{
-        background: '#ffffff',
-        borderRadius: '20px',
-        padding: '2.5rem',
-        width: '100%',
-        maxWidth: '420px',
-        boxShadow: '0 20px 40px rgba(0,0,0,0.2)'
-      }}>
-        <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
-          <div style={{
-            width: '60px',
-            height: '60px',
-            background: 'var(--primary-light)',
-            color: 'var(--primary)',
-            borderRadius: '16px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: '2rem',
-            margin: '0 auto 1rem auto'
-          }}>
-            🍽️
+    <div className="auth-login-page">
+      <div className="auth-login-card">
+        <div className="auth-login-brand">
+          <div className="auth-login-icon">
+            <UtensilsCrossed size={30} strokeWidth={2.25} />
           </div>
-          <h2 style={{ fontSize: '1.5rem', fontWeight: '800', color: 'var(--secondary)' }}>
-            System Portal Login
-          </h2>
-          <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginTop: '0.25rem' }}>
-            Restaurant SaaS & Super Admin Panel
+          <div className="auth-login-brand-name">Royal Spice</div>
+          <h1 className="auth-login-title">Welcome back</h1>
+          <p className="auth-login-subtitle">
+            Sign in with your email and password.
           </p>
         </div>
 
         {error && (
-          <div style={{
-            background: '#fee2e2',
-            color: '#991b1b',
-            padding: '0.75rem 1rem',
-            borderRadius: '10px',
-            fontSize: '0.85rem',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.5rem',
-            marginBottom: '1.5rem'
-          }}>
+          <div className="auth-login-error">
             <AlertCircle size={16} />
             <span>{error}</span>
           </div>
         )}
 
-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-          <div>
-            <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', marginBottom: '0.4rem', color: 'var(--secondary)' }}>
-              Email Address
-            </label>
+        <form onSubmit={handleSubmit} className="auth-login-form">
+          <div className="auth-login-field">
+            <label htmlFor="admin-email">Email Address</label>
             <input
+              id="admin-email"
               type="email"
               required
+              autoComplete="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="admin@restaurant.com"
-              style={{ width: '100%' }}
+              placeholder="you@restaurant.com"
             />
           </div>
 
-          <div>
-            <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', marginBottom: '0.4rem', color: 'var(--secondary)' }}>
-              Password
-            </label>
+          <div className="auth-login-field">
+            <label htmlFor="admin-password">Password</label>
             <input
+              id="admin-password"
               type="password"
               required
+              autoComplete="current-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
-              style={{ width: '100%' }}
+              placeholder="Enter your password"
             />
           </div>
 
           <button
             type="submit"
             disabled={loading}
-            className="btn btn-primary"
-            style={{ width: '100%', padding: '0.8rem', marginTop: '0.5rem' }}
+            className="btn btn-primary auth-login-submit"
           >
             <LogIn size={18} />
-            <span>{loading ? 'Authenticating...' : 'Sign In'}</span>
+            <span>{loading ? 'Signing in...' : 'Sign In'}</span>
           </button>
         </form>
-
-        <p style={{ textAlign: 'center', marginTop: '1.25rem', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-          Branch manager?{' '}
-          <Link to="/branch/login" style={{ color: 'var(--primary)', fontWeight: '600' }}>
-            Branch Login
-          </Link>
-        </p>
       </div>
     </div>
   );

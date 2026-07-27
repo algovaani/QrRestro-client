@@ -8,6 +8,7 @@ const MenuItem = require('../models/MenuItem');
 const Order = require('../models/Order');
 const MembershipPlan = require('../models/MembershipPlan');
 const { getDaysRemaining, formatExpiryDate, formatRenewalMessage, withMembershipDays, isTrialPlanName, isFreePlan, adminHasUsedFreeTrial, inferPlanNameFromDays, addMembershipDays } = require('../utils/membershipDays');
+const { parseMaxBranches } = require('../utils/branchLimits');
 
 const getPlanConfig = async (planName) => {
   const plan = await MembershipPlan.findOne({ name: planName });
@@ -107,7 +108,7 @@ exports.getAllAdmins = async (req, res, next) => {
 // @route POST /api/super-admin/admins
 exports.createAdmin = async (req, res, next) => {
   try {
-    const { name, restaurantName, email, password, planName } = req.body;
+    const { name, restaurantName, email, password, planName, maxBranches } = req.body;
 
     const existingUser = await User.findOne({ email });
     if (existingUser) {
@@ -135,7 +136,8 @@ exports.createAdmin = async (req, res, next) => {
       trialEndsAt: expiryDate,
       subscriptionEndsAt: expiryDate,
       renewalRequested: false,
-      freeTrialUsed: usedFreeTrial
+      freeTrialUsed: usedFreeTrial,
+      maxBranches: maxBranches !== undefined ? parseMaxBranches(maxBranches) : null
     });
 
     await Setting.create({
@@ -176,7 +178,7 @@ exports.createAdmin = async (req, res, next) => {
 // @route PUT /api/super-admin/admins/:id
 exports.updateAdmin = async (req, res, next) => {
   try {
-    const { name, restaurantName, email, password, planName, extendDays } = req.body;
+    const { name, restaurantName, email, password, planName, extendDays, maxBranches } = req.body;
 
     let admin = await User.findById(req.params.id);
     if (!admin) {
@@ -193,6 +195,10 @@ exports.updateAdmin = async (req, res, next) => {
 
     const previousPlanName = admin.planName;
     if (planName) admin.planName = planName;
+
+    if (maxBranches !== undefined) {
+      admin.maxBranches = maxBranches === '' || maxBranches === null ? null : parseMaxBranches(maxBranches);
+    }
 
     const planChanged = planName && planName !== previousPlanName;
     const hasExtendDays = extendDays !== undefined && extendDays !== null && String(extendDays).trim() !== '';
@@ -492,7 +498,7 @@ exports.requestRenewal = async (req, res, next) => {
 
     res.json({
       success: true,
-      message: `Membership renewal request submitted for ${planName}! Super Admin payment verify karke activate karenge.`,
+      message: `Membership renewal request submitted for ${planName}! Super Admin will verify payment and activate your account.`,
       user: {
         _id: user._id,
         renewalRequested: user.renewalRequested,

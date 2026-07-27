@@ -72,8 +72,18 @@ exports.resolvePlanFeaturesByName = async (planName) => {
 };
 
 exports.adminHasPlanFeature = async (user, featureKey) => {
-  if (!user || user.role !== 'Admin') return false;
-  const { featureKeys } = await exports.resolvePlanFeaturesByName(user.planName);
+  if (!user) return false;
+
+  let planName = user.planName;
+  if (user.role === 'BranchAdmin' && user.restaurantAdminId) {
+    const User = require('../models/User');
+    const parent = await User.findById(user.restaurantAdminId).select('planName');
+    planName = parent?.planName || planName;
+  } else if (user.role !== 'Admin') {
+    return false;
+  }
+
+  const { featureKeys } = await exports.resolvePlanFeaturesByName(planName);
   return featureKeys.includes(featureKey);
 };
 

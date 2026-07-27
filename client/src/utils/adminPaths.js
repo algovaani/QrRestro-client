@@ -13,13 +13,12 @@ export function portalPath(user, segment) {
   return `${base}${path}`;
 }
 
-export function getLoginPath(user) {
-  if (!user) return '/admin/login';
-  return isBranchAdmin(user) ? '/branch/login' : '/admin/login';
+export function getLoginPath() {
+  return '/admin/login';
 }
 
-/** Features only available in branch portal (not restaurant admin) */
-export const BRANCH_ONLY_SEGMENTS = ['/kitchen', '/menu', '/categories', '/tables'];
+/** Features only available in branch/kitchen portal (not restaurant admin dashboard) */
+export const BRANCH_ONLY_SEGMENTS = ['/kitchen'];
 
 export function isBranchOnlyAdminPath(pathname) {
   return BRANCH_ONLY_SEGMENTS.some((seg) => pathname === `/admin${seg}` || pathname.startsWith(`/admin${seg}/`));

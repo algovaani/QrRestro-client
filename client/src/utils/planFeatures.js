@@ -9,10 +9,12 @@ export const PLAN_FEATURE_ROUTE_MAP = {
 };
 
 export function hasPlanFeature(user, featureKey) {
-  if (!user || user.role !== 'Admin') return false;
+  if (!user || !['Admin', 'BranchAdmin'].includes(user.role)) return false;
+  // Inventory is always available so restaurant admin can audit every branch's stock
+  if (featureKey === 'inventory') return true;
   const keys = user.planFeatureKeys;
   if (!Array.isArray(keys) || keys.length === 0) {
-    return featureKey !== 'inventory';
+    return true;
   }
   return keys.includes(featureKey);
 }

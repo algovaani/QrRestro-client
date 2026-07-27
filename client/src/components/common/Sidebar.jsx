@@ -67,7 +67,7 @@ export default function Sidebar() {
             </NavLink>
           )}
 
-          {branchMode && (
+          {(branchMode || user?.role === 'Admin') && (
             <>
               <NavLink to={p('/menu')} onClick={closeSidebar} className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
                 <Utensils size={18} />
@@ -93,7 +93,7 @@ export default function Sidebar() {
             </NavLink>
           )}
 
-          {!branchMode && hasPlanFeature(user, 'inventory') && (
+          {(branchMode || user?.role === 'Admin') && (
             <NavLink to={p('/inventory')} onClick={closeSidebar} className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
               <Package size={18} />
               <span>Kitchen Stock</span>

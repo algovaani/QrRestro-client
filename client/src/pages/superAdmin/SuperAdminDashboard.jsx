@@ -91,7 +91,8 @@ export default function SuperAdminDashboard() {
     restaurantName: '',
     email: '',
     password: '',
-    planName: '5-Day Free Trial'
+    planName: '5-Day Free Trial',
+    maxBranches: ''
   });
 
   // Edit Admin Modal State
@@ -101,7 +102,8 @@ export default function SuperAdminDashboard() {
     restaurantName: '',
     email: '',
     password: '',
-    planName: 'Monthly Plan'
+    planName: 'Monthly Plan',
+    maxBranches: ''
   });
 
   // Renew Plan Modal State
@@ -118,6 +120,7 @@ export default function SuperAdminDashboard() {
     name: '',
     price: 999,
     durationDays: 30,
+    maxBranches: 1,
     description: '',
     featureKeys: ['orders', 'branches', 'branch_portal', 'reports', 'settings'],
     status: 'Active',
@@ -250,7 +253,7 @@ export default function SuperAdminDashboard() {
       const res = await API.post('/super-admin/admins', newAdmin);
       if (res.data.success) {
         setShowAddModal(false);
-        setNewAdmin({ name: '', restaurantName: '', email: '', password: '', planName: plans[0]?.name || '5-Day Free Trial' });
+        setNewAdmin({ name: '', restaurantName: '', email: '', password: '', planName: plans[0]?.name || '5-Day Free Trial', maxBranches: '' });
         showToast('success', res.data.message || 'Admin account created successfully');
         fetchSuperAdminData();
       }
@@ -268,7 +271,8 @@ export default function SuperAdminDashboard() {
       restaurantName: admin.restaurantName || '',
       email: admin.email,
       password: admin.rawPassword || '',
-      planName: admin.planName || 'Monthly Plan'
+      planName: admin.planName || 'Monthly Plan',
+      maxBranches: admin.maxBranches ?? ''
     });
     setModalError('');
   };
@@ -431,6 +435,7 @@ export default function SuperAdminDashboard() {
       name: '',
       price: 999,
       durationDays: 30,
+      maxBranches: 1,
       description: 'Full featured membership plan for dining outlets',
       featureKeys: ['orders', 'branches', 'branch_portal', 'reports', 'settings'],
       status: 'Active',
@@ -446,6 +451,7 @@ export default function SuperAdminDashboard() {
       name: plan.name,
       price: plan.price,
       durationDays: plan.durationDays,
+      maxBranches: plan.maxBranches ?? 1,
       description: plan.description || '',
       featureKeys: plan.featureKeys?.length ? plan.featureKeys : ['orders', 'branches', 'branch_portal', 'reports', 'settings'],
       status: plan.status || 'Active',
@@ -464,6 +470,7 @@ export default function SuperAdminDashboard() {
         name: planForm.name,
         price: planForm.price,
         durationDays: planForm.durationDays,
+        maxBranches: planForm.maxBranches,
         description: planForm.description || '',
         featureKeys: planForm.featureKeys || [],
         status: planForm.status || 'Active',
@@ -1261,6 +1268,9 @@ export default function SuperAdminDashboard() {
                         {plan.price === 0 ? 'FREE' : `₹${plan.price}`}
                         <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: '600' }}> / {plan.durationDays} Days</span>
                       </div>
+                      <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.75rem' }}>
+                        Max branches: {plan.maxBranches > 0 ? plan.maxBranches : 'Unlimited'}
+                      </p>
 
                       {plan.description && (
                         <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '1rem', lineHeight: '1.4' }}>
@@ -1466,17 +1476,34 @@ export default function SuperAdminDashboard() {
                   return preview.features.length > 0 ? (
                     <div style={{ marginTop: '0.65rem', padding: '0.75rem', background: '#f8fafc', borderRadius: '10px', border: '1px solid var(--border)' }}>
                       <div style={{ fontSize: '0.75rem', fontWeight: '800', color: 'var(--text-muted)', marginBottom: '0.45rem' }}>
-                        Is plan mein ye features milenge:
+                        Features included in this plan:
                       </div>
                       {renderPlanFeaturesList(preview.features)}
                       {!preview.featureKeys.includes('inventory') && (
                         <p style={{ fontSize: '0.72rem', color: '#b45309', marginTop: '0.5rem', marginBottom: 0 }}>
-                          Inventory is plan mein included nahi hai.
+                          Inventory is not included in this plan.
                         </p>
                       )}
                     </div>
                   ) : null;
                 })()}
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '700', marginBottom: '0.3rem' }}>
+                  Max Branches Override (optional)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  placeholder="Leave empty to use plan default"
+                  value={newAdmin.maxBranches}
+                  onChange={(e) => setNewAdmin({ ...newAdmin, maxBranches: e.target.value })}
+                  style={{ width: '100%' }}
+                />
+                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.35rem' }}>
+                  0 = unlimited branches. Leave empty to use the selected plan limit.
+                </p>
               </div>
 
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '0.5rem' }}>
@@ -1560,12 +1587,26 @@ export default function SuperAdminDashboard() {
                   return preview.features.length > 0 ? (
                     <div style={{ marginTop: '0.65rem', padding: '0.75rem', background: '#f8fafc', borderRadius: '10px', border: '1px solid var(--border)' }}>
                       <div style={{ fontSize: '0.75rem', fontWeight: '800', color: 'var(--text-muted)', marginBottom: '0.45rem' }}>
-                        Is plan mein ye features milenge:
+                        Features included in this plan:
                       </div>
                       {renderPlanFeaturesList(preview.features)}
                     </div>
                   ) : null;
                 })()}
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '700', marginBottom: '0.3rem' }}>
+                  Max Branches Override (0 = unlimited, empty = plan limit)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  placeholder="Plan default"
+                  value={editForm.maxBranches}
+                  onChange={(e) => setEditForm({ ...editForm, maxBranches: e.target.value })}
+                  style={{ width: '100%' }}
+                />
               </div>
 
               <div>
@@ -1699,12 +1740,12 @@ export default function SuperAdminDashboard() {
                   return preview.features.length > 0 ? (
                     <div style={{ marginTop: '0.65rem', padding: '0.75rem', background: '#f8fafc', borderRadius: '10px', border: '1px solid var(--border)' }}>
                       <div style={{ fontSize: '0.75rem', fontWeight: '800', color: 'var(--text-muted)', marginBottom: '0.45rem' }}>
-                        Is plan mein ye features milenge:
+                        Features included in this plan:
                       </div>
                       {renderPlanFeaturesList(preview.features)}
                       {!preview.featureKeys.includes('inventory') && (
                         <p style={{ fontSize: '0.72rem', color: '#b45309', marginTop: '0.5rem', marginBottom: 0 }}>
-                          Inventory is plan mein included nahi hai.
+                          Inventory is not included in this plan.
                         </p>
                       )}
                     </div>
@@ -1855,6 +1896,23 @@ export default function SuperAdminDashboard() {
               </div>
 
               <div>
+                <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '700', marginBottom: '0.3rem' }}>
+                  Max Branches (0 = Unlimited)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  placeholder="e.g. 3"
+                  value={planForm.maxBranches}
+                  onChange={(e) => setPlanForm({ ...planForm, maxBranches: e.target.value })}
+                  style={{ width: '100%' }}
+                />
+                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.35rem' }}>
+                  How many branches a restaurant admin can create on this plan.
+                </p>
+              </div>
+
+              <div>
                 <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '700', marginBottom: '0.3rem' }}>Plan Description</label>
                 <input
                   type="text"
@@ -1867,7 +1925,7 @@ export default function SuperAdminDashboard() {
 
               <div>
                 <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '700', marginBottom: '0.45rem' }}>
-                  Plan Features (select karein — plan ke hisaab se access milega)
+                  Plan Features (select features included in this plan)
                 </label>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem', maxHeight: '220px', overflowY: 'auto', padding: '0.65rem', background: '#f8fafc', borderRadius: '10px', border: '1px solid var(--border)' }}>
                   {(featureCatalog.length ? featureCatalog : [

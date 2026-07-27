@@ -1,16 +1,10 @@
 const Table = require('../models/Table');
 const Branch = require('../models/Branch');
-const QRCode = require('qrcode');
 const { getTenantAdminId, buildScopedFilter, assertTenantOwnership } = require('../middleware/tenantMiddleware');
-const { buildMenuQrUrl } = require('../utils/tenantUtils');
 const { ensureDefaultBranch } = require('../utils/branchUtils');
-const { getClientUrl } = require('../utils/clientUrl');
+const { generateQrAssets, refreshTableQr } = require('../utils/tableQrUtils');
 
-const buildQrForTable = async (table) => {
-  const qrDataUrl = buildMenuQrUrl(getClientUrl(), table.adminId, table.branchId, table.tableNumber);
-  const qrCodeImage = await QRCode.toDataURL(qrDataUrl, { errorCorrectionLevel: 'H', margin: 2, width: 300 });
-  return { qrDataUrl, qrCodeImage };
-};
+const buildQrForTable = (table) => generateQrAssets(table);
 
 // @desc Get all tables (filtered by admin + optional branch)
 // @route GET /api/tables
@@ -174,6 +168,40 @@ exports.regenerateQR = async (req, res, next) => {
       success: true,
       message: 'QR Code regenerated successfully',
       table
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc Regenerate QR codes for all tables in tenant scope
+// @route POST /api/tables/regenerate-all-qrs
+exports.regenerateAllQR = async (req, res, next) => {
+  try {
+    const adminId = getTenantAdminId(req.user);
+    if (!adminId) {
+      return res.status(403).json({ success: false, message: 'Restaurant tenant access required' });
+    }
+
+    const filter = buildScopedFilter(req.user, req, res);
+    if (!filter) return;
+
+    const tables = await Table.find(filter);
+    let count = 0;
+
+    for (const table of tables) {
+      if (!table.branchId) {
+        const defaultBranch = await ensureDefaultBranch(adminId);
+        table.branchId = defaultBranch._id;
+      }
+      await refreshTableQr(table);
+      count += 1;
+    }
+
+    res.json({
+      success: true,
+      message: `${count} QR code(s) regenerated`,
+      count
     });
   } catch (error) {
     next(error);

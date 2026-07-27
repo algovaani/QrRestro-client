@@ -41,6 +41,12 @@ const membershipPlanSchema = new mongoose.Schema({
   paymentQrCode: {
     type: String,
     default: ''
+  },
+  /** Max branches per restaurant admin. 0 = unlimited */
+  maxBranches: {
+    type: Number,
+    default: 1,
+    min: 0
   }
 }, {
   timestamps: true

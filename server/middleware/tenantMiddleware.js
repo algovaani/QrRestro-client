@@ -49,10 +49,36 @@ exports.buildScopedFilter = (user, req, res) => {
   return { adminId };
 };
 
+/** Like buildScopedFilter but requires a specific branch (for menu/categories per branch). */
+exports.buildBranchRequiredFilter = (user, req, res) => {
+  const filter = exports.buildScopedFilter(user, req, res);
+  if (!filter) return null;
+  if (!filter.branchId) {
+    if (res) {
+      res.status(400).json({ success: false, message: 'Branch selection required' });
+    }
+    return null;
+  }
+  return filter;
+};
+
 /** Ensure a document belongs to the current tenant before mutate/read by id */
 exports.assertTenantOwnership = (doc, user, res, message = 'Not authorized to access this resource') => {
   const adminId = exports.getTenantAdminId(user);
   if (!adminId || !doc?.adminId || doc.adminId.toString() !== adminId.toString()) {
+    if (res) {
+      res.status(403).json({ success: false, message });
+    }
+    return false;
+  }
+  return true;
+};
+
+/** Tenant + branch scope for branch-specific resources */
+exports.assertScopedOwnership = (doc, user, res, message = 'Not authorized to access this resource') => {
+  if (!exports.assertTenantOwnership(doc, user, res, message)) return false;
+  const forcedBranchId = exports.getTenantBranchId(user);
+  if (forcedBranchId && doc.branchId && doc.branchId.toString() !== forcedBranchId) {
     if (res) {
       res.status(403).json({ success: false, message });
     }
