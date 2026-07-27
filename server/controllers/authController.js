@@ -10,6 +10,8 @@ const generateToken = (id) => {
   });
 };
 
+exports.generateToken = generateToken;
+
 const validateBranchAdminLogin = async (user, res) => {
   if (!user.isActive) {
     res.status(403).json({ success: false, message: 'Branch login deactivated. Contact restaurant admin.' });
@@ -51,6 +53,8 @@ const validateBranchAdminLogin = async (user, res) => {
 
   return branch;
 };
+
+exports.validateBranchAdminLogin = validateBranchAdminLogin;
 
 const serializeAuthUser = async (user, isExpired = false) => {
   const base = withMembershipDays({
@@ -98,6 +102,8 @@ const serializeAuthUser = async (user, isExpired = false) => {
 
   return base;
 };
+
+exports.serializeAuthUser = serializeAuthUser;
 
 // @desc Auth user & get token
 // @route POST /api/auth/login

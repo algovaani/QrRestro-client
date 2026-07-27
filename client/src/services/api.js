@@ -115,9 +115,14 @@ function captureApiOriginFromResponse(response) {
   }
 }
 
-// Interceptor to add JWT token from localStorage
+// Interceptor to add JWT token (sessionStorage first = branch portal tab)
 API.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token');
+  let token = null;
+  try {
+    token = sessionStorage.getItem('token') || localStorage.getItem('token');
+  } catch {
+    token = localStorage.getItem('token');
+  }
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
@@ -127,6 +132,45 @@ API.interceptors.request.use((config) => {
   }
   return config;
 }, (error) => Promise.reject(error));
+
+function clearActiveAuthStorage() {
+  try {
+    if (sessionStorage.getItem('token')) {
+      sessionStorage.removeItem('token');
+      sessionStorage.removeItem('user');
+      return;
+    }
+  } catch {
+    /* ignore */
+  }
+  localStorage.removeItem('token');
+  localStorage.removeItem('user');
+}
+
+function patchActiveUser(mutator) {
+  const stores = [];
+  try {
+    if (sessionStorage.getItem('user')) stores.push(sessionStorage);
+  } catch {
+    /* ignore */
+  }
+  if (localStorage.getItem('user') && stores.length === 0) stores.push(localStorage);
+  if (stores.length === 0 && localStorage.getItem('user')) stores.push(localStorage);
+
+  for (const store of stores.length ? stores : [localStorage]) {
+    const saved = store.getItem('user');
+    if (!saved) continue;
+    try {
+      const u = JSON.parse(saved);
+      mutator(u);
+      store.setItem('user', JSON.stringify(u));
+      return u;
+    } catch {
+      /* ignore */
+    }
+  }
+  return null;
+}
 
 // Response interceptor to handle 401 unauthorized
 API.interceptors.response.use(
@@ -139,57 +183,51 @@ API.interceptors.response.use(
       captureApiOriginFromResponse(error.response);
     }
     if (error.response && error.response.status === 401) {
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
+      clearActiveAuthStorage();
       const path = window.location.pathname;
       if (
         (path.startsWith('/admin') || path.startsWith('/branch') || path.startsWith('/super-admin'))
         && path !== '/admin/login'
+        && path !== '/branch/access'
       ) {
         window.location.href = '/admin/login';
       }
     }
     if (error.response?.status === 403 && error.response?.data?.code === 'MEMBERSHIP_EXPIRED') {
-      const saved = localStorage.getItem('user');
       const data = error.response.data;
-      if (saved) {
-        try {
-          const u = JSON.parse(saved);
-          u.planStatus = 'Expired';
-          u.isExpired = true;
-          u.renewalRequested = Boolean(data.renewalRequested);
-          localStorage.setItem('user', JSON.stringify(u));
-          window.dispatchEvent(new CustomEvent('membership-expired', { detail: data }));
-          const path = window.location.pathname;
-          if (!path.includes('subscription-expired') && !path.includes('/admin/membership')) {
-            window.location.href = '/subscription-expired';
-          }
-        } catch { /* ignore */ }
+      const u = patchActiveUser((user) => {
+        user.planStatus = 'Expired';
+        user.isExpired = true;
+        user.renewalRequested = Boolean(data.renewalRequested);
+      });
+      if (u) {
+        window.dispatchEvent(new CustomEvent('membership-expired', { detail: data }));
+        const path = window.location.pathname;
+        if (!path.includes('subscription-expired') && !path.includes('/admin/membership')) {
+          window.location.href = '/subscription-expired';
+        }
       }
     }
     if (error.response?.status === 403 && error.response?.data?.code === 'ACCOUNT_DEACTIVATED') {
-      const saved = localStorage.getItem('user');
       const data = error.response.data;
-      if (saved) {
-        try {
-          const u = JSON.parse(saved);
-          u.isActive = false;
-          u.membershipOfferSent = Boolean(data.membershipOfferSent);
-          u.membershipOfferPlanName = data.membershipOfferPlanName || u.membershipOfferPlanName || '';
-          u.renewalRequested = Boolean(data.renewalRequested);
-          localStorage.setItem('user', JSON.stringify(u));
-          window.dispatchEvent(new CustomEvent('account-deactivated', {
-            detail: {
-              membershipOfferSent: u.membershipOfferSent,
-              membershipOfferPlanName: u.membershipOfferPlanName,
-              renewalRequested: u.renewalRequested
-            }
-          }));
-          const path = window.location.pathname;
-          if (!path.includes('subscription-expired') && !path.includes('/admin/membership')) {
-            window.location.href = '/subscription-expired';
+      const u = patchActiveUser((user) => {
+        user.isActive = false;
+        user.membershipOfferSent = Boolean(data.membershipOfferSent);
+        user.membershipOfferPlanName = data.membershipOfferPlanName || user.membershipOfferPlanName || '';
+        user.renewalRequested = Boolean(data.renewalRequested);
+      });
+      if (u) {
+        window.dispatchEvent(new CustomEvent('account-deactivated', {
+          detail: {
+            membershipOfferSent: u.membershipOfferSent,
+            membershipOfferPlanName: u.membershipOfferPlanName,
+            renewalRequested: u.renewalRequested
           }
-        } catch { /* ignore */ }
+        }));
+        const path = window.location.pathname;
+        if (!path.includes('subscription-expired') && !path.includes('/admin/membership')) {
+          window.location.href = '/subscription-expired';
+        }
       }
     }
     return Promise.reject(error);

@@ -383,3 +383,55 @@ exports.deleteBranchManager = async (req, res, next) => {
     next(error);
   }
 };
+
+/** Restaurant admin opens branch portal as that branch manager (one-click) */
+exports.portalLoginAsBranch = async (req, res, next) => {
+  try {
+    const { generateToken, serializeAuthUser, validateBranchAdminLogin } = require('./authController');
+
+    if (req.user.role !== 'Admin') {
+      return res.status(403).json({ success: false, message: 'Only restaurant admin can open branch portal' });
+    }
+
+    const adminId = getTenantAdminId(req.user);
+    if (!adminId) {
+      return res.status(403).json({ success: false, message: 'Restaurant admin access required' });
+    }
+
+    const branch = await Branch.findById(req.params.id);
+    if (!branch) {
+      return res.status(404).json({ success: false, message: 'Branch not found' });
+    }
+    if (!assertTenantOwnership(branch, req.user, res, 'Not authorized')) return;
+
+    if (branch.suspendedByLimit) {
+      return res.status(403).json({
+        success: false,
+        message: 'This branch is suspended because the restaurant branch limit was exceeded.'
+      });
+    }
+    if (!branch.isActive) {
+      return res.status(403).json({ success: false, message: 'Branch is inactive.' });
+    }
+
+    const manager = await User.findOne({ branchId: branch._id, role: 'BranchAdmin' });
+    if (!manager) {
+      return res.status(400).json({
+        success: false,
+        message: 'Create Branch Login first, then open the branch portal.'
+      });
+    }
+
+    const validBranch = await validateBranchAdminLogin(manager, res);
+    if (!validBranch) return;
+
+    const token = generateToken(manager._id);
+    res.json({
+      success: true,
+      token,
+      user: await serializeAuthUser(manager)
+    });
+  } catch (error) {
+    next(error);
+  }
+};

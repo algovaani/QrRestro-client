@@ -3,6 +3,28 @@ import API from '../services/api';
 
 const AuthContext = createContext();
 
+/** Prefer sessionStorage when this tab opened as branch portal (keeps admin localStorage intact). */
+function getAuthStorage() {
+  try {
+    if (sessionStorage.getItem('token') && sessionStorage.getItem('user')) {
+      return sessionStorage;
+    }
+  } catch {
+    /* ignore */
+  }
+  return localStorage;
+}
+
+function readStoredUser() {
+  const saved = getAuthStorage().getItem('user');
+  if (!saved) return null;
+  try {
+    return JSON.parse(saved);
+  } catch {
+    return null;
+  }
+}
+
 const syncUserFromApi = (prev, u) => ({
   ...prev,
   ...u,
@@ -23,11 +45,8 @@ const syncUserFromApi = (prev, u) => ({
 });
 
 export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(() => {
-    const saved = localStorage.getItem('user');
-    return saved ? JSON.parse(saved) : null;
-  });
-  const [token, setToken] = useState(() => localStorage.getItem('token') || null);
+  const [user, setUser] = useState(() => readStoredUser());
+  const [token, setToken] = useState(() => getAuthStorage().getItem('token') || null);
   const [loading, setLoading] = useState(false);
   const [authReady, setAuthReady] = useState(false);
 
@@ -43,7 +62,7 @@ export const AuthProvider = ({ children }) => {
           membershipOfferPlanName: detail.membershipOfferPlanName ?? prev.membershipOfferPlanName ?? '',
           renewalRequested: detail.renewalRequested ?? prev.renewalRequested ?? false
         };
-        localStorage.setItem('user', JSON.stringify(updated));
+        getAuthStorage().setItem('user', JSON.stringify(updated));
         return updated;
       });
     };
@@ -57,7 +76,7 @@ export const AuthProvider = ({ children }) => {
           isExpired: true,
           renewalRequested: Boolean(detail.renewalRequested ?? prev.renewalRequested)
         };
-        localStorage.setItem('user', JSON.stringify(updated));
+        getAuthStorage().setItem('user', JSON.stringify(updated));
         return updated;
       });
     };
@@ -84,7 +103,7 @@ export const AuthProvider = ({ children }) => {
           setUser((prev) => {
             if (!prev) return prev;
             const updated = syncUserFromApi(prev, res.data.user);
-            localStorage.setItem('user', JSON.stringify(updated));
+            getAuthStorage().setItem('user', JSON.stringify(updated));
             return updated;
           });
         }
@@ -92,8 +111,9 @@ export const AuthProvider = ({ children }) => {
         if (!cancelled && err.response?.status === 401) {
           setUser(null);
           setToken(null);
-          localStorage.removeItem('token');
-          localStorage.removeItem('user');
+          const store = getAuthStorage();
+          store.removeItem('token');
+          store.removeItem('user');
         }
       } finally {
         if (!cancelled) setAuthReady(true);
@@ -114,7 +134,7 @@ export const AuthProvider = ({ children }) => {
         setUser((prev) => {
           if (!prev) return prev;
           const updated = syncUserFromApi(prev, u);
-          localStorage.setItem('user', JSON.stringify(updated));
+          getAuthStorage().setItem('user', JSON.stringify(updated));
           return updated;
         });
       })
@@ -126,6 +146,12 @@ export const AuthProvider = ({ children }) => {
     try {
       const res = await API.post('/auth/login', { email, password });
       if (res.data.success) {
+        try {
+          sessionStorage.removeItem('token');
+          sessionStorage.removeItem('user');
+        } catch {
+          /* ignore */
+        }
         setUser(res.data.user);
         setToken(res.data.token);
         localStorage.setItem('token', res.data.token);
@@ -146,8 +172,9 @@ export const AuthProvider = ({ children }) => {
   const logout = () => {
     setUser(null);
     setToken(null);
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
+    const store = getAuthStorage();
+    store.removeItem('token');
+    store.removeItem('user');
     setAuthReady(true);
   };
 
@@ -155,7 +182,7 @@ export const AuthProvider = ({ children }) => {
     setUser((prev) => {
       if (!prev) return prev;
       const updated = { ...prev, ...partial };
-      localStorage.setItem('user', JSON.stringify(updated));
+      getAuthStorage().setItem('user', JSON.stringify(updated));
       return updated;
     });
   };

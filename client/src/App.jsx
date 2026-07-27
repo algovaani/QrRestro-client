@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { CartProvider } from './context/CartContext';
 import { SocketProvider } from './context/SocketContext';
+import BranchAccessPage from './pages/branch/BranchAccessPage';
 import BrandLogo from './components/common/BrandLogo';
 
 // Super Admin Pages
@@ -155,6 +156,7 @@ export default function App() {
 
               {/* Admin Auth Route */}
               <Route path="/admin/login" element={<AdminLogin />} />
+              <Route path="/branch/access" element={<BranchAccessPage />} />
               <Route path="/branch/login" element={<Navigate to="/admin/login" replace />} />
 
               {/* Subscription Expired Route */}

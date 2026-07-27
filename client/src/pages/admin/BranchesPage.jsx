@@ -4,7 +4,7 @@ import API from '../../services/api';
 import Sidebar from '../../components/common/Sidebar';
 import Header from '../../components/common/Header';
 import { useBranch } from '../../context/BranchContext';
-import { Plus, Edit2, Trash2, MapPin, Star, RefreshCw, QrCode, ShoppingBag, IndianRupee, Clock, LayoutGrid, KeyRound, UserPlus, Copy, Check, Package } from 'lucide-react';
+import { Plus, Edit2, Trash2, MapPin, Star, RefreshCw, QrCode, ShoppingBag, IndianRupee, Clock, LayoutGrid, KeyRound, UserPlus, Copy, Check, Package, LogIn, ExternalLink } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { portalPath } from '../../utils/adminPaths';
 
@@ -42,6 +42,7 @@ export default function BranchesPage() {
   const [managerError, setManagerError] = useState('');
   const [managerSaving, setManagerSaving] = useState(false);
   const [copiedLogin, setCopiedLogin] = useState(false);
+  const [openingPortalId, setOpeningPortalId] = useState(null);
 
   const branchLoginUrl = `${window.location.origin}/admin/login`;
   const showInventory = true;
@@ -205,6 +206,43 @@ export default function BranchesPage() {
     }
   };
 
+  const openBranchPortal = async (branch) => {
+    if (!branch?.branchManager) {
+      alert('Pehle "Create Branch Login" se manager banao, phir Branch Login open kar sakte ho.');
+      return;
+    }
+    if (branch.branchManager.isActive === false) {
+      alert('Branch login disabled hai. Edit Branch Login se pehle enable karo.');
+      return;
+    }
+    if (branch.suspendedByLimit) {
+      alert('Yeh branch suspended hai — pehle limit fix karo.');
+      return;
+    }
+
+    setOpeningPortalId(branch._id);
+    try {
+      const res = await API.post(`/branches/${branch._id}/portal-login`);
+      if (!res.data.success || !res.data.token || !res.data.user) {
+        alert(res.data.message || 'Branch portal open nahi ho paya');
+        return;
+      }
+
+      const auth = encodeURIComponent(JSON.stringify({
+        token: res.data.token,
+        user: res.data.user
+      }));
+      const opened = window.open(`/branch/access?auth=${auth}`, '_blank');
+      if (!opened) {
+        alert('Popup blocked. Browser me new tab allow karo.');
+      }
+    } catch (err) {
+      alert(err.response?.data?.message || 'Branch portal open nahi ho paya');
+    } finally {
+      setOpeningPortalId(null);
+    }
+  };
+
   const maxBranches = branchLimits?.maxBranches ?? 0;
   const currentBranches = branchLimits?.currentBranches ?? branches.length;
   const activeWithinLimit = branchLimits?.activeWithinLimit ?? branches.filter((b) => b.isActive !== false && !b.suspendedByLimit).length;
@@ -361,6 +399,36 @@ export default function BranchesPage() {
 
                     <button
                       type="button"
+                      onClick={() => openBranchPortal(branch)}
+                      className="btn btn-primary btn-sm"
+                      style={{ width: '100%' }}
+                      disabled={
+                        branch.suspendedByLimit
+                        || !branch.branchManager
+                        || branch.branchManager?.isActive === false
+                        || openingPortalId === branch._id
+                      }
+                      title={
+                        branch.suspendedByLimit
+                          ? 'Suspended branch'
+                          : !branch.branchManager
+                            ? 'Pehle Create Branch Login karo'
+                            : branch.branchManager?.isActive === false
+                              ? 'Branch login disabled'
+                              : 'New tab me branch portal open karein'
+                      }
+                    >
+                      {openingPortalId === branch._id ? (
+                        <RefreshCw size={15} />
+                      ) : (
+                        <LogIn size={15} />
+                      )}
+                      {openingPortalId === branch._id ? 'Opening…' : 'Open Branch Login'}
+                      <ExternalLink size={13} style={{ opacity: 0.85 }} />
+                    </button>
+
+                    <button
+                      type="button"
                       onClick={() => handleOpenManager(branch)}
                       className="btn btn-secondary btn-sm"
                       style={{ width: '100%' }}
@@ -374,7 +442,7 @@ export default function BranchesPage() {
                     <button
                       type="button"
                       onClick={() => openBranchTables(branch)}
-                      className="btn btn-primary btn-sm"
+                      className="btn btn-secondary btn-sm"
                       style={{ width: '100%', marginTop: '0.25rem' }}
                       disabled={branch.suspendedByLimit}
                       title={branch.suspendedByLimit ? 'Suspended branch — QR orders are blocked' : undefined}

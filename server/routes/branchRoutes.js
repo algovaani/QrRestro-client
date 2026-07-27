@@ -8,7 +8,8 @@ const {
   deleteBranch,
   getBranchManager,
   upsertBranchManager,
-  deleteBranchManager
+  deleteBranchManager,
+  portalLoginAsBranch
 } = require('../controllers/branchController');
 
 router.use(protect);
@@ -22,5 +23,6 @@ router.delete('/:id', authorize('Admin'), deleteBranch);
 router.get('/:id/manager', authorize('Admin'), getBranchManager);
 router.put('/:id/manager', authorize('Admin'), upsertBranchManager);
 router.delete('/:id/manager', authorize('Admin'), deleteBranchManager);
+router.post('/:id/portal-login', authorize('Admin'), portalLoginAsBranch);
 
 module.exports = router;
