@@ -1,13 +1,19 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import API from '../../services/api';
 import UPIPaymentModal from '../../components/customer/UPIPaymentModal';
 import CustomerBottomNav from '../../components/customer/CustomerBottomNav';
 import MyOrdersModal from '../../components/customer/MyOrdersModal';
+import CustomerNotificationToast from '../../components/customer/CustomerNotificationToast';
+import CustomerSoundEnableBar from '../../components/customer/CustomerSoundEnableBar';
 import { useCart, getCustomerMenuPath } from '../../context/CartContext';
+import { useSocket } from '../../context/SocketContext';
+import { useTableRoomSocket } from '../../hooks/useTableRoomSocket';
+import { useLivePolling, useSocketReconnectRefetch } from '../../hooks/useLivePolling';
 import { useTableSessionOrders } from '../../hooks/useTableSessionOrders';
 import { startCustomerPayFlow, getUnpaidOrders } from '../../utils/customerPayFlow';
 import PayOrderPickerModal from '../../components/customer/PayOrderPickerModal';
+import { orderMatchesCustomerSession, notifyCustomerOrderStatus } from '../../utils/orderNotifications';
 import { CheckCircle2, Clock, Utensils, QrCode } from 'lucide-react';
 
 export default function OrderSuccessPage() {
@@ -20,8 +26,10 @@ export default function OrderSuccessPage() {
   const [paymentOrderNumbers, setPaymentOrderNumbers] = useState(null);
   const [showPayPicker, setShowPayPicker] = useState(false);
   const [showMyOrdersModal, setShowMyOrdersModal] = useState(false);
+  const [liveToast, setLiveToast] = useState('');
 
   const { initTableCart, customerMobile } = useCart();
+  const { socket } = useSocket();
 
   useEffect(() => {
     if (order?.adminId && order?.tableNumber) {
@@ -54,18 +62,105 @@ export default function OrderSuccessPage() {
     fetchOrderDetails();
   }, [orderNumber]);
 
-  const fetchOrderDetails = async () => {
+  const fetchOrderDetails = useCallback(async () => {
+    if (!orderNumber) return;
     try {
       const res = await API.get(`/public/orders/${orderNumber}/status`);
       if (res.data.success) {
-        setOrder(res.data.order);
+        setOrder((prev) => {
+          const nextOrder = res.data.order;
+          if (prev && prev.orderStatus !== nextOrder.orderStatus) {
+            notifyCustomerOrderStatus(nextOrder, setLiveToast, prev.orderStatus);
+          }
+          return nextOrder;
+        });
       }
     } catch (err) {
       console.error(err);
     } finally {
       setLoading(false);
     }
-  };
+  }, [orderNumber]);
+
+  useEffect(() => {
+    if (!liveToast) return undefined;
+    const timer = setTimeout(() => setLiveToast(''), 8000);
+    return () => clearTimeout(timer);
+  }, [liveToast]);
+
+  const sessionBranchId = order?.branchId ? String(order.branchId) : '';
+  const sessionMobile = customerMobile || order?.customerMobile || '';
+
+  useTableRoomSocket(
+    socket,
+    order?.adminId,
+    order?.tableNumber,
+    sessionBranchId,
+    order
+      ? {
+          onStatusUpdate: (updatedOrder) => {
+            if (
+              updatedOrder.orderNumber !== orderNumber &&
+              (!order || String(updatedOrder._id) !== String(order._id))
+            ) {
+              return;
+            }
+            if (
+              !orderMatchesCustomerSession(
+                updatedOrder,
+                order.adminId,
+                order.tableNumber,
+                sessionMobile,
+                sessionBranchId
+              )
+            ) {
+              return;
+            }
+            setOrder((prev) => {
+              if (updatedOrder.paymentStatus === 'Unpaid' && prev?.paymentStatus === 'Pending') {
+                setLiveToast(`Payment for Order #${updatedOrder.orderNumber} was not approved. Please try again.`);
+                return updatedOrder;
+              }
+              notifyCustomerOrderStatus(updatedOrder, setLiveToast, prev?.orderStatus);
+              return updatedOrder;
+            });
+          },
+          onPaymentPending: (updatedOrder) => {
+            if (
+              !orderMatchesCustomerSession(
+                updatedOrder,
+                order.adminId,
+                order.tableNumber,
+                sessionMobile,
+                sessionBranchId
+              )
+            ) {
+              return;
+            }
+            setOrder(updatedOrder);
+            setLiveToast(`⏳ Payment submitted for Order #${updatedOrder.orderNumber} — waiting for admin approval`);
+          },
+          onPaymentSuccess: (updatedOrder) => {
+            if (
+              !orderMatchesCustomerSession(
+                updatedOrder,
+                order.adminId,
+                order.tableNumber,
+                sessionMobile,
+                sessionBranchId
+              )
+            ) {
+              return;
+            }
+            setOrder(updatedOrder);
+            setLiveToast(`💳 Payment approved for Order #${updatedOrder.orderNumber}!`);
+          }
+        }
+      : {}
+  );
+
+  useLivePolling(fetchOrderDetails, 8000, Boolean(orderNumber));
+  useSocketReconnectRefetch(socket, fetchOrderDetails, Boolean(orderNumber && order?.adminId));
 
   const handlePaymentSuccess = (updatedOrder) => {
     setOrder(updatedOrder);
@@ -74,6 +169,8 @@ export default function OrderSuccessPage() {
 
   return (
     <div className="customer-mobile-wrap" style={{ background: '#ffffff', minHeight: '100vh', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', padding: '1.5rem 1rem 6rem' }}>
+      <CustomerNotificationToast message={liveToast} onDismiss={() => setLiveToast('')} aboveNav />
+      <CustomerSoundEnableBar aboveNav />
       
       <div style={{ textAlign: 'center', marginTop: '1rem' }}>
         <div style={{

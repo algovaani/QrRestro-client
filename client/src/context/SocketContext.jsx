@@ -67,7 +67,7 @@ export const SocketProvider = ({ children }) => {
         id: `${order._id || order.orderNumber}_${Date.now()}`,
         type: 'new_order',
         title: '🚨 NEW ORDER RECEIVED!',
-        message: `Order #${order.orderNumber} for Table ${order.tableNumber} (₹${order.grandTotal})`,
+        message: `Order #${order.orderNumber} · Table ${order.tableNumber}${order.branchName ? ` · ${order.branchName}` : ''} (₹${order.grandTotal})`,
         order,
         timestamp: new Date()
       };

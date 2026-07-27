@@ -1,7 +1,19 @@
 let ioInstance = null;
 const { getDaysRemaining, formatExpiryDate } = require('../utils/membershipDays');
 
-const toPayload = (order) => (order?.toObject ? order.toObject() : order);
+const toPayload = (order) => {
+  const payload = order?.toObject ? order.toObject() : { ...order };
+  if (payload.adminId) {
+    payload.adminId = String(payload.adminId._id || payload.adminId);
+  }
+  if (payload.branchId) {
+    payload.branchId = String(payload.branchId._id || payload.branchId);
+  }
+  if (payload.tableNumber !== undefined && payload.tableNumber !== null) {
+    payload.tableNumber = String(payload.tableNumber);
+  }
+  return payload;
+};
 
 const getAdminRoom = (adminId) => `admin_${adminId}`;
 const getKitchenRoom = (adminId) => `kitchen_${adminId}`;
@@ -41,6 +53,7 @@ const emitToTenant = (order, eventName) => {
   ioInstance
     .to(getAdminRoom(adminId))
     .to(getKitchenRoom(adminId))
+    .to(getRestaurantRoom(adminId))
     .to(getTableRoom(adminId, payload.tableNumber, payload.branchId))
     .emit(eventName, payload);
 };

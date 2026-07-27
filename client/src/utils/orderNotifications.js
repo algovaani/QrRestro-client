@@ -10,19 +10,28 @@ export const normalizeTableNumber = (value) => String(value ?? '').trim();
 export const tableNumbersMatch = (a, b) =>
   normalizeTableNumber(a) === normalizeTableNumber(b);
 
-/** Order must match this table session — not just the same mobile on another table/branch. */
+export const normalizeBranchId = (value) => (value ? String(value) : '');
+
+/** Order must match this table session — scoped by branch when branch is known. */
 export const orderMatchesCustomerSession = (order, adminId, tableNumber, customerMobile, branchId = '') => {
   if (!order || !adminId || !tableNumber || !customerMobile) return false;
   if (String(order.adminId) !== String(adminId)) return false;
   if (!tableNumbersMatch(order.tableNumber, tableNumber)) return false;
-  if (branchId && order.branchId && String(order.branchId) !== String(branchId)) return false;
+
+  const sessionBranch = normalizeBranchId(branchId);
+  const orderBranch = normalizeBranchId(order.branchId);
+  if (sessionBranch) {
+    if (!orderBranch || orderBranch !== sessionBranch) return false;
+  }
+
   return mobilesMatch(order.customerMobile, customerMobile);
 };
 
 const NOTIFY_STATUSES = new Set(['Confirmed', 'Preparing', 'Ready', 'Served', 'Completed']);
 
 export const shouldShowStatusToast = (order, prevStatus) => {
-  if (!order?.orderStatus || !prevStatus) return false;
+  if (!order?.orderStatus) return false;
+  if (!prevStatus) return order.orderStatus !== 'New';
   return prevStatus !== order.orderStatus;
 };
 

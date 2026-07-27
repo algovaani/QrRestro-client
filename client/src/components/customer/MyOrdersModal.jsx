@@ -36,7 +36,7 @@ export default function MyOrdersModal({ tableNumber, adminId, branchId = '', cus
     if (tableNumber && adminId && customerMobile) {
       fetchTableSessionOrders();
     }
-  }, [tableNumber, adminId, customerMobile]);
+  }, [tableNumber, adminId, branchId, customerMobile]);
 
   useEffect(() => {
     if (tableOrders.length === 0) {

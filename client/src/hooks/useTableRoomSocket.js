@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { getTableRoom } from '../context/SocketContext';
-import { tableNumbersMatch } from '../utils/orderNotifications';
+import { tableNumbersMatch, normalizeBranchId } from '../utils/orderNotifications';
 
 export function useTableRoomSocket(socket, adminId, tableNumber, branchId, handlers = {}) {
   const handlersRef = useRef(handlers);
@@ -10,12 +10,18 @@ export function useTableRoomSocket(socket, adminId, tableNumber, branchId, handl
     if (!socket || !adminId || !tableNumber) return;
 
     const room = getTableRoom(adminId, tableNumber, branchId);
+    const sessionBranch = normalizeBranchId(branchId);
 
-    const belongsToThisTable = (order) =>
-      order?.adminId &&
-      String(order.adminId) === String(adminId) &&
-      tableNumbersMatch(order.tableNumber, tableNumber) &&
-      (!branchId || !order.branchId || String(order.branchId) === String(branchId));
+    const belongsToThisTable = (order) => {
+      if (!order?.adminId || String(order.adminId) !== String(adminId)) return false;
+      if (!tableNumbersMatch(order.tableNumber, tableNumber)) return false;
+
+      const orderBranch = normalizeBranchId(order.branchId);
+      if (sessionBranch) {
+        if (!orderBranch || orderBranch !== sessionBranch) return false;
+      }
+      return true;
+    };
 
     const joinRoom = () => {
       socket.emit('join_room', room);
