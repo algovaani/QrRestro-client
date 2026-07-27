@@ -14,7 +14,7 @@ import OrderRatingDisplay from '../../components/admin/OrderRatingDisplay';
 import OrderBranchBadge from '../../components/admin/OrderBranchBadge';
 import { resolveOrderBranchName, formatOrderTableLabel } from '../../utils/orderBranch';
 import { buildBranchOrderGroups, computeOrderDayStats, filterOrdersByDay } from '../../utils/orderBranchGroups';
-import { Printer, Eye, RefreshCw, MessageSquare, Search, ArrowUpDown, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, CheckCircle2, XCircle, Loader2, ChevronDown, ChevronUp, MapPin, CalendarDays } from 'lucide-react';
+import { Printer, Eye, RefreshCw, MessageSquare, Search, ArrowUpDown, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, CheckCircle2, XCircle, Loader2, MapPin, CalendarDays, ArrowLeft, ArrowRight } from 'lucide-react';
 
 export default function OrdersPage() {
   const location = useLocation();
@@ -43,10 +43,12 @@ export default function OrdersPage() {
 
   const { socket, isConnected } = useSocket();
   const { user } = useAuth();
-  const { branchQueryParams, getBranchName, hasMultipleBranches, branches, isAllBranches, isBranchLocked, setSelectedBranchId } = useBranch();
-  const showBranchGroupedView = hasMultipleBranches && isAllBranches && !isBranchLocked;
+  const { getBranchName, hasMultipleBranches, branches, isBranchLocked, setSelectedBranchId } = useBranch();
+  const [ordersBranchId, setOrdersBranchId] = useState(null);
+  const [statsOrders, setStatsOrders] = useState([]);
+  const [statsLoading, setStatsLoading] = useState(false);
+  const showBranchPicker = hasMultipleBranches && !isBranchLocked && !ordersBranchId;
   const [dayFilter, setDayFilter] = useState('all');
-  const [expandedBranches, setExpandedBranches] = useState(() => new Set());
   const [billSendingId, setBillSendingId] = useState(null);
   const [restaurantBillInfo, setRestaurantBillInfo] = useState({
     contactNumber: '',
@@ -68,20 +70,36 @@ export default function OrdersPage() {
   }, []);
 
   useEffect(() => {
-    if (!isBranchLocked && hasMultipleBranches) {
+    if (isBranchLocked && user?.branchId) {
+      setOrdersBranchId(String(user.branchId));
+      return;
+    }
+    if (!hasMultipleBranches && branches.length === 1) {
+      setOrdersBranchId(String(branches[0]._id));
+      return;
+    }
+    if (hasMultipleBranches && !isBranchLocked) {
+      setOrdersBranchId(null);
       setSelectedBranchId('all');
+      setOrders([]);
     }
-  }, []);
+  }, [location.pathname, isBranchLocked, hasMultipleBranches, branches, user?.branchId, setSelectedBranchId]);
 
   useEffect(() => {
-    if (branches.length > 0) {
-      setExpandedBranches(new Set(branches.map((b) => String(b._id))));
-    }
-  }, [branches]);
+    if (!showBranchPicker) return;
+    setStatsLoading(true);
+    API.get('/orders')
+      .then((res) => {
+        if (res.data.success) setStatsOrders(res.data.orders || []);
+      })
+      .catch(console.error)
+      .finally(() => setStatsLoading(false));
+  }, [showBranchPicker, user?._id]);
 
   useEffect(() => {
+    if (showBranchPicker) return;
     fetchOrders();
-  }, [statusFilter, paymentFilter, user?._id, showBranchGroupedView, branchQueryParams.branchId]);
+  }, [statusFilter, paymentFilter, user?._id, ordersBranchId, showBranchPicker]);
 
   // Refetch orders when socket reconnects (catch missed events during disconnect)
   useEffect(() => {
@@ -126,17 +144,7 @@ export default function OrdersPage() {
     stripOrderFromUrl();
   };
 
-  // Open order from notification link (?order=ORD-1163), then remove param so reload won't reopen
-  useEffect(() => {
-    const orderParam = new URLSearchParams(location.search).get('order') || '';
-    if (!orderParam || loading) return;
-
-    const match = orders.find((o) => o.orderNumber === orderParam);
-    if (match) {
-      setSelectedOrder(match);
-    }
-    stripOrderFromUrl();
-  }, [location.search, orders, loading]);
+  // Open order from notification link — effect registered after handleSelectBranch (see below)
 
   const enrichOrderBranch = (order) => {
     if (!order) return order;
@@ -150,11 +158,13 @@ export default function OrdersPage() {
 
     const handleNewOrder = (newOrder) => {
       if (!belongsToTenant(newOrder, user?._id)) return;
+      if (ordersBranchId && newOrder.branchId && String(newOrder.branchId) !== String(ordersBranchId)) return;
       setOrders((prev) => prependUniqueOrder(prev, enrichOrderBranch(newOrder)));
     };
 
     const handleStatusUpdate = (updatedOrder) => {
       if (!belongsToTenant(updatedOrder, user?._id)) return;
+      if (ordersBranchId && updatedOrder.branchId && String(updatedOrder.branchId) !== String(ordersBranchId)) return;
       const enriched = enrichOrderBranch(updatedOrder);
       setOrders((prev) => upsertOrder(prev, enriched));
       if (selectedOrder && getOrderId(selectedOrder) === getOrderId(enriched)) {
@@ -164,6 +174,7 @@ export default function OrdersPage() {
 
     const handlePaymentPending = (updatedOrder) => {
       if (!belongsToTenant(updatedOrder, user?._id)) return;
+      if (ordersBranchId && updatedOrder.branchId && String(updatedOrder.branchId) !== String(ordersBranchId)) return;
       const enriched = enrichOrderBranch(updatedOrder);
       setOrders((prev) => upsertOrder(prev, enriched));
       if (selectedOrder && getOrderId(selectedOrder) === getOrderId(enriched)) {
@@ -173,6 +184,7 @@ export default function OrdersPage() {
 
     const handlePaymentSuccess = (updatedOrder) => {
       if (!belongsToTenant(updatedOrder, user?._id)) return;
+      if (ordersBranchId && updatedOrder.branchId && String(updatedOrder.branchId) !== String(ordersBranchId)) return;
       const enriched = enrichOrderBranch(updatedOrder);
       setOrders((prev) => upsertOrder(prev, enriched));
       if (selectedOrder && getOrderId(selectedOrder) === getOrderId(enriched)) {
@@ -182,6 +194,7 @@ export default function OrdersPage() {
 
     const handleOrderRating = (updatedOrder) => {
       if (!belongsToTenant(updatedOrder, user?._id)) return;
+      if (ordersBranchId && updatedOrder.branchId && String(updatedOrder.branchId) !== String(ordersBranchId)) return;
       const enriched = enrichOrderBranch(updatedOrder);
       setOrders((prev) => upsertOrder(prev, enriched));
       if (selectedOrder && getOrderId(selectedOrder) === getOrderId(enriched)) {
@@ -202,17 +215,25 @@ export default function OrdersPage() {
       socket.off('payment_success', handlePaymentSuccess);
       socket.off('order_rating', handleOrderRating);
     };
-  }, [socket, selectedOrder, user?._id, getBranchName]);
+  }, [socket, selectedOrder, user?._id, getBranchName, ordersBranchId]);
 
   const fetchOrders = async () => {
+    const activeBranchId = isBranchLocked
+      ? String(user?.branchId || '')
+      : ordersBranchId;
+
+    if (!activeBranchId) {
+      setLoading(false);
+      return;
+    }
+
     try {
+      setLoading(true);
       const params = {
         status: statusFilter,
-        paymentStatus: paymentFilter
+        paymentStatus: paymentFilter,
+        branchId: activeBranchId
       };
-      if (!showBranchGroupedView && branchQueryParams.branchId) {
-        params.branchId = branchQueryParams.branchId;
-      }
       const res = await API.get('/orders', { params });
       if (res.data.success) {
         setOrders((res.data.orders || []).map((order) => enrichOrderBranch(order)));
@@ -355,8 +376,8 @@ export default function OrdersPage() {
   };
 
   const filteredOrders = useMemo(() => {
-    return orders.filter(order => {
-      const query = searchTerm.toLowerCase();
+    const query = searchTerm.toLowerCase();
+    return orders.filter((order) => {
       const branchName = resolveOrderBranchName(order, getBranchName).toLowerCase();
       return (
         order.orderNumber.toLowerCase().includes(query) ||
@@ -374,8 +395,13 @@ export default function OrdersPage() {
     });
   }, [orders, searchTerm, getBranchName]);
 
+  const dayFilteredOrders = useMemo(
+    () => filterOrdersByDay(filteredOrders, dayFilter),
+    [filteredOrders, dayFilter]
+  );
+
   const sortedOrders = useMemo(() => {
-    return [...filteredOrders].sort((a, b) => {
+    return [...dayFilteredOrders].sort((a, b) => {
       let aVal = a[sortField];
       let bVal = b[sortField];
 
@@ -388,7 +414,7 @@ export default function OrdersPage() {
       if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1;
       return 0;
     });
-  }, [filteredOrders, sortField, sortDirection]);
+  }, [dayFilteredOrders, sortField, sortDirection]);
 
   const totalPages = Math.ceil(sortedOrders.length / itemsPerPage) || 1;
   const paginatedOrders = useMemo(() => {
@@ -397,32 +423,54 @@ export default function OrdersPage() {
   }, [sortedOrders, currentPage, itemsPerPage]);
 
   const globalDayStats = useMemo(
-    () => computeOrderDayStats(filteredOrders),
-    [filteredOrders]
+    () => computeOrderDayStats(dayFilteredOrders),
+    [dayFilteredOrders]
   );
 
-  const branchOrderGroups = useMemo(() => {
-    if (!showBranchGroupedView) return [];
+  const branchPickerGroups = useMemo(() => {
+    if (!showBranchPicker) return [];
     const resolveName = (order) => resolveOrderBranchName(order, getBranchName);
-    return buildBranchOrderGroups(filteredOrders, branches, getBranchName, resolveName).map((group) => ({
-      ...group,
-      visibleOrders: filterOrdersByDay(
-        [...group.orders].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)),
-        dayFilter
-      )
-    }));
-  }, [showBranchGroupedView, filteredOrders, branches, getBranchName, dayFilter]);
+    return buildBranchOrderGroups(statsOrders, branches, getBranchName, resolveName);
+  }, [showBranchPicker, statsOrders, branches, getBranchName]);
 
-  const toggleBranchExpand = (branchId) => {
-    setExpandedBranches((prev) => {
-      const next = new Set(prev);
-      if (next.has(branchId)) next.delete(branchId);
-      else next.add(branchId);
-      return next;
-    });
+  const handleSelectBranch = (branchId) => {
+    setOrdersBranchId(String(branchId));
+    setSelectedBranchId(String(branchId));
+    setCurrentPage(1);
+    setSearchTerm('');
+    setDayFilter('all');
+  };
+
+  const handleChangeBranch = () => {
+    setOrdersBranchId(null);
+    setSelectedBranchId('all');
+    setOrders([]);
+    setCurrentPage(1);
+    setSearchTerm('');
+    setDayFilter('all');
   };
 
   const formatRupee = (amount) => `₹${Math.round(Number(amount) || 0).toLocaleString('en-IN')}`;
+  const selectedBranchName = ordersBranchId ? getBranchName(ordersBranchId) : '';
+
+  useEffect(() => {
+    const orderParam = new URLSearchParams(location.search).get('order') || '';
+    if (!orderParam) return;
+
+    const match =
+      orders.find((o) => o.orderNumber === orderParam) ||
+      statsOrders.find((o) => o.orderNumber === orderParam);
+
+    if (match?.branchId && showBranchPicker) {
+      handleSelectBranch(match.branchId);
+      return;
+    }
+
+    if (!loading && match) {
+      setSelectedOrder(enrichOrderBranch(match));
+      stripOrderFromUrl();
+    }
+  }, [location.search, orders, statsOrders, loading, showBranchPicker]);
 
   const sendWhatsAppBill = async (order) => {
     if (!order?.customerMobile) {
@@ -521,12 +569,6 @@ export default function OrdersPage() {
       <td style={{ padding: '0.85rem 1rem', fontWeight: '800', color: 'var(--primary)' }}>
         {order.orderNumber}
       </td>
-
-      {!showBranchGroupedView && hasMultipleBranches && (
-        <td style={{ padding: '0.85rem 1rem' }}>
-          <OrderBranchBadge name={resolveOrderBranchName(order, getBranchName)} />
-        </td>
-      )}
 
       <td style={{ padding: '0.85rem 1rem', fontWeight: '700' }}>
         Table {order.tableNumber}
@@ -648,9 +690,6 @@ export default function OrdersPage() {
           ORDER # <ArrowUpDown size={12} />
         </div>
       </th>
-      {!showBranchGroupedView && hasMultipleBranches && (
-        <th style={{ padding: '0.8rem 1rem' }}>BRANCH</th>
-      )}
       <th onClick={() => handleSort('tableNumber')} style={{ padding: '0.8rem 1rem', cursor: 'pointer' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
           TABLE <ArrowUpDown size={12} />
@@ -695,69 +734,136 @@ export default function OrdersPage() {
     <div className="admin-layout">
       <Sidebar />
       <div className="admin-main">
-        <Header title={showBranchGroupedView ? 'Orders — Branch Wise' : 'Orders & Payment'} />
+        <Header title={showBranchPicker ? 'Select Branch' : `Orders — ${selectedBranchName || 'Branch'}`} />
         <div className="admin-content">
 
-          {showBranchGroupedView && (
-            <>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.85rem', marginBottom: '1rem' }}>
-                <div className="admin-panel admin-panel--padded" style={{ borderLeft: '4px solid var(--primary)' }}>
-                  <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 700 }}>Aaj (Today)</div>
-                  <div style={{ fontSize: '1.35rem', fontWeight: 800, color: 'var(--primary)' }}>{globalDayStats.today.count}</div>
-                  <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{formatRupee(globalDayStats.today.revenue)}</div>
-                </div>
-                <div className="admin-panel admin-panel--padded" style={{ borderLeft: '4px solid #6366f1' }}>
-                  <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 700 }}>Kal (Yesterday)</div>
-                  <div style={{ fontSize: '1.35rem', fontWeight: 800, color: '#4338ca' }}>{globalDayStats.yesterday.count}</div>
-                  <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{formatRupee(globalDayStats.yesterday.revenue)}</div>
-                </div>
-                <div className="admin-panel admin-panel--padded" style={{ borderLeft: '4px solid #15803d' }}>
-                  <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 700 }}>Total Orders</div>
-                  <div style={{ fontSize: '1.35rem', fontWeight: 800, color: '#15803d' }}>{globalDayStats.total.count}</div>
-                  <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{formatRupee(globalDayStats.total.revenue)}</div>
-                </div>
-                <div className="admin-panel admin-panel--padded" style={{ borderLeft: '4px solid #b45309' }}>
-                  <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 700 }}>Branches</div>
-                  <div style={{ fontSize: '1.35rem', fontWeight: 800, color: '#b45309' }}>{branches.length}</div>
-                  <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Alag-alag section mein</div>
-                </div>
+          {showBranchPicker ? (
+            <div>
+              <div className="admin-panel admin-panel--padded" style={{ marginBottom: '1.25rem' }}>
+                <h3 style={{ fontSize: '1.1rem', fontWeight: 800, marginBottom: '0.35rem', color: 'var(--secondary)' }}>
+                  Select a branch to view orders
+                </h3>
+                <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', margin: 0 }}>
+                  Orders are shown one branch at a time. Choose the branch you want to manage.
+                </p>
               </div>
 
-              <div className="admin-panel admin-panel--padded" style={{ marginBottom: '1rem', display: 'flex', flexWrap: 'wrap', gap: '0.5rem', alignItems: 'center' }}>
-                <CalendarDays size={18} color="var(--primary)" />
-                <span style={{ fontWeight: 700, fontSize: '0.85rem', marginRight: '0.35rem' }}>Din filter:</span>
-                {[
-                  { id: 'all', label: 'Sabhi Orders' },
-                  { id: 'today', label: 'Sirf Aaj' },
-                  { id: 'yesterday', label: 'Sirf Kal' }
-                ].map((opt) => (
-                  <button
-                    key={opt.id}
-                    type="button"
-                    onClick={() => setDayFilter(opt.id)}
-                    className={dayFilter === opt.id ? 'btn btn-primary btn-sm' : 'btn btn-secondary btn-sm'}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
-            </>
-          )}
+              {statsLoading ? (
+                <div className="admin-panel admin-panel--padded" style={{ textAlign: 'center', color: 'var(--text-muted)' }}>
+                  <Loader2 size={24} className="animate-spin" style={{ margin: '0 auto 0.5rem' }} />
+                  Loading branches...
+                </div>
+              ) : (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1rem' }}>
+                  {branchPickerGroups.map((group) => (
+                    <button
+                      key={group.branchId}
+                      type="button"
+                      onClick={() => handleSelectBranch(group.branchId)}
+                      className="admin-panel admin-panel--padded"
+                      style={{
+                        textAlign: 'left',
+                        cursor: 'pointer',
+                        border: '1px solid var(--border)',
+                        transition: 'border-color 0.15s ease, box-shadow 0.15s ease',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '0.75rem'
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          <MapPin size={18} color="var(--primary)" />
+                          <span style={{ fontWeight: 800, fontSize: '1.05rem', color: 'var(--secondary)' }}>
+                            {group.branchName}
+                          </span>
+                        </div>
+                        <ArrowRight size={18} color="var(--primary)" />
+                      </div>
 
-          {!showBranchGroupedView && (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '0.75rem', marginBottom: '1rem' }}>
-              <div className="admin-panel admin-panel--padded" style={{ borderLeft: '4px solid var(--primary)' }}>
-                <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 700 }}>Aaj</div>
-                <div style={{ fontSize: '1.2rem', fontWeight: 800 }}>{globalDayStats.today.count} orders</div>
-                <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>{formatRupee(globalDayStats.today.revenue)}</div>
-              </div>
-              <div className="admin-panel admin-panel--padded" style={{ borderLeft: '4px solid #6366f1' }}>
-                <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 700 }}>Kal</div>
-                <div style={{ fontSize: '1.2rem', fontWeight: 800 }}>{globalDayStats.yesterday.count} orders</div>
-                <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>{formatRupee(globalDayStats.yesterday.revenue)}</div>
-              </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', fontSize: '0.78rem' }}>
+                        <div style={{ background: '#f0fdf4', padding: '0.55rem 0.65rem', borderRadius: '8px' }}>
+                          <div style={{ color: 'var(--text-muted)', fontWeight: 700 }}>Today</div>
+                          <div style={{ fontWeight: 800, color: '#15803d' }}>{group.stats.today.count} orders</div>
+                          <div style={{ color: 'var(--text-muted)' }}>{formatRupee(group.stats.today.revenue)}</div>
+                        </div>
+                        <div style={{ background: '#eff6ff', padding: '0.55rem 0.65rem', borderRadius: '8px' }}>
+                          <div style={{ color: 'var(--text-muted)', fontWeight: 700 }}>Yesterday</div>
+                          <div style={{ fontWeight: 800, color: '#1d4ed8' }}>{group.stats.yesterday.count} orders</div>
+                          <div style={{ color: 'var(--text-muted)' }}>{formatRupee(group.stats.yesterday.revenue)}</div>
+                        </div>
+                      </div>
+
+                      <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                        Total: <strong>{group.stats.total.count}</strong> orders · {formatRupee(group.stats.total.revenue)}
+                      </div>
+
+                      <span className="btn btn-primary btn-sm" style={{ alignSelf: 'flex-start' }}>
+                        View Orders
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {!statsLoading && branchPickerGroups.length === 0 && (
+                <div className="admin-panel admin-panel--padded" style={{ textAlign: 'center', color: 'var(--text-muted)' }}>
+                  No branches found. Add branches from the Branches page.
+                </div>
+              )}
             </div>
+          ) : (
+            <>
+          {hasMultipleBranches && !isBranchLocked && (
+            <button
+              type="button"
+              onClick={handleChangeBranch}
+              className="btn btn-secondary btn-sm"
+              style={{ marginBottom: '1rem', display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
+            >
+              <ArrowLeft size={16} /> Change Branch
+            </button>
           )}
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '0.75rem', marginBottom: '1rem' }}>
+            <div className="admin-panel admin-panel--padded" style={{ borderLeft: '4px solid var(--primary)' }}>
+              <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 700 }}>Today</div>
+              <div style={{ fontSize: '1.2rem', fontWeight: 800 }}>{globalDayStats.today.count} orders</div>
+              <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>{formatRupee(globalDayStats.today.revenue)}</div>
+            </div>
+            <div className="admin-panel admin-panel--padded" style={{ borderLeft: '4px solid #6366f1' }}>
+              <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 700 }}>Yesterday</div>
+              <div style={{ fontSize: '1.2rem', fontWeight: 800 }}>{globalDayStats.yesterday.count} orders</div>
+              <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>{formatRupee(globalDayStats.yesterday.revenue)}</div>
+            </div>
+            <div className="admin-panel admin-panel--padded" style={{ borderLeft: '4px solid #15803d' }}>
+              <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 700 }}>Total (filtered)</div>
+              <div style={{ fontSize: '1.2rem', fontWeight: 800 }}>{globalDayStats.total.count} orders</div>
+              <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>{formatRupee(globalDayStats.total.revenue)}</div>
+            </div>
+          </div>
+
+          <div className="admin-panel admin-panel--padded" style={{ marginBottom: '1rem', display: 'flex', flexWrap: 'wrap', gap: '0.5rem', alignItems: 'center' }}>
+            <CalendarDays size={18} color="var(--primary)" />
+            <span style={{ fontWeight: 700, fontSize: '0.85rem', marginRight: '0.35rem' }}>Date filter:</span>
+            {[
+              { id: 'all', label: 'All Orders' },
+              { id: 'today', label: 'Today Only' },
+              { id: 'yesterday', label: 'Yesterday Only' }
+            ].map((opt) => (
+              <button
+                key={opt.id}
+                type="button"
+                onClick={() => {
+                  setDayFilter(opt.id);
+                  setCurrentPage(1);
+                }}
+                className={dayFilter === opt.id ? 'btn btn-primary btn-sm' : 'btn btn-secondary btn-sm'}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
 
           {/* DATATABLE TOP CONTROLS */}
           <div className="admin-panel admin-panel--padded" style={{ marginBottom: '1.25rem', boxShadow: 'var(--shadow-sm)' }}>
@@ -819,87 +925,7 @@ export default function OrdersPage() {
             </div>
           </div>
 
-          {/* ORDERS BODY */}
-          {showBranchGroupedView ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              {branchOrderGroups.map((group) => {
-                const isExpanded = expandedBranches.has(group.branchId);
-                return (
-                  <div key={group.branchId} className="admin-panel" style={{ overflow: 'hidden' }}>
-                    <button
-                      type="button"
-                      onClick={() => toggleBranchExpand(group.branchId)}
-                      style={{
-                        width: '100%',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        gap: '1rem',
-                        padding: '1rem 1.15rem',
-                        background: '#f8fafc',
-                        border: 'none',
-                        borderBottom: isExpanded ? '1px solid var(--border)' : 'none',
-                        cursor: 'pointer',
-                        textAlign: 'left'
-                      }}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', minWidth: 0 }}>
-                        <MapPin size={18} color="var(--primary)" />
-                        <div>
-                          <div style={{ fontWeight: 800, fontSize: '1.05rem', color: 'var(--secondary)' }}>
-                            {group.branchName}
-                          </div>
-                          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.15rem' }}>
-                            Aaj: <strong>{group.stats.today.count}</strong> orders ({formatRupee(group.stats.today.revenue)})
-                            {' · '}
-                            Kal: <strong>{group.stats.yesterday.count}</strong> orders ({formatRupee(group.stats.yesterday.revenue)})
-                            {' · '}
-                            Total: <strong>{group.stats.total.count}</strong>
-                          </div>
-                        </div>
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', flexShrink: 0 }}>
-                        <OrderBranchBadge name={group.branchName} compact />
-                        <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-muted)' }}>
-                          {group.visibleOrders.length} dikha rahe hain
-                        </span>
-                        {isExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
-                      </div>
-                    </button>
-
-                    {isExpanded && (
-                      <div className="admin-table-wrap">
-                        <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.85rem' }}>
-                          <thead style={{ background: '#fff', borderBottom: '1px solid var(--border)', color: 'var(--text-muted)', fontSize: '0.75rem' }}>
-                            {tableHeadRow}
-                          </thead>
-                          <tbody>
-                            {group.visibleOrders.map((order) => renderOrderRow(order))}
-                            {group.visibleOrders.length === 0 && !loading && (
-                              <tr>
-                                <td colSpan={10} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
-                                  {dayFilter === 'today'
-                                    ? 'Aaj is branch mein koi order nahi.'
-                                    : dayFilter === 'yesterday'
-                                      ? 'Kal is branch mein koi order nahi.'
-                                      : 'Is branch mein abhi koi order nahi.'}
-                                </td>
-                              </tr>
-                            )}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-              {branchOrderGroups.length === 0 && !loading && (
-                <div className="admin-panel admin-panel--padded" style={{ textAlign: 'center', color: 'var(--text-muted)' }}>
-                  Koi branch ya order nahi mila.
-                </div>
-              )}
-            </div>
-          ) : (
+          {/* ORDERS TABLE */}
           <div className="admin-panel">
             <div className="admin-table-wrap">
             <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.85rem' }}>
@@ -910,8 +936,12 @@ export default function OrdersPage() {
                 {paginatedOrders.map((order) => renderOrderRow(order))}
                 {paginatedOrders.length === 0 && !loading && (
                   <tr>
-                    <td colSpan={hasMultipleBranches ? 11 : 10} style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
-                      No orders found matching search criteria.
+                    <td colSpan={10} style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
+                      {dayFilter === 'today'
+                        ? 'No orders for this branch today.'
+                        : dayFilter === 'yesterday'
+                          ? 'No orders for this branch yesterday.'
+                          : 'No orders found matching your filters.'}
                     </td>
                   </tr>
                 )}
@@ -966,6 +996,7 @@ export default function OrdersPage() {
               </div>
             </div>
           </div>
+            </>
           )}
 
         </div>
