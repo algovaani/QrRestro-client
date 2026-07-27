@@ -734,7 +734,11 @@ export default function OrdersPage() {
     <div className="admin-layout">
       <Sidebar />
       <div className="admin-main">
-        <Header title={showBranchPicker ? 'Select Branch' : `Orders — ${selectedBranchName || 'Branch'}`} />
+        <Header
+          title={showBranchPicker ? 'Select Branch' : `Orders — ${selectedBranchName || 'Branch'}`}
+          hideBranchSelector
+          branchLabel={showBranchPicker ? '' : (selectedBranchName || '')}
+        />
         <div className="admin-content">
 
           {showBranchPicker ? (

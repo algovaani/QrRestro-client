@@ -13,7 +13,7 @@ import { MapPin } from 'lucide-react';
 import { getAdminOrderDetailsPath } from '../../utils/adminNotifications';
 import { useBranch } from '../../context/BranchContext';
 
-export default function Header({ title }) {
+export default function Header({ title, hideBranchSelector = false, branchLabel = '' }) {
   const { notifications, removeNotification, isConnected } = useSocket();
   const { user } = useAuth();
   const { getBranchName } = useBranch();
@@ -38,6 +38,13 @@ export default function Header({ title }) {
               <MapPin size={15} />
               <span style={{ fontSize: '0.8rem', fontWeight: '700' }}>{user?.branchName || 'Branch'}</span>
             </div>
+          ) : hideBranchSelector ? (
+            branchLabel ? (
+              <div className="admin-branch-selector" title="Selected branch">
+                <MapPin size={15} />
+                <span style={{ fontSize: '0.8rem', fontWeight: '700' }}>{branchLabel}</span>
+              </div>
+            ) : null
           ) : (
             <BranchSelector />
           )}

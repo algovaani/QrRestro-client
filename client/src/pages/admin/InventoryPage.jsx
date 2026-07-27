@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useLocation, useSearchParams } from 'react-router-dom';
 import API from '../../services/api';
 import Sidebar from '../../components/common/Sidebar';
 import Header from '../../components/common/Header';
@@ -7,7 +7,6 @@ import { useBranch } from '../../context/BranchContext';
 import { useAuth } from '../../context/AuthContext';
 import { isBranchAdmin } from '../../utils/adminPaths';
 import {
-  Package,
   Plus,
   Minus,
   Edit2,
@@ -17,7 +16,10 @@ import {
   AlertTriangle,
   CheckCircle2,
   XCircle,
-  MapPin
+  MapPin,
+  ArrowLeft,
+  ArrowRight,
+  Loader2
 } from 'lucide-react';
 
 const UNITS = ['kg', 'g', 'L', 'ml', 'pcs', 'packet', 'dozen', 'box'];
@@ -35,22 +37,26 @@ const emptyForm = {
   unit: 'kg'
 };
 
+const emptySummary = { total: 0, in_stock: 0, low_stock: 0, out_of_stock: 0 };
+
 export default function InventoryPage() {
+  const location = useLocation();
   const [searchParams] = useSearchParams();
   const { user } = useAuth();
   const branchMode = isBranchAdmin(user);
   const {
-    branchQueryParams,
-    selectedBranchId,
-    isAllBranches,
     branches,
     setSelectedBranchId,
     getBranchName,
-    selectedBranch
+    hasMultipleBranches,
+    isBranchLocked
   } = useBranch();
+
+  const [stockBranchId, setStockBranchId] = useState(null);
   const [items, setItems] = useState([]);
-  const [byBranch, setByBranch] = useState([]);
-  const [summary, setSummary] = useState({ total: 0, in_stock: 0, low_stock: 0, out_of_stock: 0 });
+  const [summary, setSummary] = useState(emptySummary);
+  const [pickerGroups, setPickerGroups] = useState([]);
+  const [pickerLoading, setPickerLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
@@ -60,89 +66,153 @@ export default function InventoryPage() {
   const [modalError, setModalError] = useState('');
   const [saving, setSaving] = useState(false);
   const [actionLoading, setActionLoading] = useState('');
-  const [modalBranchId, setModalBranchId] = useState('');
 
+  // Same pattern as Orders page
+  const showBranchPicker = hasMultipleBranches && !isBranchLocked && !stockBranchId;
+  const selectedBranchName = stockBranchId ? getBranchName(stockBranchId) : '';
+
+  const selectedBranchMeta = useMemo(
+    () => branches.find((b) => String(b._id) === String(stockBranchId)) || null,
+    [branches, stockBranchId]
+  );
+  const branchLocked = Boolean(
+    selectedBranchMeta?.suspendedByLimit || selectedBranchMeta?.isActive === false
+  );
+
+  // Init branch scope — same UX as Orders (picker first for multi-branch admin)
   useEffect(() => {
     const fromUrl = searchParams.get('branchId');
     if (fromUrl) {
-      setSelectedBranchId(fromUrl);
+      setStockBranchId(String(fromUrl));
+      setSelectedBranchId(String(fromUrl));
+      return;
     }
-  }, [searchParams, setSelectedBranchId]);
 
-  const resolvedBranchId = useMemo(() => {
-    if (!isAllBranches && selectedBranchId && selectedBranchId !== 'all') {
-      return String(selectedBranchId);
+    if (isBranchLocked && user?.branchId) {
+      setStockBranchId(String(user.branchId));
+      return;
     }
-    if (branches.length === 1) {
-      return String(branches[0]._id);
+
+    if (!hasMultipleBranches && branches.length === 1) {
+      setStockBranchId(String(branches[0]._id));
+      return;
     }
-    return '';
-  }, [isAllBranches, selectedBranchId, branches]);
 
-  const showGroupedByBranch = !branchMode && isAllBranches && branches.length > 1;
+    if (hasMultipleBranches && !isBranchLocked) {
+      // Entering Kitchen Stock: always start with branch picker (like Orders)
+      setStockBranchId(null);
+      setSelectedBranchId('all');
+      setItems([]);
+      setSummary(emptySummary);
+    }
+    // Only re-run when navigating to this page — not when branches list refreshes after select
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.pathname]);
 
-  const operationalBranches = useMemo(
-    () => branches.filter((b) => b.isActive !== false && !b.suspendedByLimit),
-    [branches]
-  );
+  // Keep single-branch / branch-manager lock in sync once branches load
+  useEffect(() => {
+    if (searchParams.get('branchId')) return;
+    if (isBranchLocked && user?.branchId) {
+      setStockBranchId(String(user.branchId));
+      return;
+    }
+    if (!hasMultipleBranches && branches.length === 1 && !stockBranchId) {
+      setStockBranchId(String(branches[0]._id));
+    }
+  }, [isBranchLocked, hasMultipleBranches, branches, user?.branchId, searchParams, stockBranchId]);
 
-  const isBranchStockLocked = useCallback(
-    (branchId) => {
-      const branch = branches.find((b) => String(b._id) === String(branchId));
-      if (!branch) return false;
-      return Boolean(branch.suspendedByLimit) || branch.isActive === false;
-    },
-    [branches]
-  );
+  // Branch picker stats — all branches summary (like Orders stats fetch)
+  useEffect(() => {
+    if (!showBranchPicker) return;
+    setPickerLoading(true);
+    API.get('/inventory')
+      .then((res) => {
+        if (!res.data.success) return;
+        const byBranch = res.data.byBranch || [];
+        const groups = (branches.length ? branches : byBranch.map((b) => ({
+          _id: b.branchId,
+          branchName: b.branchName,
+          suspendedByLimit: b.suspendedByLimit,
+          isActive: b.branchActive !== false
+        }))).map((branch) => {
+          const id = String(branch._id || branch.branchId);
+          const match = byBranch.find((b) => String(b.branchId) === id);
+          return {
+            branchId: id,
+            branchName: branch.branchName || match?.branchName || 'Branch',
+            suspendedByLimit: Boolean(branch.suspendedByLimit ?? match?.suspendedByLimit),
+            isActive: branch.isActive !== false && match?.branchActive !== false,
+            total: match?.total || 0,
+            in_stock: match?.in_stock || 0,
+            low_stock: match?.low_stock || 0,
+            out_of_stock: match?.out_of_stock || 0
+          };
+        });
+        setPickerGroups(groups);
+      })
+      .catch(console.error)
+      .finally(() => setPickerLoading(false));
+  }, [showBranchPicker, user?._id, branches]);
 
   const fetchInventory = useCallback(async () => {
+    if (!stockBranchId) {
+      setItems([]);
+      setSummary(emptySummary);
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     try {
-      const params = {
-        ...branchQueryParams,
-        status: statusFilter,
-        search: searchTerm.trim() || undefined
-      };
-      const res = await API.get('/inventory', { params });
+      const res = await API.get('/inventory', {
+        params: {
+          branchId: stockBranchId,
+          status: statusFilter,
+          search: searchTerm.trim() || undefined
+        }
+      });
       if (res.data.success) {
         setItems(res.data.items || []);
-        setByBranch(res.data.byBranch || []);
-        setSummary(res.data.summary || { total: 0, in_stock: 0, low_stock: 0, out_of_stock: 0 });
+        setSummary(res.data.summary || emptySummary);
       }
     } catch (err) {
       console.error(err);
       setItems([]);
-      setByBranch([]);
+      setSummary(emptySummary);
     } finally {
       setLoading(false);
     }
-  }, [branchQueryParams, statusFilter, searchTerm]);
+  }, [stockBranchId, statusFilter, searchTerm]);
 
   useEffect(() => {
+    if (showBranchPicker) return;
     fetchInventory();
-  }, [fetchInventory]);
+  }, [fetchInventory, showBranchPicker]);
 
-  const handleOpenAdd = (presetBranchId = '') => {
-    if (operationalBranches.length === 0) {
-      alert(
-        branches.some((b) => b.suspendedByLimit)
-          ? 'All extra branches are suspended by plan limit. Delete a branch or ask Super Admin to increase the limit.'
-          : 'Please create a branch first from the Branches page.'
-      );
+  const handleSelectBranch = (branchId) => {
+    setStockBranchId(String(branchId));
+    setSelectedBranchId(String(branchId));
+    setSearchTerm('');
+    setStatusFilter('all');
+  };
+
+  const handleChangeBranch = () => {
+    setStockBranchId(null);
+    setSelectedBranchId('all');
+    setItems([]);
+    setSummary(emptySummary);
+    setSearchTerm('');
+    setStatusFilter('all');
+  };
+
+  const handleOpenAdd = () => {
+    if (!stockBranchId) {
+      alert('Please select a branch first.');
       return;
     }
-    if (presetBranchId && isBranchStockLocked(presetBranchId)) {
+    if (branchLocked) {
       alert('This branch is suspended because it exceeds your branch limit. Kitchen stock cannot be changed.');
       return;
-    }
-    const defaultBranch =
-      presetBranchId ||
-      resolvedBranchId ||
-      (operationalBranches.length === 1 ? String(operationalBranches[0]._id) : '');
-    if (defaultBranch && isBranchStockLocked(defaultBranch)) {
-      setModalBranchId('');
-    } else {
-      setModalBranchId(defaultBranch);
     }
     setEditingItem(null);
     setFormData(emptyForm);
@@ -151,12 +221,11 @@ export default function InventoryPage() {
   };
 
   const handleOpenEdit = (item) => {
-    if (item.suspendedByLimit || isBranchStockLocked(item.branchId)) {
+    if (branchLocked || item.suspendedByLimit) {
       alert('This branch is suspended because it exceeds your branch limit. Kitchen stock cannot be changed.');
       return;
     }
     setEditingItem(item);
-    setModalBranchId(String(item.branchId || ''));
     setFormData({
       customItemName: item.customItemName || item.itemName || '',
       quantity: String(item.quantity ?? 0),
@@ -169,7 +238,7 @@ export default function InventoryPage() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    const branchId = editingItem?.branchId || modalBranchId || resolvedBranchId;
+    const branchId = editingItem?.branchId || stockBranchId;
     if (!branchId) {
       setModalError('Please select a branch first.');
       return;
@@ -200,7 +269,7 @@ export default function InventoryPage() {
   };
 
   const handleAdjust = async (item, adjustment) => {
-    if (item.suspendedByLimit || isBranchStockLocked(item.branchId)) {
+    if (branchLocked || item.suspendedByLimit) {
       alert('This branch is suspended because it exceeds your branch limit. Kitchen stock cannot be changed.');
       return;
     }
@@ -225,367 +294,308 @@ export default function InventoryPage() {
     }
   };
 
-  const pageTitle = branchMode
-    ? `Kitchen Stock — ${user?.branchName || 'Branch'}`
-    : selectedBranch
-      ? `Kitchen Stock — ${selectedBranch.branchName}`
-      : 'Kitchen Stock — All Branches';
-
-  const renderItemRows = (list) =>
-    list.map((item) => {
-      const statusMeta = STATUS_LABELS[item.stockStatus] || STATUS_LABELS.in_stock;
-      const StatusIcon = statusMeta.icon;
-      const locked = Boolean(item.suspendedByLimit) || isBranchStockLocked(item.branchId);
-      return (
-        <tr key={item._id} style={{ borderBottom: '1px solid #f1f5f9', opacity: locked ? 0.65 : 1 }}>
-          <td style={{ padding: '0.85rem 1rem' }}>
-            <div style={{ fontWeight: '700' }}>{item.itemName}</div>
-            <div style={{ fontSize: '0.75rem', color: locked ? '#b45309' : 'var(--text-muted)' }}>
-              {locked ? 'Suspended branch — stock locked' : 'Kitchen Stock'}
-            </div>
-          </td>
-          {!showGroupedByBranch && isAllBranches && (
-            <td style={{ padding: '0.85rem 1rem', fontSize: '0.82rem' }}>
-              {item.branchName || getBranchName(item.branchId)}
-            </td>
-          )}
-          <td style={{ padding: '0.85rem 1rem' }}>
-            <strong
-              style={{
-                fontSize: '1rem',
-                color:
-                  item.stockStatus === 'out_of_stock' || item.stockStatus === 'low_stock'
-                    ? statusMeta.color
-                    : undefined
-              }}
-            >
-              {item.quantity}
-            </strong>
-            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginLeft: '0.25rem' }}>
-              {item.unit}
-            </span>
-          </td>
-          <td style={{ padding: '0.85rem 1rem' }}>
-            {item.lowStockThreshold} {item.unit}
-          </td>
-          <td style={{ padding: '0.85rem 1rem' }}>
-            <span
-              className={`badge ${statusMeta.className}`}
-              style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}
-            >
-              <StatusIcon size={12} />
-              {statusMeta.label}
-            </span>
-          </td>
-          <td style={{ padding: '0.85rem 1rem', textAlign: 'right' }}>
-            <div style={{ display: 'flex', gap: '0.35rem', justifyContent: 'flex-end' }}>
-              <button
-                type="button"
-                className="btn btn-secondary btn-sm"
-                title={locked ? 'Branch suspended' : 'Reduce stock'}
-                disabled={locked || actionLoading === item._id}
-                onClick={() => handleAdjust(item, -1)}
-              >
-                <Minus size={14} />
-              </button>
-              <button
-                type="button"
-                className="btn btn-secondary btn-sm"
-                title={locked ? 'Branch suspended' : 'Add stock'}
-                disabled={locked || actionLoading === item._id}
-                onClick={() => handleAdjust(item, 1)}
-              >
-                <Plus size={14} />
-              </button>
-              <button
-                type="button"
-                className="btn btn-secondary btn-sm"
-                disabled={locked}
-                title={locked ? 'Branch suspended' : 'Edit'}
-                onClick={() => handleOpenEdit(item)}
-              >
-                <Edit2 size={14} />
-              </button>
-              <button
-                type="button"
-                className="btn btn-secondary btn-sm"
-                onClick={() => handleDelete(item)}
-                style={{ color: 'var(--danger)' }}
-                title="Remove stock item"
-              >
-                <Trash2 size={14} />
-              </button>
-            </div>
-          </td>
-        </tr>
-      );
-    });
-
-  const renderTable = (list, colSpan) => (
-    <div className="admin-table-wrap">
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
-        <thead
-          style={{
-            background: '#f8fafc',
-            borderBottom: '1px solid var(--border)',
-            color: 'var(--text-muted)',
-            fontSize: '0.75rem'
-          }}
-        >
-          <tr>
-            <th style={{ padding: '0.85rem 1rem', textAlign: 'left' }}>ITEM</th>
-            {!showGroupedByBranch && isAllBranches && (
-              <th style={{ padding: '0.85rem 1rem', textAlign: 'left' }}>BRANCH</th>
-            )}
-            <th style={{ padding: '0.85rem 1rem', textAlign: 'left' }}>QUANTITY LEFT</th>
-            <th style={{ padding: '0.85rem 1rem', textAlign: 'left' }}>LOW ALERT</th>
-            <th style={{ padding: '0.85rem 1rem', textAlign: 'left' }}>STATUS</th>
-            <th style={{ padding: '0.85rem 1rem', textAlign: 'right' }}>ACTIONS</th>
-          </tr>
-        </thead>
-        <tbody>
-          {loading ? (
-            <tr>
-              <td colSpan={colSpan} style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>
-                Loading inventory...
-              </td>
-            </tr>
-          ) : list.length === 0 ? (
-            <tr>
-              <td colSpan={colSpan} style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>
-                No kitchen stock yet. Use &quot;Add Stock Item&quot; to add items like salt, pepper, or ghee.
-              </td>
-            </tr>
-          ) : (
-            renderItemRows(list)
-          )}
-        </tbody>
-      </table>
-    </div>
-  );
-
   return (
     <div className="admin-layout">
       <Sidebar />
       <div className="admin-main">
-        <Header title={pageTitle} />
+        <Header
+          title={showBranchPicker ? 'Select Branch' : `Kitchen Stock — ${selectedBranchName || user?.branchName || 'Branch'}`}
+          hideBranchSelector
+          branchLabel={showBranchPicker ? '' : (selectedBranchName || user?.branchName || '')}
+        />
         <div className="admin-content">
-          <div className="admin-action-bar" style={{ marginBottom: '1rem', alignItems: 'flex-start' }}>
-            <div style={{ maxWidth: '720px' }}>
-              <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '0.5rem' }}>
-                {branchMode
-                  ? 'Manage kitchen stock for your branch — salt, oil, ghee, and similar items.'
-                  : 'View and manage kitchen stock for every branch. Each branch has its own inventory record.'}
-              </p>
-            </div>
-            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-              <button type="button" onClick={fetchInventory} className="btn btn-secondary btn-sm" title="Refresh">
-                <RefreshCw size={16} />
-              </button>
-              <button
-                type="button"
-                onClick={() => handleOpenAdd()}
-                className="btn btn-primary btn-sm"
-                disabled={
-                  (!branchMode && selectedBranch && isBranchStockLocked(selectedBranch._id)) ||
-                  operationalBranches.length === 0
-                }
-                title={
-                  operationalBranches.length === 0
-                    ? 'No active branches within plan limit'
-                    : selectedBranch && isBranchStockLocked(selectedBranch._id)
-                      ? 'Selected branch is suspended'
-                      : undefined
-                }
-              >
-                <Plus size={16} />
-                Add Stock Item
-              </button>
-            </div>
-          </div>
 
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
-              gap: '0.75rem',
-              marginBottom: '1rem'
-            }}
-          >
-            <div className="admin-panel admin-panel--padded" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: '600' }}>Total Items</div>
-                <div style={{ fontSize: '1.5rem', fontWeight: '800' }}>{summary.total}</div>
+          {showBranchPicker ? (
+            <div>
+              <div className="admin-panel admin-panel--padded" style={{ marginBottom: '1.25rem' }}>
+                <h3 style={{ fontSize: '1.1rem', fontWeight: 800, marginBottom: '0.35rem', color: 'var(--secondary)' }}>
+                  Select a branch to view kitchen stock
+                </h3>
+                <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', margin: 0 }}>
+                  Kitchen stock is shown one branch at a time. Choose the branch you want to manage.
+                </p>
               </div>
-              <Package size={22} color="var(--secondary)" />
-            </div>
-            <div className="admin-panel admin-panel--padded" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: '600' }}>In Stock</div>
-                <div style={{ fontSize: '1.5rem', fontWeight: '800', color: '#15803d' }}>{summary.in_stock}</div>
-              </div>
-              <CheckCircle2 size={22} color="#15803d" />
-            </div>
-            <div className="admin-panel admin-panel--padded" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: '600' }}>Low Stock</div>
-                <div style={{ fontSize: '1.5rem', fontWeight: '800', color: '#b45309' }}>{summary.low_stock}</div>
-              </div>
-              <AlertTriangle size={22} color="#b45309" />
-            </div>
-            <div className="admin-panel admin-panel--padded" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: '600' }}>Out of Stock</div>
-                <div style={{ fontSize: '1.5rem', fontWeight: '800', color: '#dc2626' }}>{summary.out_of_stock}</div>
-              </div>
-              <XCircle size={22} color="#dc2626" />
-            </div>
-          </div>
 
-          {showGroupedByBranch && (
-            <div style={{ marginBottom: '1.25rem' }}>
-              <h3 style={{ fontSize: '0.95rem', fontWeight: '800', marginBottom: '0.75rem', color: 'var(--secondary)' }}>
-                Stock by Branch
-              </h3>
-              <div className="admin-grid-cards" style={{ marginBottom: '0.5rem' }}>
-                {byBranch.map((branch) => {
-                  const suspended = Boolean(branch.suspendedByLimit) || branch.branchActive === false;
-                  return (
-                  <button
-                    key={String(branch.branchId)}
-                    type="button"
-                    onClick={() => setSelectedBranchId(String(branch.branchId))}
-                    className="admin-panel admin-panel--padded"
-                    style={{
-                      textAlign: 'left',
-                      border: `1px solid ${suspended ? '#fecaca' : 'var(--border)'}`,
-                      cursor: 'pointer',
-                      width: '100%',
-                      opacity: suspended ? 0.75 : 1
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.5rem' }}>
-                      <MapPin size={16} color={suspended ? '#b45309' : 'var(--primary)'} />
-                      <strong style={{ fontSize: '0.95rem' }}>{branch.branchName}</strong>
-                      {suspended && (
-                        <span className="badge badge-cancelled" style={{ fontSize: '0.65rem' }}>Suspended</span>
-                      )}
-                    </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.35rem', fontSize: '0.8rem' }}>
-                      <div>
-                        Items: <strong>{branch.total}</strong>
-                      </div>
-                      <div style={{ color: '#15803d' }}>
-                        In stock: <strong>{branch.in_stock}</strong>
-                      </div>
-                      <div style={{ color: '#b45309' }}>
-                        Low: <strong>{branch.low_stock}</strong>
-                      </div>
-                      <div style={{ color: '#dc2626' }}>
-                        Out: <strong>{branch.out_of_stock}</strong>
-                      </div>
-                    </div>
-                    {suspended && (
-                      <div style={{ marginTop: '0.5rem', fontSize: '0.72rem', color: '#b45309', fontWeight: 700 }}>
-                        Over branch limit — stock locked
-                      </div>
-                    )}
-                  </button>
-                  );
-                })}
-              </div>
-              <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                Click a branch card to filter that branch only, or keep &quot;All Branches&quot; selected to see the full record below.
-              </p>
-            </div>
-          )}
-
-          <div className="admin-panel" style={{ marginBottom: showGroupedByBranch ? '1rem' : 0 }}>
-            <div className="admin-panel--padded admin-toolbar" style={{ borderBottom: '1px solid var(--border)' }}>
-              <div className="admin-toolbar-search">
-                <Search
-                  size={18}
-                  style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }}
-                />
-                <input
-                  type="text"
-                  placeholder="Search salt, ghee, branch..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  style={{ width: '100%', paddingLeft: '38px' }}
-                />
-              </div>
-              <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} style={{ minWidth: '150px' }}>
-                <option value="all">All Status</option>
-                <option value="in_stock">In Stock</option>
-                <option value="low_stock">Low Stock</option>
-                <option value="out_of_stock">Out of Stock</option>
-              </select>
-            </div>
-
-            {!showGroupedByBranch &&
-              renderTable(items, isAllBranches && !showGroupedByBranch ? 6 : 5)}
-          </div>
-
-          {showGroupedByBranch &&
-            (loading ? (
-              <div className="admin-panel admin-panel--padded" style={{ textAlign: 'center', color: 'var(--text-muted)' }}>
-                Loading inventory...
-              </div>
-            ) : (
-              byBranch.map((branch) => {
-                const suspended = Boolean(branch.suspendedByLimit) || branch.branchActive === false;
-                return (
-                <div key={String(branch.branchId)} className="admin-panel" style={{ marginBottom: '1rem', opacity: suspended ? 0.8 : 1 }}>
-                  <div
-                    style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      gap: '0.75rem',
-                      flexWrap: 'wrap',
-                      padding: '0.85rem 1rem',
-                      borderBottom: '1px solid var(--border)',
-                      background: suspended ? '#fef2f2' : '#fff7ed'
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                      <MapPin size={18} color={suspended ? '#b45309' : 'var(--primary)'} />
-                      <div>
-                        <div style={{ fontWeight: '800', color: 'var(--secondary)', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                          {branch.branchName}
-                          {suspended && <span className="badge badge-cancelled">Suspended (limit)</span>}
-                        </div>
-                        <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-                          {branch.total} item{branch.total === 1 ? '' : 's'} · Low {branch.low_stock} · Out {branch.out_of_stock}
-                          {suspended ? ' · Stock locked' : ''}
-                        </div>
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      className="btn btn-primary btn-sm"
-                      disabled={suspended}
-                      title={suspended ? 'Suspended branch — stock locked' : undefined}
-                      onClick={() => handleOpenAdd(String(branch.branchId))}
-                    >
-                      <Plus size={14} />
-                      Add to {branch.branchName}
-                    </button>
-                  </div>
-                  {branch.items?.length
-                    ? renderTable(branch.items, 5)
-                    : (
-                      <div style={{ padding: '1.25rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
-                        {suspended
-                          ? 'This branch exceeds your plan limit. Delete it or ask Super Admin to raise the limit.'
-                          : 'No stock items in this branch yet.'}
-                      </div>
-                    )}
+              {pickerLoading ? (
+                <div className="admin-panel admin-panel--padded" style={{ textAlign: 'center', color: 'var(--text-muted)' }}>
+                  <Loader2 size={24} className="animate-spin" style={{ margin: '0 auto 0.5rem' }} />
+                  Loading branches...
                 </div>
-                );
-              })
-            ))}
+              ) : (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1rem' }}>
+                  {pickerGroups.map((group) => {
+                    const isSuspended = Boolean(group.suspendedByLimit) || group.isActive === false;
+                    return (
+                      <button
+                        key={group.branchId}
+                        type="button"
+                        onClick={() => !isSuspended && handleSelectBranch(group.branchId)}
+                        disabled={isSuspended}
+                        className="admin-panel admin-panel--padded"
+                        style={{
+                          textAlign: 'left',
+                          cursor: isSuspended ? 'not-allowed' : 'pointer',
+                          opacity: isSuspended ? 0.65 : 1,
+                          border: `1px solid ${isSuspended ? '#fecaca' : 'var(--border)'}`,
+                          transition: 'border-color 0.15s ease, box-shadow 0.15s ease',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '0.75rem'
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <MapPin size={18} color={isSuspended ? '#b45309' : 'var(--primary)'} />
+                            <span style={{ fontWeight: 800, fontSize: '1.05rem', color: 'var(--secondary)' }}>
+                              {group.branchName}
+                            </span>
+                          </div>
+                          {!isSuspended && <ArrowRight size={18} color="var(--primary)" />}
+                        </div>
+
+                        {isSuspended && (
+                          <div style={{ fontSize: '0.78rem', color: '#b45309', fontWeight: 700 }}>
+                            Suspended — exceeds branch limit. Delete this branch or ask Super Admin to increase limit.
+                          </div>
+                        )}
+
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', fontSize: '0.78rem' }}>
+                          <div style={{ background: '#f0fdf4', padding: '0.55rem 0.65rem', borderRadius: '8px' }}>
+                            <div style={{ color: 'var(--text-muted)', fontWeight: 700 }}>In Stock</div>
+                            <div style={{ fontWeight: 800, color: '#15803d' }}>{group.in_stock} items</div>
+                          </div>
+                          <div style={{ background: '#eff6ff', padding: '0.55rem 0.65rem', borderRadius: '8px' }}>
+                            <div style={{ color: 'var(--text-muted)', fontWeight: 700 }}>Low / Out</div>
+                            <div style={{ fontWeight: 800, color: '#1d4ed8' }}>
+                              {group.low_stock} / {group.out_of_stock}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                          Total: <strong>{group.total}</strong> stock items
+                        </div>
+
+                        <span
+                          className={`btn btn-sm ${isSuspended ? 'btn-secondary' : 'btn-primary'}`}
+                          style={{ alignSelf: 'flex-start' }}
+                        >
+                          {isSuspended ? 'Not Available' : 'View Stock'}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
+              {!pickerLoading && pickerGroups.length === 0 && (
+                <div className="admin-panel admin-panel--padded" style={{ textAlign: 'center', color: 'var(--text-muted)' }}>
+                  No branches found. Add branches from the Branches page.
+                </div>
+              )}
+            </div>
+          ) : (
+            <>
+              {hasMultipleBranches && !isBranchLocked && (
+                <button
+                  type="button"
+                  onClick={handleChangeBranch}
+                  className="btn btn-secondary btn-sm"
+                  style={{ marginBottom: '1rem', display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
+                >
+                  <ArrowLeft size={16} /> Change Branch
+                </button>
+              )}
+
+              <div className="admin-action-bar" style={{ marginBottom: '1rem', alignItems: 'flex-start' }}>
+                <div style={{ maxWidth: '720px' }}>
+                  <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '0.5rem' }}>
+                    {branchMode
+                      ? 'Manage kitchen stock for your branch — salt, oil, ghee, and similar items.'
+                      : `Showing kitchen stock for ${selectedBranchName || 'this branch'} only.`}
+                  </p>
+                  {branchLocked && (
+                    <p style={{ fontSize: '0.82rem', color: '#b45309', fontWeight: 700, margin: 0 }}>
+                      This branch is suspended (over plan limit). Stock is view-only.
+                    </p>
+                  )}
+                </div>
+                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                  <button type="button" onClick={fetchInventory} className="btn btn-secondary btn-sm" title="Refresh">
+                    <RefreshCw size={16} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleOpenAdd}
+                    className="btn btn-primary btn-sm"
+                    disabled={branchLocked || !stockBranchId}
+                  >
+                    <Plus size={16} />
+                    Add Stock Item
+                  </button>
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '0.75rem', marginBottom: '1rem' }}>
+                <div className="admin-panel admin-panel--padded" style={{ borderLeft: '4px solid var(--primary)' }}>
+                  <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 700 }}>Total Items</div>
+                  <div style={{ fontSize: '1.2rem', fontWeight: 800 }}>{summary.total}</div>
+                </div>
+                <div className="admin-panel admin-panel--padded" style={{ borderLeft: '4px solid #15803d' }}>
+                  <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 700 }}>In Stock</div>
+                  <div style={{ fontSize: '1.2rem', fontWeight: 800, color: '#15803d' }}>{summary.in_stock}</div>
+                </div>
+                <div className="admin-panel admin-panel--padded" style={{ borderLeft: '4px solid #b45309' }}>
+                  <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 700 }}>Low Stock</div>
+                  <div style={{ fontSize: '1.2rem', fontWeight: 800, color: '#b45309' }}>{summary.low_stock}</div>
+                </div>
+                <div className="admin-panel admin-panel--padded" style={{ borderLeft: '4px solid #dc2626' }}>
+                  <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 700 }}>Out of Stock</div>
+                  <div style={{ fontSize: '1.2rem', fontWeight: 800, color: '#dc2626' }}>{summary.out_of_stock}</div>
+                </div>
+              </div>
+
+              <div className="admin-panel">
+                <div className="admin-panel--padded admin-toolbar" style={{ borderBottom: '1px solid var(--border)' }}>
+                  <div className="admin-toolbar-search">
+                    <Search
+                      size={18}
+                      style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }}
+                    />
+                    <input
+                      type="text"
+                      placeholder="Search salt, ghee, oil..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      style={{ width: '100%', paddingLeft: '38px' }}
+                    />
+                  </div>
+                  <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} style={{ minWidth: '150px' }}>
+                    <option value="all">All Status</option>
+                    <option value="in_stock">In Stock</option>
+                    <option value="low_stock">Low Stock</option>
+                    <option value="out_of_stock">Out of Stock</option>
+                  </select>
+                </div>
+
+                <div className="admin-table-wrap">
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                    <thead
+                      style={{
+                        background: '#f8fafc',
+                        borderBottom: '1px solid var(--border)',
+                        color: 'var(--text-muted)',
+                        fontSize: '0.75rem'
+                      }}
+                    >
+                      <tr>
+                        <th style={{ padding: '0.85rem 1rem', textAlign: 'left' }}>ITEM</th>
+                        <th style={{ padding: '0.85rem 1rem', textAlign: 'left' }}>QUANTITY LEFT</th>
+                        <th style={{ padding: '0.85rem 1rem', textAlign: 'left' }}>LOW ALERT</th>
+                        <th style={{ padding: '0.85rem 1rem', textAlign: 'left' }}>STATUS</th>
+                        <th style={{ padding: '0.85rem 1rem', textAlign: 'right' }}>ACTIONS</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {loading ? (
+                        <tr>
+                          <td colSpan={5} style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+                            Loading inventory...
+                          </td>
+                        </tr>
+                      ) : items.length === 0 ? (
+                        <tr>
+                          <td colSpan={5} style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+                            No kitchen stock yet for this branch. Use &quot;Add Stock Item&quot; to add items.
+                          </td>
+                        </tr>
+                      ) : (
+                        items.map((item) => {
+                          const statusMeta = STATUS_LABELS[item.stockStatus] || STATUS_LABELS.in_stock;
+                          const StatusIcon = statusMeta.icon;
+                          const locked = branchLocked || Boolean(item.suspendedByLimit);
+                          return (
+                            <tr key={item._id} style={{ borderBottom: '1px solid #f1f5f9', opacity: locked ? 0.65 : 1 }}>
+                              <td style={{ padding: '0.85rem 1rem' }}>
+                                <div style={{ fontWeight: '700' }}>{item.itemName}</div>
+                                <div style={{ fontSize: '0.75rem', color: locked ? '#b45309' : 'var(--text-muted)' }}>
+                                  {locked ? 'Suspended branch — stock locked' : 'Kitchen Stock'}
+                                </div>
+                              </td>
+                              <td style={{ padding: '0.85rem 1rem' }}>
+                                <strong
+                                  style={{
+                                    fontSize: '1rem',
+                                    color:
+                                      item.stockStatus === 'out_of_stock' || item.stockStatus === 'low_stock'
+                                        ? statusMeta.color
+                                        : undefined
+                                  }}
+                                >
+                                  {item.quantity}
+                                </strong>
+                                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginLeft: '0.25rem' }}>
+                                  {item.unit}
+                                </span>
+                              </td>
+                              <td style={{ padding: '0.85rem 1rem' }}>
+                                {item.lowStockThreshold} {item.unit}
+                              </td>
+                              <td style={{ padding: '0.85rem 1rem' }}>
+                                <span
+                                  className={`badge ${statusMeta.className}`}
+                                  style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}
+                                >
+                                  <StatusIcon size={12} />
+                                  {statusMeta.label}
+                                </span>
+                              </td>
+                              <td style={{ padding: '0.85rem 1rem', textAlign: 'right' }}>
+                                <div style={{ display: 'flex', gap: '0.35rem', justifyContent: 'flex-end' }}>
+                                  <button
+                                    type="button"
+                                    className="btn btn-secondary btn-sm"
+                                    disabled={locked || actionLoading === item._id}
+                                    onClick={() => handleAdjust(item, -1)}
+                                  >
+                                    <Minus size={14} />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="btn btn-secondary btn-sm"
+                                    disabled={locked || actionLoading === item._id}
+                                    onClick={() => handleAdjust(item, 1)}
+                                  >
+                                    <Plus size={14} />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="btn btn-secondary btn-sm"
+                                    disabled={locked}
+                                    onClick={() => handleOpenEdit(item)}
+                                  >
+                                    <Edit2 size={14} />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="btn btn-secondary btn-sm"
+                                    onClick={() => handleDelete(item)}
+                                    style={{ color: 'var(--danger)' }}
+                                  >
+                                    <Trash2 size={14} />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </>
+          )}
         </div>
       </div>
 
@@ -612,55 +622,17 @@ export default function InventoryPage() {
             )}
 
             <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              {!editingItem && !branchMode && branches.length > 1 && (
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', marginBottom: '0.3rem' }}>
-                    Branch *
-                  </label>
-                  <select
-                    required
-                    value={modalBranchId}
-                    onChange={(e) => setModalBranchId(e.target.value)}
-                    style={{ width: '100%' }}
-                  >
-                    <option value="">Select branch</option>
-                    {branches.map((branch) => (
-                      <option
-                        key={branch._id}
-                        value={branch._id}
-                        disabled={branch.isActive === false || branch.suspendedByLimit}
-                      >
-                        {branch.branchName}
-                        {branch.isDefault ? ' (Default)' : ''}
-                        {branch.suspendedByLimit
-                          ? ' — Suspended (limit)'
-                          : branch.isActive === false
-                            ? ' — Inactive'
-                            : ''}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-
-              {!editingItem && (branchMode || branches.length === 1) && (
-                <div
-                  style={{
-                    fontSize: '0.85rem',
-                    color: 'var(--text-muted)',
-                    padding: '0.5rem 0.75rem',
-                    background: '#f8fafc',
-                    borderRadius: '8px'
-                  }}
-                >
-                  Branch:{' '}
-                  <strong>
-                    {branchMode
-                      ? user?.branchName || 'Your Branch'
-                      : branches[0]?.branchName}
-                  </strong>
-                </div>
-              )}
+              <div
+                style={{
+                  fontSize: '0.85rem',
+                  color: 'var(--text-muted)',
+                  padding: '0.5rem 0.75rem',
+                  background: '#f8fafc',
+                  borderRadius: '8px'
+                }}
+              >
+                Branch: <strong>{selectedBranchName || user?.branchName || 'Branch'}</strong>
+              </div>
 
               {!editingItem && (
                 <div>
