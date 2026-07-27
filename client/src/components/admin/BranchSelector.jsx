@@ -24,8 +24,14 @@ export default function BranchSelector() {
       >
         <option value="all">All Branches</option>
         {branches.map((branch) => (
-          <option key={branch._id} value={branch._id} disabled={branch.isActive === false}>
-            {branch.branchName}{branch.isDefault ? ' (Default)' : ''}{branch.isActive === false ? ' — Inactive' : ''}
+          <option
+            key={branch._id}
+            value={branch._id}
+            disabled={branch.isActive === false || branch.suspendedByLimit}
+          >
+            {branch.branchName}
+            {branch.isDefault ? ' (Default)' : ''}
+            {branch.suspendedByLimit ? ' — Suspended (limit)' : branch.isActive === false ? ' — Inactive' : ''}
           </option>
         ))}
       </select>

@@ -32,8 +32,19 @@ const validateBranchAdminLogin = async (user, res) => {
     return false;
   }
 
-  const branch = await Branch.findOne({ _id: user.branchId, adminId: parent._id, isActive: true });
+  const branch = await Branch.findOne({ _id: user.branchId, adminId: parent._id });
   if (!branch) {
+    res.status(403).json({ success: false, message: 'Branch not found.' });
+    return false;
+  }
+  if (branch.suspendedByLimit) {
+    res.status(403).json({
+      success: false,
+      message: 'This branch is suspended because the restaurant branch limit was exceeded. Contact restaurant admin or Super Admin.'
+    });
+    return false;
+  }
+  if (!branch.isActive) {
     res.status(403).json({ success: false, message: 'Branch not found or inactive.' });
     return false;
   }

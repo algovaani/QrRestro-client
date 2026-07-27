@@ -6,7 +6,7 @@ const Category = require('../models/Category');
 const MenuItem = require('../models/MenuItem');
 const { getTenantAdminId, assertTenantOwnership } = require('../middleware/tenantMiddleware');
 const { ensureDefaultBranch } = require('../utils/branchUtils');
-const { canCreateBranch, getMaxBranchesForAdmin } = require('../utils/branchLimits');
+const { canCreateBranch, getMaxBranchesForAdmin, enforceBranchLimitForAdmin, isBranchOperational } = require('../utils/branchLimits');
 
 exports.getBranches = async (req, res, next) => {
   try {
@@ -16,6 +16,7 @@ exports.getBranches = async (req, res, next) => {
     }
 
     await ensureDefaultBranch(adminId);
+    await enforceBranchLimitForAdmin(adminId);
 
     let branches;
     if (req.user.role === 'BranchAdmin') {
@@ -101,7 +102,9 @@ exports.getBranches = async (req, res, next) => {
       totals,
       branchLimits: {
         maxBranches: await getMaxBranchesForAdmin(adminId),
-        currentBranches: branches.length
+        currentBranches: branches.length,
+        activeWithinLimit: branchesWithStats.filter((b) => isBranchOperational(b)).length,
+        suspendedByLimit: branchesWithStats.filter((b) => b.suspendedByLimit).length
       }
     });
   } catch (error) {
@@ -178,7 +181,22 @@ exports.updateBranch = async (req, res, next) => {
     if (address !== undefined) branch.address = address;
     if (city !== undefined) branch.city = city;
     if (mobile !== undefined) branch.mobile = mobile;
-    if (isActive !== undefined) branch.isActive = Boolean(isActive);
+    if (isActive !== undefined) {
+      const wantsActive = Boolean(isActive);
+      if (wantsActive) {
+        await enforceBranchLimitForAdmin(branch.adminId);
+        const refreshed = await Branch.findById(branch._id);
+        if (refreshed?.suspendedByLimit) {
+          return res.status(400).json({
+            success: false,
+            message: 'This branch exceeds your plan limit and cannot be activated. Delete an extra branch or contact Super Admin to increase your limit.'
+          });
+        }
+        branch.isActive = true;
+      } else {
+        branch.isActive = false;
+      }
+    }
 
     if (isDefault === true) {
       await Branch.updateMany({ adminId: branch.adminId }, { $set: { isDefault: false } });

@@ -207,6 +207,8 @@ export default function BranchesPage() {
 
   const maxBranches = branchLimits?.maxBranches ?? 0;
   const currentBranches = branchLimits?.currentBranches ?? branches.length;
+  const activeWithinLimit = branchLimits?.activeWithinLimit ?? branches.filter((b) => b.isActive !== false && !b.suspendedByLimit).length;
+  const suspendedCount = branchLimits?.suspendedByLimit ?? branches.filter((b) => b.suspendedByLimit).length;
   const isBranchLimitReached = maxBranches > 0 && currentBranches >= maxBranches;
 
   const statBox = (label, value, icon, color = 'var(--primary)') => (
@@ -233,10 +235,12 @@ export default function BranchesPage() {
                 Manage branches and branch logins here; day-to-day operations are handled by the branch manager.
               </p>
               {branchLimits && (
-                <p style={{ fontSize: '0.82rem', color: isBranchLimitReached ? '#b45309' : 'var(--text-muted)', marginBottom: '0.75rem' }}>
-                  Branch limit: <strong>{currentBranches}</strong>
-                  {maxBranches > 0 ? ` / ${maxBranches}` : ' / Unlimited'}
-                  {isBranchLimitReached && ' — limit reached. Contact Super Admin to increase your limit.'}
+                <p style={{ fontSize: '0.82rem', color: isBranchLimitReached || suspendedCount > 0 ? '#b45309' : 'var(--text-muted)', marginBottom: '0.75rem' }}>
+                  Branch limit: <strong>{activeWithinLimit}</strong> active
+                  {maxBranches > 0 ? ` / ${maxBranches} allowed` : ' / Unlimited'}
+                  {currentBranches > 0 && ` · ${currentBranches} total`}
+                  {suspendedCount > 0 && ` · ${suspendedCount} suspended (over limit)`}
+                  {isBranchLimitReached && !suspendedCount && ' — limit reached. Delete a branch or contact Super Admin.'}
                 </p>
               )}
               {totals && branches.length > 1 && (
@@ -294,9 +298,14 @@ export default function BranchesPage() {
                             </span>
                           )}
                         </h3>
-                        <span className={`badge ${branch.isActive !== false ? 'badge-completed' : 'badge-cancelled'}`}>
-                          {branch.isActive !== false ? 'Active' : 'Inactive'}
+                        <span className={`badge ${branch.suspendedByLimit ? 'badge-cancelled' : branch.isActive !== false ? 'badge-completed' : 'badge-cancelled'}`}>
+                          {branch.suspendedByLimit ? 'Suspended (limit)' : branch.isActive !== false ? 'Active' : 'Inactive'}
                         </span>
+                        {branch.suspendedByLimit && (
+                          <p style={{ fontSize: '0.75rem', color: '#b45309', marginTop: '0.35rem' }}>
+                            Exceeds your plan branch limit — not operational. Delete this branch or ask Super Admin to increase the limit.
+                          </p>
+                        )}
                       </div>
                       <div style={{ display: 'flex', gap: '0.35rem' }}>
                         <button type="button" onClick={() => handleOpenEdit(branch)} className="btn btn-secondary btn-sm" title="Edit">
@@ -355,6 +364,8 @@ export default function BranchesPage() {
                       onClick={() => handleOpenManager(branch)}
                       className="btn btn-secondary btn-sm"
                       style={{ width: '100%' }}
+                      disabled={branch.suspendedByLimit}
+                      title={branch.suspendedByLimit ? 'Suspended branch — delete or increase limit first' : undefined}
                     >
                       <UserPlus size={15} />
                       {branch.branchManager ? 'Edit Branch Login' : 'Create Branch Login'}
@@ -365,6 +376,8 @@ export default function BranchesPage() {
                       onClick={() => openBranchTables(branch)}
                       className="btn btn-primary btn-sm"
                       style={{ width: '100%', marginTop: '0.25rem' }}
+                      disabled={branch.suspendedByLimit}
+                      title={branch.suspendedByLimit ? 'Suspended branch — QR orders are blocked' : undefined}
                     >
                       <QrCode size={15} />
                       Manage Tables &amp; QR
@@ -376,6 +389,8 @@ export default function BranchesPage() {
                         onClick={() => openBranchInventory(branch)}
                         className="btn btn-secondary btn-sm"
                         style={{ width: '100%', marginTop: '0.25rem' }}
+                        disabled={branch.suspendedByLimit}
+                        title={branch.suspendedByLimit ? 'Suspended branch' : undefined}
                       >
                         <Package size={15} />
                         Manage Inventory

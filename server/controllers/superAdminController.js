@@ -8,7 +8,7 @@ const MenuItem = require('../models/MenuItem');
 const Order = require('../models/Order');
 const MembershipPlan = require('../models/MembershipPlan');
 const { getDaysRemaining, formatExpiryDate, formatRenewalMessage, withMembershipDays, isTrialPlanName, isFreePlan, adminHasUsedFreeTrial, inferPlanNameFromDays, addMembershipDays } = require('../utils/membershipDays');
-const { parseMaxBranches } = require('../utils/branchLimits');
+const { parseMaxBranches, enforceBranchLimitForAdmin, enforceBranchLimitsForAllAdmins } = require('../utils/branchLimits');
 
 const getPlanConfig = async (planName) => {
   const plan = await MembershipPlan.findOne({ name: planName });
@@ -221,6 +221,10 @@ exports.updateAdmin = async (req, res, next) => {
     }
 
     await admin.save();
+
+    if (maxBranches !== undefined || planChanged) {
+      await enforceBranchLimitForAdmin(admin._id);
+    }
 
     res.json({
       success: true,

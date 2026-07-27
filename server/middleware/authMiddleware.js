@@ -1,5 +1,6 @@
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
+const Branch = require('../models/Branch');
 
 const loadUserFromToken = async (req, res) => {
   let token;
@@ -110,6 +111,19 @@ exports.protect = async (req, res, next) => {
         code: 'MEMBERSHIP_EXPIRED',
         message: 'Restaurant membership expired. Branch login is temporarily unavailable.'
       });
+    }
+
+    if (user.branchId) {
+      const branch = await Branch.findById(user.branchId).select('isActive suspendedByLimit');
+      if (!branch || branch.suspendedByLimit || branch.isActive === false) {
+        return res.status(403).json({
+          success: false,
+          code: 'BRANCH_SUSPENDED',
+          message: branch?.suspendedByLimit
+            ? 'This branch is suspended because the restaurant branch limit was exceeded.'
+            : 'Your branch is inactive. Contact restaurant admin.'
+        });
+      }
     }
   }
 

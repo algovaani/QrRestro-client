@@ -11,6 +11,7 @@ const { MAX_REVIEW_WORDS, countReviewWords, sanitizeReviewForSave } = require('.
 const { normalizeMenuItemImage, ensureMenuItemImageStored, getMenuItemPhotoPath } = require('../utils/menuImage');
 const { ensureDefaultBranch } = require('../utils/branchUtils');
 const { deductInventoryForOrder } = require('../utils/inventoryUtils');
+const { assertBranchOperationalById } = require('../utils/branchLimits');
 
 const generateOrderNumber = () => {
   const randomNum = Math.floor(1000 + Math.random() * 9000);
@@ -88,7 +89,13 @@ const buildMenuResponse = async (table) => {
 
   let branch = null;
   if (branchId) {
-    branch = await Branch.findById(branchId).select('branchName address city mobile isActive');
+    branch = await Branch.findById(branchId).select('branchName address city mobile isActive suspendedByLimit');
+    const branchCheck = await assertBranchOperationalById(branchId);
+    if (!branchCheck.ok) {
+      const error = new Error(branchCheck.message);
+      error.status = 403;
+      throw error;
+    }
   }
 
   const categoryFilter = { adminId, status: 'Active' };
@@ -207,6 +214,11 @@ exports.placeOrder = async (req, res, next) => {
     }
     if (!branch) {
       branch = await ensureDefaultBranch(tenantAdminId);
+    }
+
+    const branchCheck = await assertBranchOperationalById(branch?._id);
+    if (!branchCheck.ok) {
+      return res.status(403).json({ success: false, message: branchCheck.message });
     }
 
     let subtotal = 0;

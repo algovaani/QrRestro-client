@@ -755,16 +755,22 @@ export default function OrdersPage() {
                 </div>
               ) : (
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1rem' }}>
-                  {branchPickerGroups.map((group) => (
+                  {branchPickerGroups.map((group) => {
+                    const branchMeta = branches.find((b) => String(b._id) === group.branchId);
+                    const isSuspended = Boolean(branchMeta?.suspendedByLimit);
+
+                    return (
                     <button
                       key={group.branchId}
                       type="button"
-                      onClick={() => handleSelectBranch(group.branchId)}
+                      onClick={() => !isSuspended && handleSelectBranch(group.branchId)}
+                      disabled={isSuspended}
                       className="admin-panel admin-panel--padded"
                       style={{
                         textAlign: 'left',
-                        cursor: 'pointer',
-                        border: '1px solid var(--border)',
+                        cursor: isSuspended ? 'not-allowed' : 'pointer',
+                        opacity: isSuspended ? 0.65 : 1,
+                        border: `1px solid ${isSuspended ? '#fecaca' : 'var(--border)'}`,
                         transition: 'border-color 0.15s ease, box-shadow 0.15s ease',
                         display: 'flex',
                         flexDirection: 'column',
@@ -773,13 +779,19 @@ export default function OrdersPage() {
                     >
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                          <MapPin size={18} color="var(--primary)" />
+                          <MapPin size={18} color={isSuspended ? '#b45309' : 'var(--primary)'} />
                           <span style={{ fontWeight: 800, fontSize: '1.05rem', color: 'var(--secondary)' }}>
                             {group.branchName}
                           </span>
                         </div>
-                        <ArrowRight size={18} color="var(--primary)" />
+                        {!isSuspended && <ArrowRight size={18} color="var(--primary)" />}
                       </div>
+
+                      {isSuspended && (
+                        <div style={{ fontSize: '0.78rem', color: '#b45309', fontWeight: 700 }}>
+                          Suspended — exceeds branch limit. Delete this branch or ask Super Admin to increase limit.
+                        </div>
+                      )}
 
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', fontSize: '0.78rem' }}>
                         <div style={{ background: '#f0fdf4', padding: '0.55rem 0.65rem', borderRadius: '8px' }}>
@@ -798,11 +810,12 @@ export default function OrdersPage() {
                         Total: <strong>{group.stats.total.count}</strong> orders · {formatRupee(group.stats.total.revenue)}
                       </div>
 
-                      <span className="btn btn-primary btn-sm" style={{ alignSelf: 'flex-start' }}>
-                        View Orders
+                      <span className={`btn btn-sm ${isSuspended ? 'btn-secondary' : 'btn-primary'}`} style={{ alignSelf: 'flex-start' }}>
+                        {isSuspended ? 'Not Available' : 'View Orders'}
                       </span>
                     </button>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
 

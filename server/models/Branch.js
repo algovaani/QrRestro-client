@@ -34,6 +34,11 @@ const branchSchema = new mongoose.Schema({
   isActive: {
     type: Boolean,
     default: true
+  },
+  /** Set when branch is auto-disabled because admin exceeded plan branch limit */
+  suspendedByLimit: {
+    type: Boolean,
+    default: false
   }
 }, {
   timestamps: true

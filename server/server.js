@@ -48,6 +48,7 @@ connectDB()
   .then(() => require('./utils/branchUtils').migrateAllBranches({ log: true }))
   .then(() => require('./utils/tableIndexMigration').migrateTableIndexes({ log: true }))
   .then(() => require('./utils/tableQrUtils').migrateTableQrUrls({ log: true }))
+  .then(() => require('./utils/branchLimits').enforceBranchLimitsForAllAdmins({ log: true }))
   .catch((err) => {
     if (err?.message) console.error('[startup]', err.message);
   });

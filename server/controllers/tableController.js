@@ -3,6 +3,7 @@ const Branch = require('../models/Branch');
 const { getTenantAdminId, buildScopedFilter, assertTenantOwnership } = require('../middleware/tenantMiddleware');
 const { ensureDefaultBranch } = require('../utils/branchUtils');
 const { generateQrAssets, refreshTableQr } = require('../utils/tableQrUtils');
+const { assertBranchOperationalById } = require('../utils/branchLimits');
 
 const buildQrForTable = (table) => generateQrAssets(table);
 
@@ -62,6 +63,11 @@ exports.createTable = async (req, res, next) => {
     const branch = await Branch.findOne({ _id: branchId, adminId });
     if (!branch) {
       return res.status(400).json({ success: false, message: 'Invalid branch selected' });
+    }
+
+    const branchCheck = await assertBranchOperationalById(branch._id);
+    if (!branchCheck.ok) {
+      return res.status(403).json({ success: false, message: branchCheck.message });
     }
 
     const existingTable = await Table.findOne({ adminId, branchId, tableNumber });

@@ -8,6 +8,8 @@ const {
   resolvePlanFeatures,
   DEFAULT_FEATURE_KEYS
 } = require('../utils/planFeatures');
+const User = require('../models/User');
+const { enforceBranchLimitForAdmin, enforceBranchLimitsForAllAdmins } = require('../utils/branchLimits');
 
 const parseFeatures = (features) => {
   if (Array.isArray(features)) return features;
@@ -144,6 +146,11 @@ exports.updatePlan = async (req, res, next) => {
 
     applyPlanFields(plan, req.body);
     await plan.save();
+
+    const adminsOnPlan = await User.find({ role: 'Admin', planName: plan.name }).select('_id');
+    for (const admin of adminsOnPlan) {
+      await enforceBranchLimitForAdmin(admin._id);
+    }
 
     res.json({
       success: true,
