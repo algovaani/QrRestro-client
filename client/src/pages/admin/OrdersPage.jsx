@@ -13,7 +13,8 @@ import { useBranch } from '../../context/BranchContext';
 import OrderRatingDisplay from '../../components/admin/OrderRatingDisplay';
 import OrderBranchBadge from '../../components/admin/OrderBranchBadge';
 import { resolveOrderBranchName, formatOrderTableLabel } from '../../utils/orderBranch';
-import { Printer, Eye, RefreshCw, MessageSquare, Search, ArrowUpDown, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, CheckCircle2, XCircle, Loader2 } from 'lucide-react';
+import { buildBranchOrderGroups, computeOrderDayStats, filterOrdersByDay } from '../../utils/orderBranchGroups';
+import { Printer, Eye, RefreshCw, MessageSquare, Search, ArrowUpDown, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, CheckCircle2, XCircle, Loader2, ChevronDown, ChevronUp, MapPin, CalendarDays } from 'lucide-react';
 
 export default function OrdersPage() {
   const location = useLocation();
@@ -42,7 +43,10 @@ export default function OrdersPage() {
 
   const { socket, isConnected } = useSocket();
   const { user } = useAuth();
-  const { branchQueryParams, getBranchName, hasMultipleBranches } = useBranch();
+  const { branchQueryParams, getBranchName, hasMultipleBranches, branches, isAllBranches, isBranchLocked, setSelectedBranchId } = useBranch();
+  const showBranchGroupedView = hasMultipleBranches && isAllBranches && !isBranchLocked;
+  const [dayFilter, setDayFilter] = useState('all');
+  const [expandedBranches, setExpandedBranches] = useState(() => new Set());
   const [billSendingId, setBillSendingId] = useState(null);
   const [restaurantBillInfo, setRestaurantBillInfo] = useState({
     contactNumber: '',
@@ -64,8 +68,20 @@ export default function OrdersPage() {
   }, []);
 
   useEffect(() => {
+    if (!isBranchLocked && hasMultipleBranches) {
+      setSelectedBranchId('all');
+    }
+  }, []);
+
+  useEffect(() => {
+    if (branches.length > 0) {
+      setExpandedBranches(new Set(branches.map((b) => String(b._id))));
+    }
+  }, [branches]);
+
+  useEffect(() => {
     fetchOrders();
-  }, [statusFilter, paymentFilter, user?._id, branchQueryParams.branchId]);
+  }, [statusFilter, paymentFilter, user?._id, showBranchGroupedView, branchQueryParams.branchId]);
 
   // Refetch orders when socket reconnects (catch missed events during disconnect)
   useEffect(() => {
@@ -190,9 +206,14 @@ export default function OrdersPage() {
 
   const fetchOrders = async () => {
     try {
-      const res = await API.get('/orders', {
-        params: { status: statusFilter, paymentStatus: paymentFilter, ...branchQueryParams }
-      });
+      const params = {
+        status: statusFilter,
+        paymentStatus: paymentFilter
+      };
+      if (!showBranchGroupedView && branchQueryParams.branchId) {
+        params.branchId = branchQueryParams.branchId;
+      }
+      const res = await API.get('/orders', { params });
       if (res.data.success) {
         setOrders((res.data.orders || []).map((order) => enrichOrderBranch(order)));
       }
@@ -375,6 +396,34 @@ export default function OrdersPage() {
     return sortedOrders.slice(start, start + itemsPerPage);
   }, [sortedOrders, currentPage, itemsPerPage]);
 
+  const globalDayStats = useMemo(
+    () => computeOrderDayStats(filteredOrders),
+    [filteredOrders]
+  );
+
+  const branchOrderGroups = useMemo(() => {
+    if (!showBranchGroupedView) return [];
+    const resolveName = (order) => resolveOrderBranchName(order, getBranchName);
+    return buildBranchOrderGroups(filteredOrders, branches, getBranchName, resolveName).map((group) => ({
+      ...group,
+      visibleOrders: filterOrdersByDay(
+        [...group.orders].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)),
+        dayFilter
+      )
+    }));
+  }, [showBranchGroupedView, filteredOrders, branches, getBranchName, dayFilter]);
+
+  const toggleBranchExpand = (branchId) => {
+    setExpandedBranches((prev) => {
+      const next = new Set(prev);
+      if (next.has(branchId)) next.delete(branchId);
+      else next.add(branchId);
+      return next;
+    });
+  };
+
+  const formatRupee = (amount) => `₹${Math.round(Number(amount) || 0).toLocaleString('en-IN')}`;
+
   const sendWhatsAppBill = async (order) => {
     if (!order?.customerMobile) {
       alert('Customer mobile number is missing — cannot send bill on WhatsApp.');
@@ -467,12 +516,248 @@ export default function OrdersPage() {
     printWindow.document.close();
   };
 
+  const renderOrderRow = (order) => (
+    <tr key={order._id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+      <td style={{ padding: '0.85rem 1rem', fontWeight: '800', color: 'var(--primary)' }}>
+        {order.orderNumber}
+      </td>
+
+      {!showBranchGroupedView && hasMultipleBranches && (
+        <td style={{ padding: '0.85rem 1rem' }}>
+          <OrderBranchBadge name={resolveOrderBranchName(order, getBranchName)} />
+        </td>
+      )}
+
+      <td style={{ padding: '0.85rem 1rem', fontWeight: '700' }}>
+        Table {order.tableNumber}
+      </td>
+
+      <td style={{ padding: '0.85rem 1rem' }}>
+        <div style={{ fontWeight: '600' }}>{order.customerName}</div>
+        <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{order.customerMobile || 'No phone'}</div>
+      </td>
+
+      <td style={{ padding: '0.85rem 1rem', fontWeight: '800', fontSize: '0.95rem' }}>
+        ₹{order.grandTotal}
+      </td>
+
+      <td style={{ padding: '0.85rem 1rem' }}>
+        <select
+          key={`status-${getOrderId(order)}`}
+          value={order.orderStatus}
+          onChange={(e) => updateStatus(getOrderId(order), e.target.value)}
+          onClick={(e) => e.stopPropagation()}
+          className={`badge badge-${order.orderStatus.toLowerCase()} admin-order-status-select`}
+          style={{ cursor: 'pointer', outline: 'none' }}
+        >
+          <option value="New">New</option>
+          <option value="Confirmed">Confirmed</option>
+          <option value="Preparing">Preparing</option>
+          <option value="Ready">Ready</option>
+          <option value="Served">Served</option>
+          <option value="Completed">Completed</option>
+          <option value="Cancelled">Cancelled</option>
+        </select>
+      </td>
+
+      <td style={{ padding: '0.85rem 1rem' }}>
+        {order.paymentStatus === 'Pending' ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+            <span className="badge badge-pending">⏳ Approval Pending</span>
+            <div style={{ display: 'flex', gap: '0.3rem' }}>
+              <button
+                onClick={() => approvePayment(order._id)}
+                className="btn btn-primary btn-sm"
+                style={{ padding: '0.25rem 0.5rem', fontSize: '0.7rem' }}
+                title="Approve Payment"
+              >
+                <CheckCircle2 size={13} /> Approve
+              </button>
+              <button
+                onClick={() => rejectPayment(order._id)}
+                className="btn btn-secondary btn-sm"
+                style={{ padding: '0.25rem 0.5rem', fontSize: '0.7rem', color: '#dc2626' }}
+                title="Reject Payment"
+              >
+                <XCircle size={13} /> Reject
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => openPaymentConfirm(order)}
+            className={`badge ${order.paymentStatus === 'Paid' ? 'badge-paid' : 'badge-unpaid'}`}
+            style={{ cursor: 'pointer' }}
+          >
+            {order.paymentStatus === 'Paid' ? '✓ Paid' : '⏳ Unpaid'}
+          </button>
+        )}
+      </td>
+
+      <td className="order-rating-cell" style={{ padding: '0.85rem 1rem' }}>
+        {order.rating ? (
+          <OrderRatingDisplay rating={order.rating} review={order.review} compact />
+        ) : (
+          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>—</span>
+        )}
+      </td>
+
+      <td className="admin-table-txn-cell" style={{ padding: '0.85rem 1rem', fontFamily: 'monospace', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+        {order.transactionId || '-'}
+      </td>
+
+      <td style={{ padding: '0.85rem 1rem', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+        {new Date(order.createdAt).toLocaleString('en-IN', {
+          day: 'numeric',
+          month: 'short',
+          hour: '2-digit',
+          minute: '2-digit'
+        })}
+      </td>
+
+      <td style={{ padding: '0.85rem 1rem', textAlign: 'right' }}>
+        <div style={{ display: 'inline-flex', gap: '0.3rem' }}>
+          <button onClick={() => openOrderModal(order)} className="btn btn-secondary btn-sm" title="View Details">
+            <Eye size={14} />
+          </button>
+          <button
+            onClick={() => sendWhatsAppBill(order)}
+            disabled={billSendingId === order._id}
+            className="btn btn-secondary btn-sm"
+            title="WhatsApp PDF Bill"
+            style={{ color: '#25D366' }}
+          >
+            {billSendingId === order._id ? <Loader2 size={14} className="animate-spin" /> : <MessageSquare size={14} />}
+          </button>
+          <button onClick={() => handlePrint(order, 'kitchen')} className="btn btn-secondary btn-sm" title="Print KOT">
+            <Printer size={14} /> KOT
+          </button>
+          <button onClick={() => handlePrint(order, 'bill')} className="btn btn-primary btn-sm" title="Print Bill">
+            <Printer size={14} /> Bill
+          </button>
+        </div>
+      </td>
+    </tr>
+  );
+
+  const tableHeadRow = (
+    <tr>
+      <th onClick={() => handleSort('orderNumber')} style={{ padding: '0.8rem 1rem', cursor: 'pointer' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+          ORDER # <ArrowUpDown size={12} />
+        </div>
+      </th>
+      {!showBranchGroupedView && hasMultipleBranches && (
+        <th style={{ padding: '0.8rem 1rem' }}>BRANCH</th>
+      )}
+      <th onClick={() => handleSort('tableNumber')} style={{ padding: '0.8rem 1rem', cursor: 'pointer' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+          TABLE <ArrowUpDown size={12} />
+        </div>
+      </th>
+      <th onClick={() => handleSort('customerName')} style={{ padding: '0.8rem 1rem', cursor: 'pointer' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+          CUSTOMER <ArrowUpDown size={12} />
+        </div>
+      </th>
+      <th onClick={() => handleSort('grandTotal')} style={{ padding: '0.8rem 1rem', cursor: 'pointer' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+          TOTAL <ArrowUpDown size={12} />
+        </div>
+      </th>
+      <th onClick={() => handleSort('orderStatus')} style={{ padding: '0.8rem 1rem', cursor: 'pointer' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+          ORDER STATUS <ArrowUpDown size={12} />
+        </div>
+      </th>
+      <th onClick={() => handleSort('paymentStatus')} style={{ padding: '0.8rem 1rem', cursor: 'pointer' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+          PAYMENT <ArrowUpDown size={12} />
+        </div>
+      </th>
+      <th onClick={() => handleSort('rating')} style={{ padding: '0.8rem 1rem', cursor: 'pointer' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+          RATING <ArrowUpDown size={12} />
+        </div>
+      </th>
+      <th style={{ padding: '0.8rem 1rem' }}>TXN ID</th>
+      <th onClick={() => handleSort('createdAt')} style={{ padding: '0.8rem 1rem', cursor: 'pointer' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+          TIME <ArrowUpDown size={12} />
+        </div>
+      </th>
+      <th style={{ padding: '0.8rem 1rem', textAlign: 'right' }}>ACTIONS</th>
+    </tr>
+  );
+
   return (
     <div className="admin-layout">
       <Sidebar />
       <div className="admin-main">
-        <Header title="Orders & Payment Datatable" />
+        <Header title={showBranchGroupedView ? 'Orders — Branch Wise' : 'Orders & Payment'} />
         <div className="admin-content">
+
+          {showBranchGroupedView && (
+            <>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.85rem', marginBottom: '1rem' }}>
+                <div className="admin-panel admin-panel--padded" style={{ borderLeft: '4px solid var(--primary)' }}>
+                  <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 700 }}>Aaj (Today)</div>
+                  <div style={{ fontSize: '1.35rem', fontWeight: 800, color: 'var(--primary)' }}>{globalDayStats.today.count}</div>
+                  <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{formatRupee(globalDayStats.today.revenue)}</div>
+                </div>
+                <div className="admin-panel admin-panel--padded" style={{ borderLeft: '4px solid #6366f1' }}>
+                  <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 700 }}>Kal (Yesterday)</div>
+                  <div style={{ fontSize: '1.35rem', fontWeight: 800, color: '#4338ca' }}>{globalDayStats.yesterday.count}</div>
+                  <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{formatRupee(globalDayStats.yesterday.revenue)}</div>
+                </div>
+                <div className="admin-panel admin-panel--padded" style={{ borderLeft: '4px solid #15803d' }}>
+                  <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 700 }}>Total Orders</div>
+                  <div style={{ fontSize: '1.35rem', fontWeight: 800, color: '#15803d' }}>{globalDayStats.total.count}</div>
+                  <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{formatRupee(globalDayStats.total.revenue)}</div>
+                </div>
+                <div className="admin-panel admin-panel--padded" style={{ borderLeft: '4px solid #b45309' }}>
+                  <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 700 }}>Branches</div>
+                  <div style={{ fontSize: '1.35rem', fontWeight: 800, color: '#b45309' }}>{branches.length}</div>
+                  <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Alag-alag section mein</div>
+                </div>
+              </div>
+
+              <div className="admin-panel admin-panel--padded" style={{ marginBottom: '1rem', display: 'flex', flexWrap: 'wrap', gap: '0.5rem', alignItems: 'center' }}>
+                <CalendarDays size={18} color="var(--primary)" />
+                <span style={{ fontWeight: 700, fontSize: '0.85rem', marginRight: '0.35rem' }}>Din filter:</span>
+                {[
+                  { id: 'all', label: 'Sabhi Orders' },
+                  { id: 'today', label: 'Sirf Aaj' },
+                  { id: 'yesterday', label: 'Sirf Kal' }
+                ].map((opt) => (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => setDayFilter(opt.id)}
+                    className={dayFilter === opt.id ? 'btn btn-primary btn-sm' : 'btn btn-secondary btn-sm'}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+
+          {!showBranchGroupedView && (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '0.75rem', marginBottom: '1rem' }}>
+              <div className="admin-panel admin-panel--padded" style={{ borderLeft: '4px solid var(--primary)' }}>
+                <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 700 }}>Aaj</div>
+                <div style={{ fontSize: '1.2rem', fontWeight: 800 }}>{globalDayStats.today.count} orders</div>
+                <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>{formatRupee(globalDayStats.today.revenue)}</div>
+              </div>
+              <div className="admin-panel admin-panel--padded" style={{ borderLeft: '4px solid #6366f1' }}>
+                <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 700 }}>Kal</div>
+                <div style={{ fontSize: '1.2rem', fontWeight: 800 }}>{globalDayStats.yesterday.count} orders</div>
+                <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>{formatRupee(globalDayStats.yesterday.revenue)}</div>
+              </div>
+            </div>
+          )}
 
           {/* DATATABLE TOP CONTROLS */}
           <div className="admin-panel admin-panel--padded" style={{ marginBottom: '1.25rem', boxShadow: 'var(--shadow-sm)' }}>
@@ -534,182 +819,98 @@ export default function OrdersPage() {
             </div>
           </div>
 
-          {/* DATATABLE BODY */}
+          {/* ORDERS BODY */}
+          {showBranchGroupedView ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              {branchOrderGroups.map((group) => {
+                const isExpanded = expandedBranches.has(group.branchId);
+                return (
+                  <div key={group.branchId} className="admin-panel" style={{ overflow: 'hidden' }}>
+                    <button
+                      type="button"
+                      onClick={() => toggleBranchExpand(group.branchId)}
+                      style={{
+                        width: '100%',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: '1rem',
+                        padding: '1rem 1.15rem',
+                        background: '#f8fafc',
+                        border: 'none',
+                        borderBottom: isExpanded ? '1px solid var(--border)' : 'none',
+                        cursor: 'pointer',
+                        textAlign: 'left'
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', minWidth: 0 }}>
+                        <MapPin size={18} color="var(--primary)" />
+                        <div>
+                          <div style={{ fontWeight: 800, fontSize: '1.05rem', color: 'var(--secondary)' }}>
+                            {group.branchName}
+                          </div>
+                          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.15rem' }}>
+                            Aaj: <strong>{group.stats.today.count}</strong> orders ({formatRupee(group.stats.today.revenue)})
+                            {' · '}
+                            Kal: <strong>{group.stats.yesterday.count}</strong> orders ({formatRupee(group.stats.yesterday.revenue)})
+                            {' · '}
+                            Total: <strong>{group.stats.total.count}</strong>
+                          </div>
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', flexShrink: 0 }}>
+                        <OrderBranchBadge name={group.branchName} compact />
+                        <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-muted)' }}>
+                          {group.visibleOrders.length} dikha rahe hain
+                        </span>
+                        {isExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+                      </div>
+                    </button>
+
+                    {isExpanded && (
+                      <div className="admin-table-wrap">
+                        <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.85rem' }}>
+                          <thead style={{ background: '#fff', borderBottom: '1px solid var(--border)', color: 'var(--text-muted)', fontSize: '0.75rem' }}>
+                            {tableHeadRow}
+                          </thead>
+                          <tbody>
+                            {group.visibleOrders.map((order) => renderOrderRow(order))}
+                            {group.visibleOrders.length === 0 && !loading && (
+                              <tr>
+                                <td colSpan={10} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
+                                  {dayFilter === 'today'
+                                    ? 'Aaj is branch mein koi order nahi.'
+                                    : dayFilter === 'yesterday'
+                                      ? 'Kal is branch mein koi order nahi.'
+                                      : 'Is branch mein abhi koi order nahi.'}
+                                </td>
+                              </tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+              {branchOrderGroups.length === 0 && !loading && (
+                <div className="admin-panel admin-panel--padded" style={{ textAlign: 'center', color: 'var(--text-muted)' }}>
+                  Koi branch ya order nahi mila.
+                </div>
+              )}
+            </div>
+          ) : (
           <div className="admin-panel">
             <div className="admin-table-wrap">
             <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.85rem' }}>
               <thead style={{ background: '#f8fafc', borderBottom: '1px solid var(--border)', color: 'var(--text-muted)', fontSize: '0.75rem' }}>
-                <tr>
-                  <th onClick={() => handleSort('orderNumber')} style={{ padding: '0.8rem 1rem', cursor: 'pointer' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-                      ORDER # <ArrowUpDown size={12} />
-                    </div>
-                  </th>
-                  {hasMultipleBranches && (
-                    <th style={{ padding: '0.8rem 1rem' }}>BRANCH</th>
-                  )}
-                  <th onClick={() => handleSort('tableNumber')} style={{ padding: '0.8rem 1rem', cursor: 'pointer' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-                      TABLE <ArrowUpDown size={12} />
-                    </div>
-                  </th>
-                  <th onClick={() => handleSort('customerName')} style={{ padding: '0.8rem 1rem', cursor: 'pointer' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-                      CUSTOMER <ArrowUpDown size={12} />
-                    </div>
-                  </th>
-                  <th onClick={() => handleSort('grandTotal')} style={{ padding: '0.8rem 1rem', cursor: 'pointer' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-                      TOTAL <ArrowUpDown size={12} />
-                    </div>
-                  </th>
-                  <th onClick={() => handleSort('orderStatus')} style={{ padding: '0.8rem 1rem', cursor: 'pointer' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-                      ORDER STATUS <ArrowUpDown size={12} />
-                    </div>
-                  </th>
-                  <th onClick={() => handleSort('paymentStatus')} style={{ padding: '0.8rem 1rem', cursor: 'pointer' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-                      PAYMENT <ArrowUpDown size={12} />
-                    </div>
-                  </th>
-                  <th onClick={() => handleSort('rating')} style={{ padding: '0.8rem 1rem', cursor: 'pointer' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-                      RATING <ArrowUpDown size={12} />
-                    </div>
-                  </th>
-                  <th style={{ padding: '0.8rem 1rem' }}>TXN ID</th>
-                  <th onClick={() => handleSort('createdAt')} style={{ padding: '0.8rem 1rem', cursor: 'pointer' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-                      TIME <ArrowUpDown size={12} />
-                    </div>
-                  </th>
-                  <th style={{ padding: '0.8rem 1rem', textAlign: 'right' }}>ACTIONS</th>
-                </tr>
+                {tableHeadRow}
               </thead>
               <tbody>
-                {paginatedOrders.map((order) => (
-                  <tr key={order._id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                    <td style={{ padding: '0.85rem 1rem', fontWeight: '800', color: 'var(--primary)' }}>
-                      {order.orderNumber}
-                    </td>
-
-                    {hasMultipleBranches && (
-                      <td style={{ padding: '0.85rem 1rem' }}>
-                        <OrderBranchBadge name={resolveOrderBranchName(order, getBranchName)} />
-                      </td>
-                    )}
-
-                    <td style={{ padding: '0.85rem 1rem', fontWeight: '700' }}>
-                      Table {order.tableNumber}
-                    </td>
-
-                    <td style={{ padding: '0.85rem 1rem' }}>
-                      <div style={{ fontWeight: '600' }}>{order.customerName}</div>
-                      <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{order.customerMobile || 'No phone'}</div>
-                    </td>
-
-                    <td style={{ padding: '0.85rem 1rem', fontWeight: '800', fontSize: '0.95rem' }}>
-                      ₹{order.grandTotal}
-                    </td>
-
-                    <td style={{ padding: '0.85rem 1rem' }}>
-                      <select
-                        key={`status-${getOrderId(order)}`}
-                        value={order.orderStatus}
-                        onChange={(e) => updateStatus(getOrderId(order), e.target.value)}
-                        onClick={(e) => e.stopPropagation()}
-                        className={`badge badge-${order.orderStatus.toLowerCase()} admin-order-status-select`}
-                        style={{ cursor: 'pointer', outline: 'none' }}
-                      >
-                        <option value="New">New</option>
-                        <option value="Confirmed">Confirmed</option>
-                        <option value="Preparing">Preparing</option>
-                        <option value="Ready">Ready</option>
-                        <option value="Served">Served</option>
-                        <option value="Completed">Completed</option>
-                        <option value="Cancelled">Cancelled</option>
-                      </select>
-                    </td>
-
-                    <td style={{ padding: '0.85rem 1rem' }}>
-                      {order.paymentStatus === 'Pending' ? (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
-                          <span className="badge badge-pending">⏳ Approval Pending</span>
-                          <div style={{ display: 'flex', gap: '0.3rem' }}>
-                            <button
-                              onClick={() => approvePayment(order._id)}
-                              className="btn btn-primary btn-sm"
-                              style={{ padding: '0.25rem 0.5rem', fontSize: '0.7rem' }}
-                              title="Approve Payment"
-                            >
-                              <CheckCircle2 size={13} /> Approve
-                            </button>
-                            <button
-                              onClick={() => rejectPayment(order._id)}
-                              className="btn btn-secondary btn-sm"
-                              style={{ padding: '0.25rem 0.5rem', fontSize: '0.7rem', color: '#dc2626' }}
-                              title="Reject Payment"
-                            >
-                              <XCircle size={13} /> Reject
-                            </button>
-                          </div>
-                        </div>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => openPaymentConfirm(order)}
-                          className={`badge ${order.paymentStatus === 'Paid' ? 'badge-paid' : 'badge-unpaid'}`}
-                          style={{ cursor: 'pointer' }}
-                        >
-                          {order.paymentStatus === 'Paid' ? '✓ Paid' : '⏳ Unpaid'}
-                        </button>
-                      )}
-                    </td>
-
-                    <td className="order-rating-cell" style={{ padding: '0.85rem 1rem' }}>
-                      {order.rating ? (
-                        <OrderRatingDisplay rating={order.rating} review={order.review} compact />
-                      ) : (
-                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>—</span>
-                      )}
-                    </td>
-
-                    <td className="admin-table-txn-cell" style={{ padding: '0.85rem 1rem', fontFamily: 'monospace', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                      {order.transactionId || '-'}
-                    </td>
-
-                    <td style={{ padding: '0.85rem 1rem', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                      {new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </td>
-
-                    <td style={{ padding: '0.85rem 1rem', textAlign: 'right' }}>
-                      <div style={{ display: 'inline-flex', gap: '0.3rem' }}>
-                        <button onClick={() => openOrderModal(order)} className="btn btn-secondary btn-sm" title="View Details">
-                          <Eye size={14} />
-                        </button>
-                        <button
-                          onClick={() => sendWhatsAppBill(order)}
-                          disabled={billSendingId === order._id}
-                          className="btn btn-secondary btn-sm"
-                          title="WhatsApp PDF Bill"
-                          style={{ color: '#25D366' }}
-                        >
-                          {billSendingId === order._id ? <Loader2 size={14} className="animate-spin" /> : <MessageSquare size={14} />}
-                        </button>
-                        <button onClick={() => handlePrint(order, 'kitchen')} className="btn btn-secondary btn-sm" title="Print KOT">
-                          <Printer size={14} /> KOT
-                        </button>
-                        <button onClick={() => handlePrint(order, 'bill')} className="btn btn-primary btn-sm" title="Print Bill">
-                          <Printer size={14} /> Bill
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                {paginatedOrders.map((order) => renderOrderRow(order))}
                 {paginatedOrders.length === 0 && !loading && (
                   <tr>
-                    <td colSpan="9" style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
+                    <td colSpan={hasMultipleBranches ? 11 : 10} style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
                       No orders found matching search criteria.
                     </td>
                   </tr>
@@ -765,6 +966,7 @@ export default function OrdersPage() {
               </div>
             </div>
           </div>
+          )}
 
         </div>
       </div>
