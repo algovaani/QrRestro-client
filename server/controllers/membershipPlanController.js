@@ -5,8 +5,7 @@ const { isFreePlan, adminHasUsedFreeTrial } = require('../utils/membershipDays')
 const {
   normalizeFeatureKeys,
   keysToFeatureLabels,
-  resolvePlanFeatures,
-  DEFAULT_FEATURE_KEYS
+  resolvePlanFeatures
 } = require('../utils/planFeatures');
 const User = require('../models/User');
 const { enforceBranchLimitForAdmin, enforceBranchLimitsForAllAdmins } = require('../utils/branchLimits');
@@ -19,9 +18,9 @@ const parseFeatures = (features) => {
   return [];
 };
 
-const mapPlanResponse = (plan) => {
+const mapPlanResponse = async (plan) => {
   const obj = plan.toObject ? plan.toObject() : { ...plan };
-  const resolved = resolvePlanFeatures(obj);
+  const resolved = await resolvePlanFeatures(obj);
   obj.featureKeys = resolved.featureKeys;
   obj.features = resolved.features;
   return obj;
@@ -30,7 +29,7 @@ const mapPlanResponse = (plan) => {
 const mapPlansWithOptionalQr = async (plans) =>
   Promise.all(
     plans.map(async (plan) => {
-      const obj = mapPlanResponse(plan);
+      const obj = await mapPlanResponse(plan);
       obj.isFree = isFreePlan(obj);
       if (!obj.isFree && obj.upiId) {
         const upiString = buildUpiPayString({
@@ -48,7 +47,7 @@ const mapPlansWithOptionalQr = async (plans) =>
     })
   );
 
-const applyPlanFields = (plan, body) => {
+const applyPlanFields = async (plan, body) => {
   const { name, price, durationDays, description, features, status, upiId } = body;
 
   if (name) plan.name = name.trim();
@@ -64,12 +63,12 @@ const applyPlanFields = (plan, body) => {
   }
 
   if (body.featureKeys !== undefined) {
-    plan.featureKeys = normalizeFeatureKeys(
+    plan.featureKeys = await normalizeFeatureKeys(
       Array.isArray(body.featureKeys) ? body.featureKeys : parseFeatures(body.featureKeys)
     );
-    plan.features = keysToFeatureLabels(plan.featureKeys);
+    plan.features = await keysToFeatureLabels(plan.featureKeys);
   } else if (plan.featureKeys?.length) {
-    plan.features = keysToFeatureLabels(plan.featureKeys);
+    plan.features = await keysToFeatureLabels(plan.featureKeys);
   }
 
   if (body.maxBranches !== undefined && body.maxBranches !== '') {
@@ -85,7 +84,7 @@ exports.getAllPlans = async (req, res, next) => {
     res.json({
       success: true,
       count: plans.length,
-      plans: plans.map((p) => mapPlanResponse(p))
+      plans: await Promise.all(plans.map((p) => mapPlanResponse(p)))
     });
   } catch (error) {
     next(error);
@@ -108,7 +107,7 @@ exports.createPlan = async (req, res, next) => {
     }
 
     const processedFeatures = parseFeatures(req.body.features);
-    const featureKeys = normalizeFeatureKeys(req.body.featureKeys || []);
+    const featureKeys = await normalizeFeatureKeys(req.body.featureKeys || []);
 
     const plan = new MembershipPlan({
       name: name.trim(),
@@ -116,13 +115,13 @@ exports.createPlan = async (req, res, next) => {
       durationDays: Number(durationDays),
       description: req.body.description || '',
       featureKeys: featureKeys.length ? featureKeys : undefined,
-      features: featureKeys.length ? keysToFeatureLabels(featureKeys) : (processedFeatures.length > 0 ? processedFeatures : keysToFeatureLabels(DEFAULT_FEATURE_KEYS)),
+      features: featureKeys.length ? await keysToFeatureLabels(featureKeys) : processedFeatures,
       status: req.body.status || 'Active',
       upiId: req.body.upiId ? String(req.body.upiId).trim() : '',
       maxBranches: req.body.maxBranches !== undefined && req.body.maxBranches !== '' ? Number(req.body.maxBranches) : 1
     });
 
-    applyPlanFields(plan, req.body);
+    await applyPlanFields(plan, req.body);
     await plan.save();
 
     res.status(201).json({
@@ -144,7 +143,7 @@ exports.updatePlan = async (req, res, next) => {
       return res.status(404).json({ success: false, message: 'Membership Plan not found' });
     }
 
-    applyPlanFields(plan, req.body);
+    await applyPlanFields(plan, req.body);
     await plan.save();
 
     const adminsOnPlan = await User.find({ role: 'Admin', planName: plan.name }).select('_id');
@@ -187,7 +186,7 @@ exports.deletePlan = async (req, res, next) => {
 exports.getPublicMembershipPlans = async (req, res, next) => {
   try {
     const plans = await MembershipPlan.find({ status: 'Active' })
-      .select('name price durationDays description features upiId')
+      .select('name price durationDays description features featureKeys upiId')
       .sort({ price: 1 });
 
     const plansWithQr = await mapPlansWithOptionalQr(plans);
@@ -204,7 +203,7 @@ exports.getAdminMembershipPlans = async (req, res, next) => {
   try {
     const user = req.user;
     let plans = await MembershipPlan.find({ status: 'Active' })
-      .select('name price durationDays description features upiId')
+      .select('name price durationDays description features featureKeys upiId')
       .sort({ price: 1 });
 
     if (adminHasUsedFreeTrial(user)) {

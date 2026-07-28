@@ -1,67 +1,70 @@
-/** Central catalog — naye features yahan add karenge */
-const PLAN_FEATURE_CATALOG = [
-  { key: 'orders', label: 'Orders & Dashboard', group: 'Core', description: 'Live orders, dashboard stats' },
-  { key: 'branches', label: 'Multi-Branch Management', group: 'Core', description: 'Kai branches aur branch logins' },
-  { key: 'branch_portal', label: 'Branch Manager Portal', group: 'Core', description: 'Har branch ka alag manager login' },
-  { key: 'reports', label: 'Sales Reports', group: 'Analytics', description: 'Branch-wise sales & item reports' },
-  { key: 'inventory', label: 'Inventory & Stock', group: 'Operations', description: 'Branch-wise stock, low stock alerts' },
-  { key: 'settings', label: 'Settings & UPI', group: 'Core', description: 'Restaurant settings, tax, UPI' }
-];
+const PlanFeature = require('../models/PlanFeature');
 
-const DEFAULT_FEATURE_KEYS = ['orders', 'branches', 'branch_portal', 'reports', 'settings'];
+async function getAllFeatureDocs({ activeOnly = false } = {}) {
+  const query = activeOnly ? { status: 'Active' } : {};
+  return PlanFeature.find(query).sort({ sortOrder: 1, label: 1 }).lean();
+}
 
-const catalogMap = Object.fromEntries(PLAN_FEATURE_CATALOG.map((f) => [f.key, f]));
+async function getFeatureMap(options) {
+  const catalog = await getAllFeatureDocs(options);
+  return Object.fromEntries(catalog.map((feature) => [feature.key, feature]));
+}
 
-exports.PLAN_FEATURE_CATALOG = PLAN_FEATURE_CATALOG;
+exports.getFeatureCatalog = async (options) => getAllFeatureDocs(options);
 
-exports.isValidFeatureKey = (key) => Boolean(catalogMap[key]);
+exports.isValidFeatureKey = async (key, options = { activeOnly: false }) => {
+  if (!key) return false;
+  const feature = await PlanFeature.findOne({
+    key: String(key).trim().toLowerCase(),
+    ...(options.activeOnly ? { status: 'Active' } : {})
+  }).lean();
+  return Boolean(feature);
+};
 
-exports.getFeatureLabel = (key) => catalogMap[key]?.label || key;
+exports.keysToFeatureLabels = async (keys = [], options = { activeOnly: false }) => {
+  const map = await getFeatureMap(options);
+  return (keys || []).filter((key) => map[key]).map((key) => map[key].label);
+};
 
-exports.getFeatureCatalog = () => PLAN_FEATURE_CATALOG;
-
-exports.keysToFeatureLabels = (keys = []) =>
-  (keys || []).filter((k) => catalogMap[k]).map((k) => catalogMap[k].label);
-
-exports.normalizeFeatureKeys = (keys) => {
+exports.normalizeFeatureKeys = async (keys, options = { activeOnly: false }) => {
   if (!Array.isArray(keys)) return [];
-  return [...new Set(keys.filter((k) => exports.isValidFeatureKey(k)))];
+  const map = await getFeatureMap(options);
+  return [...new Set(keys.map((key) => String(key || '').trim().toLowerCase()).filter((key) => map[key]))];
 };
 
 /** Legacy plans jinke paas featureKeys nahi — features strings se guess karo */
 exports.inferFeatureKeysFromLegacy = (features = []) => {
   const text = (Array.isArray(features) ? features.join(' ') : String(features || '')).toLowerCase();
-  const keys = new Set(DEFAULT_FEATURE_KEYS);
+  const keys = new Set();
 
   if (/inventory|stock/.test(text)) keys.add('inventory');
   if (/report|analytics|sales/.test(text)) keys.add('reports');
-  if (/branch/.test(text)) keys.add('branches');
-  if (/order|dashboard|kds|kitchen|qr/.test(text)) keys.add('orders');
+  if (/branch/.test(text)) {
+    keys.add('branches');
+    keys.add('branch_portal');
+  }
+  if (/qr|table/.test(text)) keys.add('tables_qr');
+  if (/order|dashboard|kds|kitchen/.test(text)) keys.add('orders');
   if (/setting|upi/.test(text)) keys.add('settings');
 
   return [...keys];
 };
 
-exports.resolvePlanFeatures = (plan) => {
+exports.resolvePlanFeatures = async (plan) => {
   if (!plan) {
     return {
-      featureKeys: [...DEFAULT_FEATURE_KEYS],
-      features: exports.keysToFeatureLabels(DEFAULT_FEATURE_KEYS)
+      featureKeys: [],
+      features: []
     };
   }
 
   const raw = plan.toObject ? plan.toObject() : plan;
-  let featureKeys = exports.normalizeFeatureKeys(raw.featureKeys);
-  if (!featureKeys.length) {
-    featureKeys = exports.inferFeatureKeysFromLegacy(raw.features);
-  }
-  if (!featureKeys.length) {
-    featureKeys = [...DEFAULT_FEATURE_KEYS];
-  }
+  // Strict: sirf Super Admin ne plan me jo featureKeys select kiye, wahi allow
+  const featureKeys = await exports.normalizeFeatureKeys(raw.featureKeys || []);
 
   return {
     featureKeys,
-    features: exports.keysToFeatureLabels(featureKeys)
+    features: await exports.keysToFeatureLabels(featureKeys)
   };
 };
 
@@ -71,24 +74,73 @@ exports.resolvePlanFeaturesByName = async (planName) => {
   return exports.resolvePlanFeatures(plan);
 };
 
+exports.resolveAdminFeatureKeys = async (planName, extraFeatureKeys = []) => {
+  const { featureKeys: planFeatureKeys } = await exports.resolvePlanFeaturesByName(planName);
+  const normalizedExtraKeys = await exports.normalizeFeatureKeys(extraFeatureKeys);
+  return [...new Set([...(planFeatureKeys || []), ...normalizedExtraKeys])];
+};
+
+exports.resolveAdminFeatures = async (planName, extraFeatureKeys = []) => {
+  const featureKeys = await exports.resolveAdminFeatureKeys(planName, extraFeatureKeys);
+  return {
+    featureKeys,
+    features: await exports.keysToFeatureLabels(featureKeys)
+  };
+};
+
+exports.resolveBranchFeatureKeys = async (branch, planFeatureKeys = []) => {
+  const normalizedPlanKeys = await exports.normalizeFeatureKeys(planFeatureKeys);
+  const branchKeys = await exports.normalizeFeatureKeys(branch?.featureKeys || []);
+  if (!branchKeys.length) return normalizedPlanKeys;
+  const planSet = new Set(normalizedPlanKeys);
+  return branchKeys.filter((key) => planSet.has(key));
+};
+
+exports.resolveBranchFeatures = async (branch, planFeatureKeys = []) => {
+  const featureKeys = await exports.resolveBranchFeatureKeys(branch, planFeatureKeys);
+  return {
+    featureKeys,
+    features: await exports.keysToFeatureLabels(featureKeys)
+  };
+};
+
 exports.adminHasPlanFeature = async (user, featureKey) => {
-  if (!user) return false;
+  if (!user || !featureKey) return false;
+  const normalizedFeatureKey = String(featureKey).trim().toLowerCase();
 
   let planName = user.planName;
+  let branch = null;
+
   if (user.role === 'BranchAdmin' && user.restaurantAdminId) {
     const User = require('../models/User');
-    const parent = await User.findById(user.restaurantAdminId).select('planName');
+    const Branch = require('../models/Branch');
+    const parent = await User.findById(user.restaurantAdminId).select('planName extraFeatureKeys');
     planName = parent?.planName || planName;
+    user.extraFeatureKeys = parent?.extraFeatureKeys || [];
+    if (user.branchId) {
+      branch = await Branch.findById(user.branchId).select('featureKeys');
+    }
   } else if (user.role !== 'Admin') {
     return false;
   }
 
-  const { featureKeys } = await exports.resolvePlanFeaturesByName(planName);
-  return featureKeys.includes(featureKey);
+  const planFeatureKeys = await exports.resolveAdminFeatureKeys(planName, user.extraFeatureKeys || []);
+  if (!planFeatureKeys.includes(normalizedFeatureKey)) {
+    return false;
+  }
+
+  if (user.role === 'BranchAdmin') {
+    const branchFeatureKeys = await exports.resolveBranchFeatureKeys(branch, planFeatureKeys);
+    return branchFeatureKeys.includes(normalizedFeatureKey);
+  }
+
+  return true;
 };
 
-exports.DEFAULT_FEATURE_KEYS = DEFAULT_FEATURE_KEYS;
-
-exports.getPlanFeatureCatalogHandler = (req, res) => {
-  res.json({ success: true, catalog: exports.getFeatureCatalog() });
+exports.getPlanFeatureCatalogHandler = async (req, res, next) => {
+  try {
+    res.json({ success: true, catalog: await exports.getFeatureCatalog() });
+  } catch (error) {
+    next(error);
+  }
 };

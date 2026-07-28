@@ -39,6 +39,10 @@ const branchSchema = new mongoose.Schema({
   suspendedByLimit: {
     type: Boolean,
     default: false
+  },
+  featureKeys: {
+    type: [String],
+    default: []
   }
 }, {
   timestamps: true

@@ -3,8 +3,10 @@ const router = express.Router();
 const { getCategories, createCategory, getCategoryById, updateCategory, deleteCategory } = require('../controllers/categoryController');
 const { protect } = require('../middleware/authMiddleware');
 const { handleUpload } = require('../middleware/uploadMiddleware');
+const { requirePlanFeature } = require('../middleware/planFeatureMiddleware');
 
 router.use(protect);
+router.use(requirePlanFeature('tables_qr'));
 
 router.get('/', getCategories);
 router.post('/', handleUpload('image'), createCategory);

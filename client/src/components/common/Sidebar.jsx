@@ -56,21 +56,21 @@ export default function Sidebar() {
             <span>Dashboard</span>
           </NavLink>
 
-          {(branchMode || (!branchMode && hasPlanFeature(user, 'orders'))) && (
+          {hasPlanFeature(user, 'orders') && (
             <NavLink to={p('/orders')} onClick={closeSidebar} className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
               <ShoppingCart size={18} />
               <span>Orders</span>
             </NavLink>
           )}
 
-          {(branchMode || user?.role === 'Kitchen') && (
+          {(user?.role === 'Kitchen' || (branchMode && hasPlanFeature(user, 'orders'))) && (
             <NavLink to={p('/kitchen')} onClick={closeSidebar} className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
               <ChefHat size={18} />
               <span>Kitchen Screen</span>
             </NavLink>
           )}
 
-          {(branchMode || user?.role === 'Admin') && (
+          {hasPlanFeature(user, 'tables_qr') && (
             <>
               <NavLink to={p('/menu')} onClick={closeSidebar} className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
                 <Utensils size={18} />
@@ -89,21 +89,21 @@ export default function Sidebar() {
             </>
           )}
 
-          {!branchMode && hasPlanFeature(user, 'branches') && (
+          {!branchMode && (hasPlanFeature(user, 'branches') || hasPlanFeature(user, 'branch_portal')) && (
             <NavLink to={p('/branches')} onClick={closeSidebar} className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
               <MapPin size={18} />
               <span>Branches</span>
             </NavLink>
           )}
 
-          {(branchMode || user?.role === 'Admin') && (
+          {hasPlanFeature(user, 'inventory') && (
             <NavLink to={p('/inventory')} onClick={closeSidebar} className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
               <Package size={18} />
               <span>Kitchen Stock</span>
             </NavLink>
           )}
 
-          {(!branchMode ? hasPlanFeature(user, 'reports') : true) && (
+          {hasPlanFeature(user, 'reports') && (
             <NavLink to={p('/reports')} onClick={closeSidebar} className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
               <BarChart3 size={18} />
               <span>Sales Reports</span>

@@ -7,6 +7,7 @@ import { useBranch } from '../../context/BranchContext';
 import { Plus, Edit2, Trash2, MapPin, Star, RefreshCw, QrCode, ShoppingBag, IndianRupee, Clock, LayoutGrid, KeyRound, UserPlus, Copy, Check, Package, LogIn, ExternalLink } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { portalPath } from '../../utils/adminPaths';
+import { hasPlanFeature } from '../../utils/planFeatures';
 
 const emptyForm = {
   branchName: '',
@@ -14,7 +15,8 @@ const emptyForm = {
   city: '',
   mobile: '',
   isActive: true,
-  isDefault: false
+  isDefault: false,
+  featureKeys: []
 };
 
 const emptyManagerForm = {
@@ -37,6 +39,7 @@ export default function BranchesPage() {
   const [formData, setFormData] = useState(emptyForm);
   const [modalError, setModalError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [featureCatalog, setFeatureCatalog] = useState([]);
   const [managerBranch, setManagerBranch] = useState(null);
   const [managerForm, setManagerForm] = useState(emptyManagerForm);
   const [managerError, setManagerError] = useState('');
@@ -45,7 +48,35 @@ export default function BranchesPage() {
   const [openingPortalId, setOpeningPortalId] = useState(null);
 
   const branchLoginUrl = `${window.location.origin}/admin/login`;
-  const showInventory = true;
+  const showInventory = hasPlanFeature(user, 'inventory');
+  const showTablesQr = hasPlanFeature(user, 'tables_qr');
+  const showBranchPortal = hasPlanFeature(user, 'branch_portal');
+  const canManageBranches = hasPlanFeature(user, 'branches');
+
+  const branchHasFeature = (branch, key) => {
+    // Pehle Super Admin plan me feature hona chahiye
+    if (!hasPlanFeature(user, key)) return false;
+    const keys = branch?.effectiveFeatureKeys || [];
+    // Branch assignment nahi hai to plan features inherit
+    if (!keys.length) return true;
+    return keys.includes(key);
+  };
+
+  const loadFeatureCatalog = async () => {
+    try {
+      const res = await API.get('/auth/plan-feature-catalog');
+      if (res.data.success) {
+        const allowedKeys = new Set(user?.planFeatureKeys || []);
+        setFeatureCatalog(
+          (res.data.catalog || []).filter(
+            (feature) => allowedKeys.has(feature.key) && feature.assignableToBranch !== false
+          )
+        );
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
   const fetchBranches = async () => {
     setLoading(true);
@@ -65,11 +96,12 @@ export default function BranchesPage() {
 
   useEffect(() => {
     fetchBranches();
+    loadFeatureCatalog();
   }, []);
 
   const handleOpenAdd = () => {
     setEditingBranch(null);
-    setFormData(emptyForm);
+    setFormData({ ...emptyForm, featureKeys: user?.planFeatureKeys || [] });
     setModalError('');
     setShowModal(true);
   };
@@ -82,7 +114,8 @@ export default function BranchesPage() {
       city: branch.city || '',
       mobile: branch.mobile || '',
       isActive: branch.isActive !== false,
-      isDefault: Boolean(branch.isDefault)
+      isDefault: Boolean(branch.isDefault),
+      featureKeys: branch.featureKeys?.length ? branch.featureKeys : (branch.effectiveFeatureKeys || [])
     });
     setModalError('');
     setShowModal(true);
@@ -95,8 +128,12 @@ export default function BranchesPage() {
     try {
       if (editingBranch) {
         await API.put(`/branches/${editingBranch._id}`, formData);
+        await API.put(`/branches/${editingBranch._id}/features`, { featureKeys: formData.featureKeys || [] });
       } else {
-        await API.post('/branches', formData);
+        const res = await API.post('/branches', formData);
+        if (res.data?.branch?._id) {
+          await API.put(`/branches/${res.data.branch._id}/features`, { featureKeys: formData.featureKeys || [] });
+        }
       }
       setShowModal(false);
       await fetchBranches();
@@ -298,8 +335,14 @@ export default function BranchesPage() {
                 type="button"
                 onClick={handleOpenAdd}
                 className="btn btn-primary"
-                disabled={isBranchLimitReached}
-                title={isBranchLimitReached ? 'Branch limit reached' : 'Add new branch'}
+                disabled={isBranchLimitReached || !canManageBranches}
+                title={
+                  !canManageBranches
+                    ? 'Multi-Branch Management plan me nahi hai'
+                    : isBranchLimitReached
+                      ? 'Branch limit reached'
+                      : 'Add new branch'
+                }
               >
                 <Plus size={18} />
                 <span>Add Branch</span>
@@ -346,10 +389,12 @@ export default function BranchesPage() {
                         )}
                       </div>
                       <div style={{ display: 'flex', gap: '0.35rem' }}>
-                        <button type="button" onClick={() => handleOpenEdit(branch)} className="btn btn-secondary btn-sm" title="Edit">
-                          <Edit2 size={14} />
-                        </button>
-                        {!branch.isDefault && (
+                        {canManageBranches && (
+                          <button type="button" onClick={() => handleOpenEdit(branch)} className="btn btn-secondary btn-sm" title="Edit">
+                            <Edit2 size={14} />
+                          </button>
+                        )}
+                        {canManageBranches && !branch.isDefault && (
                           <button type="button" onClick={() => handleDelete(branch)} className="btn btn-secondary btn-sm" title="Delete" style={{ color: 'var(--danger)' }}>
                             <Trash2 size={14} />
                           </button>
@@ -373,83 +418,117 @@ export default function BranchesPage() {
                       {statBox('Pending', s.pendingOrders ?? 0, <Clock size={12} />, (s.pendingOrders ?? 0) > 0 ? 'var(--danger)' : 'var(--text-muted)')}
                     </div>
 
-                    <div style={{
-                      background: branch.branchManager ? '#ecfdf5' : '#f8fafc',
-                      border: `1px solid ${branch.branchManager ? '#a7f3d0' : 'var(--border)'}`,
-                      borderRadius: '10px',
-                      padding: '0.65rem 0.75rem',
-                      fontSize: '0.82rem'
-                    }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontWeight: '700', marginBottom: '0.25rem', color: branch.branchManager ? '#047857' : 'var(--text-muted)' }}>
-                        <KeyRound size={14} />
-                        Branch Login
-                      </div>
-                      {branch.branchManager ? (
-                        <>
-                          <div style={{ color: 'var(--secondary)' }}>{branch.branchManager.name}</div>
-                          <div style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>{branch.branchManager.email}</div>
-                          {!branch.branchManager.isActive && (
-                            <span className="badge badge-cancelled" style={{ marginTop: '0.35rem', display: 'inline-block' }}>Login Disabled</span>
+                    {showBranchPortal ? (
+                      <>
+                        <div style={{
+                          background: branch.branchManager ? '#ecfdf5' : '#f8fafc',
+                          border: `1px solid ${branch.branchManager ? '#a7f3d0' : 'var(--border)'}`,
+                          borderRadius: '10px',
+                          padding: '0.65rem 0.75rem',
+                          fontSize: '0.82rem'
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontWeight: '700', marginBottom: '0.25rem', color: branch.branchManager ? '#047857' : 'var(--text-muted)' }}>
+                            <KeyRound size={14} />
+                            Branch Manager Portal
+                          </div>
+                          {branch.branchManager ? (
+                            <>
+                              <div style={{ color: 'var(--secondary)' }}>{branch.branchManager.name}</div>
+                              <div style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>{branch.branchManager.email}</div>
+                              {!branch.branchManager.isActive && (
+                                <span className="badge badge-cancelled" style={{ marginTop: '0.35rem', display: 'inline-block' }}>Login Disabled</span>
+                              )}
+                            </>
+                          ) : (
+                            <div style={{ color: 'var(--text-muted)' }}>No branch manager login created yet</div>
                           )}
-                        </>
-                      ) : (
-                        <div style={{ color: 'var(--text-muted)' }}>No branch manager login created yet</div>
-                      )}
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => openBranchPortal(branch)}
+                          className="btn btn-primary btn-sm"
+                          style={{ width: '100%' }}
+                          disabled={
+                            branch.suspendedByLimit
+                            || !branch.branchManager
+                            || branch.branchManager?.isActive === false
+                            || openingPortalId === branch._id
+                          }
+                          title={
+                            branch.suspendedByLimit
+                              ? 'Suspended branch'
+                              : !branch.branchManager
+                                ? 'Pehle Create Branch Login karo'
+                                : branch.branchManager?.isActive === false
+                                  ? 'Branch login disabled'
+                                  : 'New tab me branch portal open karein'
+                          }
+                        >
+                          {openingPortalId === branch._id ? (
+                            <RefreshCw size={15} />
+                          ) : (
+                            <LogIn size={15} />
+                          )}
+                          {openingPortalId === branch._id ? 'Opening…' : 'Open Branch Login'}
+                          <ExternalLink size={13} style={{ opacity: 0.85 }} />
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleOpenManager(branch)}
+                          className="btn btn-secondary btn-sm"
+                          style={{ width: '100%' }}
+                          disabled={branch.suspendedByLimit}
+                          title={branch.suspendedByLimit ? 'Suspended branch — delete or increase limit first' : undefined}
+                        >
+                          <UserPlus size={15} />
+                          {branch.branchManager ? 'Edit Branch Login' : 'Create Branch Login'}
+                        </button>
+                      </>
+                    ) : (
+                      <div style={{
+                        background: '#fff7ed',
+                        border: '1px solid #fed7aa',
+                        borderRadius: '10px',
+                        padding: '0.65rem 0.75rem',
+                        fontSize: '0.8rem',
+                        color: '#9a3412'
+                      }}>
+                        Branch Manager Portal is not included in your membership plan.
+                      </div>
+                    )}
+
+                    <div style={{ background: '#f8fafc', border: '1px solid var(--border)', borderRadius: '10px', padding: '0.65rem 0.75rem', fontSize: '0.8rem' }}>
+                      <div style={{ fontWeight: '700', color: 'var(--text-muted)', marginBottom: '0.4rem' }}>Assigned Branch Features</div>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
+                        {(branch.effectiveFeatures || []).length > 0 ? (branch.effectiveFeatures || []).map((label) => (
+                          <span key={label} className="badge badge-pending">{label}</span>
+                        )) : (
+                          <span style={{ color: 'var(--text-muted)' }}>No branch-specific features assigned</span>
+                        )}
+                      </div>
                     </div>
 
-                    <button
-                      type="button"
-                      onClick={() => openBranchPortal(branch)}
-                      className="btn btn-primary btn-sm"
-                      style={{ width: '100%' }}
-                      disabled={
-                        branch.suspendedByLimit
-                        || !branch.branchManager
-                        || branch.branchManager?.isActive === false
-                        || openingPortalId === branch._id
-                      }
-                      title={
-                        branch.suspendedByLimit
-                          ? 'Suspended branch'
-                          : !branch.branchManager
-                            ? 'Pehle Create Branch Login karo'
-                            : branch.branchManager?.isActive === false
-                              ? 'Branch login disabled'
-                              : 'New tab me branch portal open karein'
-                      }
-                    >
-                      {openingPortalId === branch._id ? (
-                        <RefreshCw size={15} />
-                      ) : (
-                        <LogIn size={15} />
-                      )}
-                      {openingPortalId === branch._id ? 'Opening…' : 'Open Branch Login'}
-                      <ExternalLink size={13} style={{ opacity: 0.85 }} />
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => handleOpenManager(branch)}
-                      className="btn btn-secondary btn-sm"
-                      style={{ width: '100%' }}
-                      disabled={branch.suspendedByLimit}
-                      title={branch.suspendedByLimit ? 'Suspended branch — delete or increase limit first' : undefined}
-                    >
-                      <UserPlus size={15} />
-                      {branch.branchManager ? 'Edit Branch Login' : 'Create Branch Login'}
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => openBranchTables(branch)}
-                      className="btn btn-secondary btn-sm"
-                      style={{ width: '100%', marginTop: '0.25rem' }}
-                      disabled={branch.suspendedByLimit}
-                      title={branch.suspendedByLimit ? 'Suspended branch — QR orders are blocked' : undefined}
-                    >
-                      <QrCode size={15} />
-                      Manage Tables &amp; QR
-                    </button>
+                    {showTablesQr && (
+                      <button
+                        type="button"
+                        onClick={() => openBranchTables(branch)}
+                        className="btn btn-secondary btn-sm"
+                        style={{ width: '100%', marginTop: '0.25rem' }}
+                        disabled={branch.suspendedByLimit || !branchHasFeature(branch, 'tables_qr')}
+                        title={
+                          branch.suspendedByLimit
+                            ? 'Suspended branch — QR orders are blocked'
+                            : !branchHasFeature(branch, 'tables_qr')
+                              ? 'Tables & QR this branch ke liye assigned nahi hai'
+                              : undefined
+                        }
+                      >
+                        <QrCode size={15} />
+                        Manage Tables &amp; QR
+                      </button>
+                    )}
 
                     {showInventory && (
                       <button
@@ -457,8 +536,14 @@ export default function BranchesPage() {
                         onClick={() => openBranchInventory(branch)}
                         className="btn btn-secondary btn-sm"
                         style={{ width: '100%', marginTop: '0.25rem' }}
-                        disabled={branch.suspendedByLimit}
-                        title={branch.suspendedByLimit ? 'Suspended branch' : undefined}
+                        disabled={branch.suspendedByLimit || !branchHasFeature(branch, 'inventory')}
+                        title={
+                          branch.suspendedByLimit
+                            ? 'Suspended branch'
+                            : !branchHasFeature(branch, 'inventory')
+                              ? 'Inventory this branch ke liye assigned nahi hai'
+                              : undefined
+                        }
                       >
                         <Package size={15} />
                         Manage Inventory
@@ -548,6 +633,39 @@ export default function BranchesPage() {
                   </label>
                 )}
               </div>
+              {featureCatalog.length > 0 && (
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', marginBottom: '0.45rem' }}>
+                    Branch Features
+                  </label>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem', maxHeight: '220px', overflowY: 'auto', padding: '0.65rem', background: '#f8fafc', borderRadius: '10px', border: '1px solid var(--border)' }}>
+                    {featureCatalog.map((feature) => (
+                      <label key={feature.key} style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem', cursor: 'pointer', fontSize: '0.82rem' }}>
+                        <input
+                          type="checkbox"
+                          checked={(formData.featureKeys || []).includes(feature.key)}
+                          onChange={(e) => setFormData((prev) => ({
+                            ...prev,
+                            featureKeys: e.target.checked
+                              ? [...new Set([...(prev.featureKeys || []), feature.key])]
+                              : (prev.featureKeys || []).filter((key) => key !== feature.key)
+                          }))}
+                          style={{ marginTop: '0.15rem' }}
+                        />
+                        <span>
+                          <strong>{feature.label}</strong>
+                          {feature.description && (
+                            <span style={{ display: 'block', fontSize: '0.72rem', color: 'var(--text-muted)' }}>{feature.description}</span>
+                          )}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                  <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.35rem' }}>
+                    Branch manager ko sirf yehi selected features dikhaye jayenge.
+                  </p>
+                </div>
+              )}
               <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', marginTop: '0.25rem' }}>
                 <button type="button" className="btn btn-secondary" onClick={() => setShowModal(false)} disabled={saving}>
                   Cancel
@@ -568,7 +686,7 @@ export default function BranchesPage() {
               Branch Login — {managerBranch.branchName}
             </h3>
             <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '1rem' }}>
-              The branch manager signs in with a separate email and password. They will only see orders, tables, and reports for this branch.
+              The branch manager signs in with a separate email and password. They will only see the features you assign to this branch.
             </p>
 
             <div style={{

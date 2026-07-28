@@ -6,11 +6,6 @@ exports.requirePlanFeature = (featureKey) => async (req, res, next) => {
       return res.status(403).json({ success: false, message: 'Restaurant access required' });
     }
 
-    // Inventory is always available for restaurant admin / branch manager
-    if (featureKey === 'inventory') {
-      return next();
-    }
-
     const allowed = await adminHasPlanFeature(req.user, featureKey);
     if (!allowed) {
       return res.status(403).json({

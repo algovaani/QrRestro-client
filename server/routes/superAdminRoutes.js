@@ -13,7 +13,8 @@ const {
   sendMembershipOffer,
   rejectRenewal,
   deleteAdmin,
-  requestRenewal
+  requestRenewal,
+  getTransactionHistory
 } = require('../controllers/superAdminController');
 
 const {
@@ -22,6 +23,12 @@ const {
   updatePlan,
   deletePlan
 } = require('../controllers/membershipPlanController');
+const {
+  getAllPlanFeatures,
+  createPlanFeature,
+  updatePlanFeature,
+  deletePlanFeature
+} = require('../controllers/planFeatureController');
 
 const { getPlanFeatureCatalogHandler } = require('../utils/planFeatures');
 const {
@@ -37,6 +44,7 @@ router.use(protect, isSuperAdmin);
 
 // Stats & Admin Accounts
 router.get('/stats', getSuperAdminStats);
+router.get('/transactions', getTransactionHistory);
 router.get('/admins', getAllAdmins);
 router.post('/admins', createAdmin);
 router.put('/admins/:id', updateAdmin);
@@ -49,6 +57,10 @@ router.delete('/admins/:id', deleteAdmin);
 
 // Membership Plans Management Routes
 router.get('/plan-feature-catalog', getPlanFeatureCatalogHandler);
+router.get('/features', getAllPlanFeatures);
+router.post('/features', createPlanFeature);
+router.put('/features/:id', updatePlanFeature);
+router.delete('/features/:id', deletePlanFeature);
 router.get('/plans', getAllPlans);
 router.post('/plans', createPlan);
 router.put('/plans/:id', updatePlan);

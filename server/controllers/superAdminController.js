@@ -7,8 +7,10 @@ const Category = require('../models/Category');
 const MenuItem = require('../models/MenuItem');
 const Order = require('../models/Order');
 const MembershipPlan = require('../models/MembershipPlan');
+const TransactionHistory = require('../models/TransactionHistory');
 const { getDaysRemaining, formatExpiryDate, formatRenewalMessage, withMembershipDays, isTrialPlanName, isFreePlan, adminHasUsedFreeTrial, inferPlanNameFromDays, addMembershipDays } = require('../utils/membershipDays');
 const { parseMaxBranches, enforceBranchLimitForAdmin, enforceBranchLimitsForAllAdmins } = require('../utils/branchLimits');
+const { resolveAdminFeatures, normalizeFeatureKeys, getFeatureCatalog } = require('../utils/planFeatures');
 
 const getPlanConfig = async (planName) => {
   const plan = await MembershipPlan.findOne({ name: planName });
@@ -23,6 +25,95 @@ const getPlanConfig = async (planName) => {
   if (planName === 'Quarterly Plan') return { durationDays: 90, planStatus: 'Active' };
   if (planName === 'Monthly Plan') return { durationDays: 30, planStatus: 'Active' };
   return { durationDays: 5, planStatus: 'Trialing' };
+};
+
+const normalizeFeatureAddOns = async (rawAddOns = []) => {
+  if (!Array.isArray(rawAddOns) || rawAddOns.length === 0) {
+    return { addOns: [], extraFeatureKeys: [] };
+  }
+
+  const normalized = [];
+
+  for (const entry of rawAddOns) {
+    const [featureKey] = await normalizeFeatureKeys([entry?.featureKey]);
+    if (!featureKey) continue;
+
+    const paymentStatus = entry?.paymentStatus === 'Paid'
+      ? 'Paid'
+      : entry?.paymentStatus === 'Waived'
+        ? 'Waived'
+        : 'Pending';
+    const enabled = Boolean(entry?.enabled);
+    const paidAt = paymentStatus === 'Paid' || paymentStatus === 'Waived'
+      ? (entry?.paidAt ? new Date(entry.paidAt) : new Date())
+      : null;
+
+    normalized.push({
+      featureKey,
+      enabled,
+      paymentStatus,
+      price: Number(entry?.price) || 0,
+      notes: String(entry?.notes || '').trim(),
+      paidAt: paidAt && !Number.isNaN(paidAt.getTime()) ? paidAt : null
+    });
+  }
+
+  const latestByKey = new Map();
+  for (const addOn of normalized) {
+    latestByKey.set(addOn.featureKey, addOn);
+  }
+
+  const addOns = [...latestByKey.values()];
+  const extraFeatureKeys = addOns
+    .filter((item) => item.enabled && (item.paymentStatus === 'Paid' || item.paymentStatus === 'Waived'))
+    .map((item) => item.featureKey);
+
+  return { addOns, extraFeatureKeys };
+};
+
+const createMembershipTransaction = async (admin, planName, notes = '') => {
+  const plan = await MembershipPlan.findOne({ name: planName }).select('price');
+  await TransactionHistory.create({
+    adminId: admin._id,
+    restaurantName: admin.restaurantName || '',
+    adminName: admin.name || '',
+    type: 'membership_plan',
+    planName: planName || '',
+    amount: Number(plan?.price) || 0,
+    paymentStatus: Number(plan?.price) > 0 ? 'Paid' : 'Waived',
+    notes,
+    paidAt: new Date()
+  });
+};
+
+const createAddOnTransactions = async (admin, previousAddOns = [], nextAddOns = []) => {
+  const catalog = await getFeatureCatalog();
+  const labelByKey = Object.fromEntries(catalog.map((item) => [item.key, item.label]));
+  const previousByKey = new Map((previousAddOns || []).map((item) => [item.featureKey, item]));
+
+  for (const addOn of nextAddOns || []) {
+    const previous = previousByKey.get(addOn.featureKey);
+    const newlyPurchasable = addOn.enabled && (addOn.paymentStatus === 'Paid' || addOn.paymentStatus === 'Waived');
+    const wasPurchasable = previous?.enabled && (previous?.paymentStatus === 'Paid' || previous?.paymentStatus === 'Waived');
+
+    if (!newlyPurchasable) continue;
+    if (wasPurchasable && Number(previous?.price || 0) === Number(addOn.price || 0) && String(previous?.notes || '') === String(addOn.notes || '')) {
+      continue;
+    }
+
+    await TransactionHistory.create({
+      adminId: admin._id,
+      restaurantName: admin.restaurantName || '',
+      adminName: admin.name || '',
+      type: 'feature_addon',
+      featureKey: addOn.featureKey,
+      featureLabel: labelByKey[addOn.featureKey] || addOn.featureKey,
+      amount: Number(addOn.price) || 0,
+      paymentStatus: addOn.paymentStatus,
+      notes: addOn.notes || '',
+      paidAt: addOn.paidAt || new Date()
+    });
+  }
 };
 
 // @desc Get Super Admin Dashboard Overview Stats
@@ -81,18 +172,23 @@ exports.getAllAdmins = async (req, res, next) => {
     const branchMap = Object.fromEntries(branchStats.map((row) => [String(row._id), row]));
     const managerMap = Object.fromEntries(branchManagerStats.map((row) => [String(row._id), row.branchManagers]));
 
-    const processedAdmins = admins.map((admin) => {
+    const processedAdmins = await Promise.all(admins.map(async (admin) => {
       const adminObj = withMembershipDays(admin.toObject());
       const branchInfo = branchMap[String(admin._id)] || {};
+      const resolvedFeatures = await resolveAdminFeatures(admin.planName, admin.extraFeatureKeys || []);
       return {
         ...adminObj,
+        extraFeatureKeys: admin.extraFeatureKeys || [],
+        featureAddOns: admin.featureAddOns || [],
+        planFeatureKeys: resolvedFeatures.featureKeys,
+        planFeatures: resolvedFeatures.features,
         branchStats: {
           totalBranches: branchInfo.totalBranches || 0,
           activeBranches: branchInfo.activeBranches || 0,
           branchManagers: managerMap[String(admin._id)] || 0
         }
       };
-    });
+    }));
 
     res.json({
       success: true,
@@ -109,6 +205,9 @@ exports.getAllAdmins = async (req, res, next) => {
 exports.createAdmin = async (req, res, next) => {
   try {
     const { name, restaurantName, email, password, planName, maxBranches } = req.body;
+    const addOnState = await normalizeFeatureAddOns(req.body.featureAddOns || []);
+    const fallbackExtraFeatureKeys = await normalizeFeatureKeys(req.body.extraFeatureKeys || []);
+    const extraFeatureKeys = addOnState.extraFeatureKeys.length ? addOnState.extraFeatureKeys : fallbackExtraFeatureKeys;
 
     const existingUser = await User.findOne({ email });
     if (existingUser) {
@@ -137,8 +236,14 @@ exports.createAdmin = async (req, res, next) => {
       subscriptionEndsAt: expiryDate,
       renewalRequested: false,
       freeTrialUsed: usedFreeTrial,
-      maxBranches: maxBranches !== undefined ? parseMaxBranches(maxBranches) : null
+      maxBranches: maxBranches !== undefined ? parseMaxBranches(maxBranches) : null,
+      extraFeatureKeys,
+      featureAddOns: addOnState.addOns
     });
+
+    if (addOnState.addOns.length) {
+      await createAddOnTransactions(newAdmin, [], addOnState.addOns);
+    }
 
     await Setting.create({
       adminId: newAdmin._id,
@@ -179,11 +284,20 @@ exports.createAdmin = async (req, res, next) => {
 exports.updateAdmin = async (req, res, next) => {
   try {
     const { name, restaurantName, email, password, planName, extendDays, maxBranches } = req.body;
+    const addOnState = req.body.featureAddOns !== undefined
+      ? await normalizeFeatureAddOns(req.body.featureAddOns || [])
+      : null;
+    const extraFeatureKeys = req.body.extraFeatureKeys !== undefined
+      ? await normalizeFeatureKeys(req.body.extraFeatureKeys || [])
+      : undefined;
 
     let admin = await User.findById(req.params.id);
     if (!admin) {
       return res.status(404).json({ success: false, message: 'Admin account not found' });
     }
+    const previousAddOns = Array.isArray(admin.featureAddOns)
+      ? admin.featureAddOns.map((item) => (item?.toObject ? item.toObject() : { ...item }))
+      : [];
 
     if (name) admin.name = name;
     if (restaurantName) admin.restaurantName = restaurantName;
@@ -198,6 +312,12 @@ exports.updateAdmin = async (req, res, next) => {
 
     if (maxBranches !== undefined) {
       admin.maxBranches = maxBranches === '' || maxBranches === null ? null : parseMaxBranches(maxBranches);
+    }
+    if (addOnState) {
+      admin.featureAddOns = addOnState.addOns;
+      admin.extraFeatureKeys = addOnState.extraFeatureKeys;
+    } else if (extraFeatureKeys !== undefined) {
+      admin.extraFeatureKeys = extraFeatureKeys;
     }
 
     const planChanged = planName && planName !== previousPlanName;
@@ -221,6 +341,10 @@ exports.updateAdmin = async (req, res, next) => {
     }
 
     await admin.save();
+
+    if (addOnState) {
+      await createAddOnTransactions(admin, previousAddOns, admin.featureAddOns || []);
+    }
 
     if (maxBranches !== undefined || planChanged) {
       await enforceBranchLimitForAdmin(admin._id);
@@ -330,6 +454,8 @@ exports.renewAdminMembership = async (req, res, next) => {
 
     await admin.save();
 
+    await createMembershipTransaction(admin, admin.planName, 'Membership activated by Super Admin');
+
     emitMembershipActivated(admin);
 
     const daysRemaining = getDaysRemaining(newExpiryDate);
@@ -352,6 +478,23 @@ exports.renewAdminMembership = async (req, res, next) => {
 exports.reactivateAdminMembership = async (req, res, next) => {
   req.body = req.body || {};
   return exports.renewAdminMembership(req, res, next);
+};
+
+exports.getTransactionHistory = async (req, res, next) => {
+  try {
+    const transactions = await TransactionHistory.find()
+      .sort({ paidAt: -1, createdAt: -1 })
+      .limit(200)
+      .lean();
+
+    res.json({
+      success: true,
+      count: transactions.length,
+      transactions
+    });
+  } catch (error) {
+    next(error);
+  }
 };
 
 // @desc Delete Admin Account

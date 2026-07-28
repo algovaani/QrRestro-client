@@ -3,8 +3,10 @@ const router = express.Router();
 const { getMenuItems, createMenuItem, getMenuItemById, updateMenuItem, deleteMenuItem, toggleAvailability } = require('../controllers/menuItemController');
 const { protect } = require('../middleware/authMiddleware');
 const { handleUpload } = require('../middleware/uploadMiddleware');
+const { requirePlanFeature } = require('../middleware/planFeatureMiddleware');
 
 router.use(protect);
+router.use(requirePlanFeature('tables_qr'));
 
 router.get('/', getMenuItems);
 router.post('/', handleUpload('image'), createMenuItem);

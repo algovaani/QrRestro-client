@@ -3,19 +3,18 @@
 export const PLAN_FEATURE_ROUTE_MAP = {
   orders: '/admin/orders',
   branches: '/admin/branches',
+  branch_portal: '/admin/branches',
+  tables_qr: '/admin/tables',
   reports: '/admin/reports',
   inventory: '/admin/inventory',
   settings: '/admin/settings'
 };
 
 export function hasPlanFeature(user, featureKey) {
-  if (!user || !['Admin', 'BranchAdmin'].includes(user.role)) return false;
-  // Inventory is always available so restaurant admin can audit every branch's stock
-  if (featureKey === 'inventory') return true;
+  if (!user || !featureKey || !['Admin', 'BranchAdmin'].includes(user.role)) return false;
   const keys = user.planFeatureKeys;
-  if (!Array.isArray(keys) || keys.length === 0) {
-    return true;
-  }
+  // Strict: sirf Super Admin plan (ya paid add-on) me jo features hain wahi allow
+  if (!Array.isArray(keys) || keys.length === 0) return false;
   return keys.includes(featureKey);
 }
 

@@ -2,7 +2,7 @@ const User = require('../models/User');
 const jwt = require('jsonwebtoken');
 const Branch = require('../models/Branch');
 const { getDaysRemaining, withMembershipDays, adminHasUsedFreeTrial } = require('../utils/membershipDays');
-const { resolvePlanFeaturesByName } = require('../utils/planFeatures');
+const { resolveBranchFeatures, resolveAdminFeatures } = require('../utils/planFeatures');
 
 const generateToken = (id) => {
   return jwt.sign({ id }, process.env.JWT_SECRET || 'super_secret_jwt_key_restaurant_qr_2026_safe', {
@@ -80,24 +80,31 @@ const serializeAuthUser = async (user, isExpired = false) => {
     isExpired: Boolean(isExpired)
   });
 
+  // Always send explicit arrays so client never falls back to "all features unlocked"
+  base.planFeatureKeys = [];
+  base.planFeatures = [];
+  base.extraFeatureKeys = [];
+
   if (user.role === 'BranchAdmin' && user.branchId) {
-    const branch = await Branch.findById(user.branchId).select('branchName');
+    const branch = await Branch.findById(user.branchId).select('branchName featureKeys');
     base.branchName = branch?.branchName || '';
     if (user.restaurantAdminId) {
-      const parent = await User.findById(user.restaurantAdminId).select('restaurantName planName');
+      const parent = await User.findById(user.restaurantAdminId).select('restaurantName planName extraFeatureKeys');
       if (parent?.restaurantName) base.restaurantName = parent.restaurantName;
-      if (parent?.planName) {
-        const planFeatures = await resolvePlanFeaturesByName(parent.planName);
-        base.planFeatureKeys = planFeatures.featureKeys;
-        base.planFeatures = planFeatures.features;
-      }
+      const adminFeatures = await resolveAdminFeatures(parent?.planName, parent?.extraFeatureKeys || []);
+      const branchFeatures = await resolveBranchFeatures(branch, adminFeatures.featureKeys);
+      base.planFeatureKeys = branchFeatures.featureKeys;
+      base.planFeatures = branchFeatures.features;
+      base.branchFeatureKeys = branch?.featureKeys || [];
+      base.extraFeatureKeys = parent?.extraFeatureKeys || [];
     }
   }
 
-  if (user.role === 'Admin' && user.planName) {
-    const planFeatures = await resolvePlanFeaturesByName(user.planName);
-    base.planFeatureKeys = planFeatures.featureKeys;
-    base.planFeatures = planFeatures.features;
+  if (user.role === 'Admin') {
+    const adminFeatures = await resolveAdminFeatures(user.planName, user.extraFeatureKeys || []);
+    base.planFeatureKeys = adminFeatures.featureKeys;
+    base.planFeatures = adminFeatures.features;
+    base.extraFeatureKeys = user.extraFeatureKeys || [];
   }
 
   return base;

@@ -23,10 +23,15 @@ const membershipPlanSchema = new mongoose.Schema({
   },
   features: {
     type: [String],
-    default: ['Orders & Dashboard', 'Multi-Branch Management', 'Sales Reports']
+    default: []
   },
   featureKeys: {
     type: [String],
+    default: []
+  },
+  featureIds: {
+    type: [mongoose.Schema.Types.ObjectId],
+    ref: 'PlanFeature',
     default: []
   },
   status: {

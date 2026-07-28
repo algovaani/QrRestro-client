@@ -7,6 +7,7 @@ const MenuItem = require('../models/MenuItem');
 const { getTenantAdminId, assertTenantOwnership } = require('../middleware/tenantMiddleware');
 const { ensureDefaultBranch } = require('../utils/branchUtils');
 const { canCreateBranch, getMaxBranchesForAdmin, enforceBranchLimitForAdmin, isBranchOperational } = require('../utils/branchLimits');
+const { resolveBranchFeatures, normalizeFeatureKeys, resolveAdminFeatureKeys } = require('../utils/planFeatures');
 
 exports.getBranches = async (req, res, next) => {
   try {
@@ -64,13 +65,24 @@ exports.getBranches = async (req, res, next) => {
     const tableMap = Object.fromEntries(tableCounts.map((r) => [String(r._id), r]));
     const orderMap = Object.fromEntries(orderStats.map((r) => [String(r._id), r]));
 
-    const branchesWithStats = branches.map((branch) => {
+    const parentFeatureSource = req.user.role === 'Admin'
+      ? { planName: req.user.planName, extraFeatureKeys: req.user.extraFeatureKeys || [] }
+      : await User.findById(adminId).select('planName extraFeatureKeys');
+    const adminFeatureKeys = await resolveAdminFeatureKeys(
+      parentFeatureSource?.planName,
+      parentFeatureSource?.extraFeatureKeys || []
+    );
+
+    const branchesWithStats = await Promise.all(branches.map(async (branch) => {
       const bid = String(branch._id);
       const tables = tableMap[bid] || {};
       const orders = orderMap[bid] || {};
       const manager = managers.find((m) => String(m.branchId) === bid);
+      const branchFeatures = await resolveBranchFeatures(branch, adminFeatureKeys);
       return {
         ...branch.toObject(),
+        effectiveFeatureKeys: branchFeatures.featureKeys,
+        effectiveFeatures: branchFeatures.features,
         stats: {
           tableCount: tables.tableCount || 0,
           activeTables: tables.activeTables || 0,
@@ -82,7 +94,7 @@ exports.getBranches = async (req, res, next) => {
           ? { _id: manager._id, name: manager.name, email: manager.email, isActive: manager.isActive }
           : null
       };
-    });
+    }));
 
     const totals = branchesWithStats.reduce(
       (acc, b) => ({
@@ -358,6 +370,41 @@ exports.upsertBranchManager = async (req, res, next) => {
         isActive: manager.isActive
       },
       loginUrl: '/admin/login'
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+exports.updateBranchFeatures = async (req, res, next) => {
+  try {
+    const adminId = getTenantAdminId(req.user);
+    if (!adminId || req.user.role !== 'Admin') {
+      return res.status(403).json({ success: false, message: 'Only restaurant admin can assign branch features' });
+    }
+
+    const branch = await Branch.findById(req.params.id);
+    if (!branch) {
+      return res.status(404).json({ success: false, message: 'Branch not found' });
+    }
+    if (!assertTenantOwnership(branch, req.user, res, 'Not authorized')) return;
+
+    const allowedKeys = await resolveAdminFeatureKeys(req.user.planName, req.user.extraFeatureKeys || []);
+    const requestedKeys = await normalizeFeatureKeys(req.body.featureKeys || []);
+    const allowedSet = new Set(allowedKeys);
+
+    branch.featureKeys = requestedKeys.filter((key) => allowedSet.has(key));
+    await branch.save();
+
+    const resolved = await resolveBranchFeatures(branch, planFeatures.featureKeys);
+    res.json({
+      success: true,
+      message: 'Branch features updated successfully',
+      branch: {
+        ...branch.toObject(),
+        effectiveFeatureKeys: resolved.featureKeys,
+        effectiveFeatures: resolved.features
+      }
     });
   } catch (error) {
     next(error);

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import API from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Users,
   Plus,
@@ -42,9 +42,22 @@ import { resolveUploadUrl } from '../../utils/uploadUrl';
 import { getSelectedPlanFeatures } from '../../utils/planFeatures';
 import BrandLogo from '../../components/common/BrandLogo';
 
+const SUPER_ADMIN_TABS = new Set(['admins', 'renewals', 'plans', 'transactions', 'settings']);
+const FEATURE_MENU_OPTIONS = [
+  { value: 'general', label: 'General / Other' },
+  { value: 'orders', label: 'Orders & Dashboard' },
+  { value: 'tables_qr', label: 'Tables & QR Codes' },
+  { value: 'inventory', label: 'Inventory' },
+  { value: 'branches', label: 'Branches' },
+  { value: 'reports', label: 'Reports' },
+  { value: 'settings', label: 'Settings & UPI' },
+  { value: 'branch_portal', label: 'Branch Portal' }
+];
+
 export default function SuperAdminDashboard() {
   const { user, logout, updateUser } = useAuth();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { socket, notifications, removeNotification, isConnected } = useSocket();
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -60,11 +73,31 @@ export default function SuperAdminDashboard() {
 
   const [admins, setAdmins] = useState([]);
   const [plans, setPlans] = useState([]);
+  const [transactions, setTransactions] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
-  const [activeTab, setActiveTab] = useState('admins'); // 'admins', 'renewals', 'plans'
+  const [activeTab, setActiveTab] = useState(() => {
+    const tab = searchParams.get('tab');
+    return SUPER_ADMIN_TABS.has(tab) ? tab : 'admins';
+  });
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [toast, setToast] = useState({ type: '', message: '' });
+
+  const changeTab = (tab) => {
+    const nextTab = SUPER_ADMIN_TABS.has(tab) ? tab : 'admins';
+    setActiveTab(nextTab);
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.set('tab', nextTab);
+    setSearchParams(nextParams, { replace: true });
+  };
+
+  useEffect(() => {
+    const tab = searchParams.get('tab');
+    const nextTab = SUPER_ADMIN_TABS.has(tab) ? tab : 'admins';
+    if (nextTab !== activeTab) {
+      setActiveTab(nextTab);
+    }
+  }, [searchParams, activeTab]);
 
   useEffect(() => {
     document.body.classList.toggle('admin-sidebar-open', sidebarOpen);
@@ -103,7 +136,9 @@ export default function SuperAdminDashboard() {
     email: '',
     password: '',
     planName: 'Monthly Plan',
-    maxBranches: ''
+    maxBranches: '',
+    extraFeatureKeys: [],
+    featureAddOns: []
   });
 
   // Renew Plan Modal State
@@ -122,11 +157,23 @@ export default function SuperAdminDashboard() {
     durationDays: 30,
     maxBranches: 1,
     description: '',
-    featureKeys: ['orders', 'branches', 'branch_portal', 'reports', 'settings'],
+    featureKeys: [],
     status: 'Active',
     upiId: ''
   });
   const [featureCatalog, setFeatureCatalog] = useState([]);
+  const [showFeatureModal, setShowFeatureModal] = useState(false);
+  const [editingFeature, setEditingFeature] = useState(null);
+  const [featureForm, setFeatureForm] = useState({
+    key: '',
+    label: '',
+    group: 'General',
+    menuKey: 'general',
+    description: '',
+    status: 'Active',
+    assignableToBranch: true,
+    sortOrder: 0
+  });
   const [modalError, setModalError] = useState('');
 
   const [sendingOfferAdmin, setSendingOfferAdmin] = useState(null);
@@ -173,7 +220,7 @@ export default function SuperAdminDashboard() {
 
     const onRenewalRequest = (data) => {
       fetchSuperAdminData();
-      setActiveTab('renewals');
+      changeTab('renewals');
       const name = data?.restaurantName || data?.adminName || 'Restaurant admin';
       const plan = data?.requestedPlanName ? ` (${data.requestedPlanName})` : '';
       showToast('success', `📋 ${name} submitted a membership renewal request${plan} — payment screenshot attached!`);
@@ -191,18 +238,20 @@ export default function SuperAdminDashboard() {
   const fetchSuperAdminData = async (silent = false) => {
     if (!silent) setLoading(true);
     try {
-      const [statsRes, adminsRes, plansRes, platformRes, catalogRes] = await Promise.all([
+      const [statsRes, adminsRes, plansRes, platformRes, catalogRes, txRes] = await Promise.all([
         API.get('/super-admin/stats'),
         API.get('/super-admin/admins'),
         API.get('/super-admin/plans'),
         API.get('/super-admin/platform-settings').catch(() => null),
-        API.get('/super-admin/plan-feature-catalog').catch(() => null)
+        API.get('/super-admin/features').catch(() => null),
+        API.get('/super-admin/transactions').catch(() => null)
       ]);
 
       if (statsRes.data.success) setStats(statsRes.data.stats);
       if (adminsRes.data.success) setAdmins(adminsRes.data.admins);
       if (plansRes.data.success) setPlans(plansRes.data.plans);
-      if (catalogRes?.data?.success) setFeatureCatalog(catalogRes.data.catalog || []);
+      if (catalogRes?.data?.success) setFeatureCatalog(catalogRes.data.features || []);
+      if (txRes?.data?.success) setTransactions(txRes.data.transactions || []);
       if (platformRes?.data?.success) {
         setSupportNumber(platformRes.data.settings?.supportNumber || '');
       }
@@ -272,7 +321,18 @@ export default function SuperAdminDashboard() {
       email: admin.email,
       password: admin.rawPassword || '',
       planName: admin.planName || 'Monthly Plan',
-      maxBranches: admin.maxBranches ?? ''
+      maxBranches: admin.maxBranches ?? '',
+      extraFeatureKeys: admin.extraFeatureKeys || [],
+      featureAddOns: admin.featureAddOns?.length
+        ? admin.featureAddOns
+        : (admin.extraFeatureKeys || []).map((featureKey) => ({
+            featureKey,
+            enabled: true,
+            paymentStatus: 'Paid',
+            price: 0,
+            notes: '',
+            paidAt: null
+          }))
     });
     setModalError('');
   };
@@ -428,6 +488,28 @@ export default function SuperAdminDashboard() {
     </ul>
   );
 
+  const getAddOnFeatureOptions = (planName) => {
+    const planFeatureKeys = new Set(getSelectedPlanFeatures(plans, planName).featureKeys || []);
+    return featureCatalog.filter((feature) => !planFeatureKeys.has(feature.key) && feature.status !== 'Inactive');
+  };
+
+  const getEffectiveFeaturePreview = (planName, featureAddOns = [], extraFeatureKeys = []) => {
+    const planPreview = getSelectedPlanFeatures(plans, planName);
+    const paidAddOnKeys = (featureAddOns || [])
+      .filter((item) => item.enabled && (item.paymentStatus === 'Paid' || item.paymentStatus === 'Waived'))
+      .map((item) => item.featureKey);
+    const effectiveExtraKeys = paidAddOnKeys.length ? paidAddOnKeys : (extraFeatureKeys || []);
+    const addOnLabels = featureCatalog
+      .filter((feature) => effectiveExtraKeys.includes(feature.key))
+      .map((feature) => feature.label);
+    const combined = [...new Set([...(planPreview.features || []), ...addOnLabels])];
+    return {
+      featureKeys: [...new Set([...(planPreview.featureKeys || []), ...effectiveExtraKeys])],
+      features: combined,
+      addOnLabels
+    };
+  };
+
   // --- PLAN MANAGEMENT ACTIONS ---
   const handleOpenAddPlan = () => {
     setEditingPlan(null);
@@ -437,7 +519,7 @@ export default function SuperAdminDashboard() {
       durationDays: 30,
       maxBranches: 1,
       description: 'Full featured membership plan for dining outlets',
-      featureKeys: ['orders', 'branches', 'branch_portal', 'reports', 'settings'],
+      featureKeys: [],
       status: 'Active',
       upiId: ''
     });
@@ -453,7 +535,7 @@ export default function SuperAdminDashboard() {
       durationDays: plan.durationDays,
       maxBranches: plan.maxBranches ?? 1,
       description: plan.description || '',
-      featureKeys: plan.featureKeys?.length ? plan.featureKeys : ['orders', 'branches', 'branch_portal', 'reports', 'settings'],
+      featureKeys: plan.featureKeys?.length ? plan.featureKeys : [],
       status: plan.status || 'Active',
       upiId: plan.upiId || ''
     });
@@ -508,6 +590,83 @@ export default function SuperAdminDashboard() {
       fetchSuperAdminData();
     } catch (err) {
       showToast('error', err.response?.data?.message || 'Error deleting membership plan');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleOpenAddFeature = () => {
+    setEditingFeature(null);
+    setFeatureForm({
+      key: '',
+      label: '',
+      group: 'General',
+      menuKey: 'general',
+      description: '',
+      status: 'Active',
+      assignableToBranch: true,
+      sortOrder: featureCatalog.length + 1
+    });
+    setModalError('');
+    setShowFeatureModal(true);
+  };
+
+  const handleOpenEditFeature = (feature) => {
+    setEditingFeature(feature);
+    setFeatureForm({
+      key: feature.key || '',
+      label: feature.label || '',
+      group: feature.group || 'General',
+      menuKey: feature.menuKey || 'general',
+      description: feature.description || '',
+      status: feature.status || 'Active',
+      assignableToBranch: feature.assignableToBranch !== false,
+      sortOrder: feature.sortOrder || 0
+    });
+    setModalError('');
+    setShowFeatureModal(true);
+  };
+
+  const handleSaveFeatureSubmit = async (e) => {
+    e.preventDefault();
+    setModalError('');
+    setActionLoading(true);
+    try {
+      const payload = {
+        key: featureForm.key,
+        label: featureForm.label,
+        group: featureForm.group,
+        menuKey: featureForm.menuKey,
+        description: featureForm.description,
+        status: featureForm.status,
+        assignableToBranch: featureForm.assignableToBranch,
+        sortOrder: featureForm.sortOrder
+      };
+      const res = editingFeature
+        ? await API.put(`/super-admin/features/${editingFeature._id}`, payload)
+        : await API.post('/super-admin/features', payload);
+
+      if (res.data.success) {
+        setShowFeatureModal(false);
+        showToast('success', res.data.message || `Feature ${editingFeature ? 'updated' : 'created'} successfully`);
+        fetchSuperAdminData();
+      }
+    } catch (err) {
+      setModalError(err.response?.data?.message || 'Error saving feature');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleDeleteFeature = async (feature) => {
+    if (!window.confirm(`Delete feature "${feature.label}"? Ye plan aur branch assignments se bhi remove ho jayega.`)) return;
+    setActionLoading(true);
+    try {
+      const res = await API.delete(`/super-admin/features/${feature._id}`);
+      showToast('success', res.data?.message || 'Feature deleted successfully');
+      fetchSuperAdminData();
+    } catch (err) {
+      showToast('error', err.response?.data?.message || 'Error deleting feature');
     } finally {
       setActionLoading(false);
     }
@@ -649,7 +808,7 @@ export default function SuperAdminDashboard() {
 
         <nav className="admin-sidebar-nav">
           <button
-            onClick={() => { setActiveTab('admins'); setSidebarOpen(false); }}
+            onClick={() => { changeTab('admins'); setSidebarOpen(false); }}
             className={`sidebar-link ${activeTab === 'admins' ? 'active' : ''}`}
             style={{ width: '100%', textAlign: 'left' }}
           >
@@ -658,7 +817,7 @@ export default function SuperAdminDashboard() {
           </button>
 
           <button
-            onClick={() => { setActiveTab('renewals'); setSidebarOpen(false); }}
+            onClick={() => { changeTab('renewals'); setSidebarOpen(false); }}
             className={`sidebar-link ${activeTab === 'renewals' ? 'active' : ''}`}
             style={{ width: '100%', textAlign: 'left', position: 'relative' }}
           >
@@ -672,7 +831,7 @@ export default function SuperAdminDashboard() {
           </button>
 
           <button
-            onClick={() => { setActiveTab('plans'); setSidebarOpen(false); }}
+            onClick={() => { changeTab('plans'); setSidebarOpen(false); }}
             className={`sidebar-link ${activeTab === 'plans' ? 'active' : ''}`}
             style={{ width: '100%', textAlign: 'left' }}
           >
@@ -681,7 +840,16 @@ export default function SuperAdminDashboard() {
           </button>
 
           <button
-            onClick={() => { setActiveTab('settings'); setSidebarOpen(false); }}
+            onClick={() => { changeTab('transactions'); setSidebarOpen(false); }}
+            className={`sidebar-link ${activeTab === 'transactions' ? 'active' : ''}`}
+            style={{ width: '100%', textAlign: 'left' }}
+          >
+            <CreditCard size={18} />
+            <span>Transactions ({transactions.length})</span>
+          </button>
+
+          <button
+            onClick={() => { changeTab('settings'); setSidebarOpen(false); }}
             className={`sidebar-link ${activeTab === 'settings' ? 'active' : ''}`}
             style={{ width: '100%', textAlign: 'left' }}
           >
@@ -740,7 +908,7 @@ export default function SuperAdminDashboard() {
 
             <AdminNotificationBell
               onNavigate={(path) => {
-                if (path.includes('super-admin')) setActiveTab('renewals');
+                if (path.includes('super-admin')) changeTab('renewals');
               }}
             />
 
@@ -763,7 +931,7 @@ export default function SuperAdminDashboard() {
           {stats.renewalRequestsCount > 0 && (
             <div
               role="alert"
-              onClick={() => setActiveTab('renewals')}
+              onClick={() => changeTab('renewals')}
               style={{
                 marginBottom: '1rem',
                 padding: '0.85rem 1rem',
@@ -800,7 +968,7 @@ export default function SuperAdminDashboard() {
           
           {/* STATS GRID */}
           <div className="stats-grid" style={{ marginBottom: '1.5rem' }}>
-            <div className="stat-card" onClick={() => setActiveTab('admins')} style={{ cursor: 'pointer' }}>
+            <div className="stat-card" onClick={() => changeTab('admins')} style={{ cursor: 'pointer' }}>
               <div>
                 <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: '600' }}>Total Admins</span>
                 <h3 style={{ fontSize: '1.6rem', fontWeight: '800', marginTop: '0.2rem' }}>{stats.totalAdmins}</h3>
@@ -810,7 +978,7 @@ export default function SuperAdminDashboard() {
               </div>
             </div>
 
-            <div className="stat-card" onClick={() => setActiveTab('admins')} style={{ cursor: 'pointer' }}>
+            <div className="stat-card" onClick={() => changeTab('admins')} style={{ cursor: 'pointer' }}>
               <div>
                 <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: '600' }}>Active Accounts</span>
                 <h3 style={{ fontSize: '1.6rem', fontWeight: '800', marginTop: '0.2rem', color: '#15803d' }}>{stats.activeAdmins}</h3>
@@ -820,7 +988,7 @@ export default function SuperAdminDashboard() {
               </div>
             </div>
 
-            <div className="stat-card" onClick={() => setActiveTab('admins')} style={{ cursor: 'pointer' }}>
+            <div className="stat-card" onClick={() => changeTab('admins')} style={{ cursor: 'pointer' }}>
               <div>
                 <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: '600' }}>5-Day Free Trials</span>
                 <h3 style={{ fontSize: '1.6rem', fontWeight: '800', marginTop: '0.2rem', color: 'var(--primary)' }}>{stats.trialingAdmins}</h3>
@@ -830,7 +998,7 @@ export default function SuperAdminDashboard() {
               </div>
             </div>
 
-            <div className="stat-card" onClick={() => setActiveTab('admins')} style={{ cursor: 'pointer' }}>
+            <div className="stat-card" onClick={() => changeTab('admins')} style={{ cursor: 'pointer' }}>
               <div>
                 <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: '600' }}>Active Branches</span>
                 <h3 style={{ fontSize: '1.6rem', fontWeight: '800', marginTop: '0.2rem', color: '#7c3aed' }}>
@@ -847,7 +1015,7 @@ export default function SuperAdminDashboard() {
             </div>
 
             <div
-              onClick={() => setActiveTab('renewals')}
+              onClick={() => changeTab('renewals')}
               className="stat-card"
               style={{ cursor: 'pointer' }}
             >
@@ -862,7 +1030,7 @@ export default function SuperAdminDashboard() {
             </div>
 
             <div
-              onClick={() => setActiveTab('plans')}
+              onClick={() => changeTab('plans')}
               className="stat-card"
               style={{ cursor: 'pointer' }}
             >
@@ -997,6 +1165,11 @@ export default function SuperAdminDashboard() {
                           <span style={{ fontWeight: '700', color: 'var(--primary)', background: 'var(--primary-light)', padding: '0.2rem 0.55rem', borderRadius: '6px', fontSize: '0.75rem' }}>
                             {admin.displayPlanName || admin.planName}
                           </span>
+                          {admin.extraFeatureKeys?.length > 0 && (
+                            <div style={{ marginTop: '0.35rem', fontSize: '0.72rem', color: 'var(--secondary)' }}>
+                              Add-ons: {admin.extraFeatureKeys.length}
+                            </div>
+                          )}
                           {admin.renewalRequested && (
                             <div style={{ fontSize: '0.7rem', color: '#0284c7', fontWeight: '800', marginTop: '0.2rem' }}>
                               ⚡ Renewal Requested
@@ -1232,9 +1405,61 @@ export default function SuperAdminDashboard() {
                   <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Create, edit, or delete SaaS subscription pricing plans for restaurants</span>
                 </div>
 
-                <button onClick={handleOpenAddPlan} className="btn btn-primary btn-sm">
-                  <Plus size={16} /> + Add New Membership Plan
-                </button>
+                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                  <button onClick={handleOpenAddFeature} className="btn btn-secondary btn-sm">
+                    <Settings size={16} /> Manage Features
+                  </button>
+                  <button onClick={handleOpenAddPlan} className="btn btn-primary btn-sm">
+                    <Plus size={16} /> + Add New Membership Plan
+                  </button>
+                </div>
+              </div>
+
+              <div style={{ background: '#ffffff', borderRadius: '18px', border: '1px solid var(--border)', padding: '1rem', marginBottom: '1rem', boxShadow: '0 4px 12px rgba(0,0,0,0.03)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem', marginBottom: '0.85rem', flexWrap: 'wrap' }}>
+                  <div>
+                    <div style={{ fontSize: '0.95rem', fontWeight: '800', color: 'var(--secondary)' }}>Feature Master</div>
+                    <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>Super admin yahan se dynamic features create karega, phir wahi plans aur branches me use honge.</div>
+                  </div>
+                  <button type="button" className="btn btn-primary btn-sm" onClick={handleOpenAddFeature}>
+                    <Plus size={14} /> Add Feature
+                  </button>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 220px))', justifyContent: 'flex-start', gap: '0.6rem' }}>
+                  {featureCatalog.length === 0 && (
+                    <div style={{ gridColumn: '1 / -1', color: 'var(--text-muted)', border: '1px dashed var(--border)', borderRadius: '12px', padding: '1rem', textAlign: 'center' }}>
+                      No features in database yet. Use `Add Feature` to create your first dynamic feature.
+                    </div>
+                  )}
+                  {featureCatalog.map((feature) => (
+                    <div key={feature._id || feature.key} style={{ border: '1px solid var(--border)', borderRadius: '12px', padding: '0.7rem', background: '#f8fafc' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem', alignItems: 'flex-start' }}>
+                        <div>
+                          <div style={{ fontWeight: '800', fontSize: '0.92rem', color: 'var(--secondary)', lineHeight: 1.2 }}>{feature.label}</div>
+                          <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '0.15rem' }}>{feature.key}</div>
+                        </div>
+                        <span className={`badge ${feature.status === 'Active' ? 'badge-completed' : 'badge-cancelled'}`}>{feature.status}</span>
+                      </div>
+                      <div style={{ fontSize: '0.76rem', color: 'var(--text-muted)', marginTop: '0.45rem' }}>
+                        {feature.group || 'General'} {feature.assignableToBranch === false ? '• Plan only' : '• Branch assignable'}
+                      </div>
+                      <div style={{ fontSize: '0.74rem', color: 'var(--primary)', marginTop: '0.25rem', fontWeight: '700' }}>
+                        Menu: {FEATURE_MENU_OPTIONS.find((item) => item.value === feature.menuKey)?.label || feature.menuKey || 'General / Other'}
+                      </div>
+                      {feature.description && (
+                        <p style={{ fontSize: '0.76rem', lineHeight: 1.35, color: 'var(--text-muted)', margin: '0.45rem 0 0' }}>{feature.description}</p>
+                      )}
+                      <div style={{ display: 'flex', gap: '0.45rem', marginTop: '0.7rem' }}>
+                        <button type="button" className="btn btn-secondary btn-sm" style={{ flex: 1, justifyContent: 'center' }} onClick={() => handleOpenEditFeature(feature)}>
+                          <Edit2 size={14} /> Edit
+                        </button>
+                        <button type="button" className="btn btn-danger btn-sm" style={{ padding: '0.4rem 0.65rem' }} onClick={() => handleDeleteFeature(feature)}>
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
 
               <div className="admin-grid-cards">
@@ -1340,7 +1565,51 @@ export default function SuperAdminDashboard() {
             </div>
           )}
 
-          {/* TAB 4: PLATFORM SETTINGS */}
+          {/* TAB 4: TRANSACTION HISTORY */}
+          {activeTab === 'transactions' && (
+            <div style={{ background: 'var(--bg-surface)', borderRadius: 'var(--radius)', border: '1px solid var(--border)', padding: '1.25rem' }}>
+              <div style={{ marginBottom: '1rem' }}>
+                <h3 style={{ fontSize: '1.2rem', fontWeight: '800', color: 'var(--secondary)' }}>Transaction History</h3>
+                <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                  Membership purchases aur paid add-ons ka latest history yahan dikh raha hai.
+                </span>
+              </div>
+
+              {transactions.length === 0 ? (
+                <div style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '2rem 1rem' }}>
+                  No transactions yet.
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                  {transactions.map((tx) => (
+                    <div key={tx._id} style={{ border: '1px solid var(--border)', borderRadius: '12px', padding: '0.85rem 1rem', background: '#fff' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', flexWrap: 'wrap' }}>
+                        <div>
+                          <div style={{ fontWeight: '800', color: 'var(--secondary)' }}>
+                            {tx.type === 'membership_plan' ? (tx.planName || 'Membership Plan') : (tx.featureLabel || tx.featureKey || 'Feature Add-on')}
+                          </div>
+                          <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>
+                            {tx.restaurantName || tx.adminName} {tx.type === 'feature_addon' ? '• Feature Add-on' : '• Membership Purchase'}
+                          </div>
+                        </div>
+                        <div style={{ textAlign: 'right' }}>
+                          <div style={{ fontWeight: '800', color: 'var(--primary)' }}>Rs {Number(tx.amount || 0).toLocaleString('en-IN')}</div>
+                          <span className={`badge ${tx.paymentStatus === 'Pending' ? 'badge-pending' : 'badge-completed'}`}>{tx.paymentStatus}</span>
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', marginTop: '0.55rem', fontSize: '0.76rem', color: 'var(--text-muted)' }}>
+                        <span>Date: {tx.paidAt ? new Date(tx.paidAt).toLocaleString('en-IN') : 'N/A'}</span>
+                        {tx.featureKey && <span>Feature: {tx.featureKey}</span>}
+                        {tx.notes && <span>Notes: {tx.notes}</span>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* TAB 5: PLATFORM SETTINGS */}
           {activeTab === 'settings' && (
             <div style={{ maxWidth: '560px' }}>
               <div style={{ marginBottom: '1.25rem' }}>
@@ -1480,11 +1749,9 @@ export default function SuperAdminDashboard() {
                         Features included in this plan:
                       </div>
                       {renderPlanFeaturesList(preview.features)}
-                      {!preview.featureKeys.includes('inventory') && (
-                        <p style={{ fontSize: '0.72rem', color: '#b45309', marginTop: '0.5rem', marginBottom: 0 }}>
-                          Inventory is not included in this plan.
-                        </p>
-                      )}
+                      <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '0.5rem', marginBottom: 0 }}>
+                        Selected: {preview.featureKeys.length} feature(s)
+                      </p>
                     </div>
                   ) : null;
                 })()}
@@ -1584,16 +1851,117 @@ export default function SuperAdminDashboard() {
                   ))}
                 </select>
                 {(() => {
-                  const preview = getSelectedPlanFeatures(plans, editForm.planName);
+                  const preview = getEffectiveFeaturePreview(editForm.planName, editForm.featureAddOns, editForm.extraFeatureKeys);
                   return preview.features.length > 0 ? (
                     <div style={{ marginTop: '0.65rem', padding: '0.75rem', background: '#f8fafc', borderRadius: '10px', border: '1px solid var(--border)' }}>
                       <div style={{ fontSize: '0.75rem', fontWeight: '800', color: 'var(--text-muted)', marginBottom: '0.45rem' }}>
-                        Features included in this plan:
+                        Effective features for this admin:
                       </div>
                       {renderPlanFeaturesList(preview.features)}
+                      {preview.addOnLabels.length > 0 && (
+                        <p style={{ fontSize: '0.72rem', color: 'var(--primary)', marginTop: '0.5rem', marginBottom: 0 }}>
+                          Paid add-ons: {preview.addOnLabels.join(', ')}
+                        </p>
+                      )}
                     </div>
                   ) : null;
                 })()}
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '700', marginBottom: '0.45rem' }}>
+                  Extra Paid Features
+                </label>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem', maxHeight: '220px', overflowY: 'auto', padding: '0.65rem', background: '#f8fafc', borderRadius: '10px', border: '1px solid var(--border)' }}>
+                  {getAddOnFeatureOptions(editForm.planName).length === 0 ? (
+                    <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                      Is plan ke bahar koi extra feature available nahi hai.
+                    </div>
+                  ) : (
+                    getAddOnFeatureOptions(editForm.planName).map((feature) => (
+                      <div key={feature.key} style={{ border: '1px solid var(--border)', borderRadius: '10px', padding: '0.65rem', background: '#fff' }}>
+                        <label style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem', cursor: 'pointer', fontSize: '0.82rem' }}>
+                          <input
+                            type="checkbox"
+                            checked={(editForm.featureAddOns || []).some((item) => item.featureKey === feature.key && item.enabled)}
+                            onChange={(e) => setEditForm((prev) => {
+                              const existing = prev.featureAddOns || [];
+                              const match = existing.find((item) => item.featureKey === feature.key);
+                              let nextAddOns;
+                              if (e.target.checked) {
+                                nextAddOns = match
+                                  ? existing.map((item) => item.featureKey === feature.key ? { ...item, enabled: true } : item)
+                                  : [
+                                      ...existing,
+                                      { featureKey: feature.key, enabled: true, paymentStatus: 'Pending', price: 0, notes: '', paidAt: null }
+                                    ];
+                              } else {
+                                nextAddOns = existing.map((item) => item.featureKey === feature.key ? { ...item, enabled: false } : item);
+                              }
+                              return { ...prev, featureAddOns: nextAddOns };
+                            })}
+                            style={{ marginTop: '0.15rem' }}
+                          />
+                          <span>
+                            <strong>{feature.label}</strong>
+                            <span style={{ display: 'block', fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                              {feature.description || 'Paid add-on feature'} {feature.assignableToBranch === false ? '• Plan level only' : '• Branch assignable'}
+                            </span>
+                          </span>
+                        </label>
+
+                        {(editForm.featureAddOns || []).some((item) => item.featureKey === feature.key && item.enabled) && (
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.6rem', marginTop: '0.65rem' }}>
+                            <div>
+                              <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: '700', marginBottom: '0.25rem' }}>Price</label>
+                              <input
+                                type="number"
+                                min="0"
+                                value={(editForm.featureAddOns || []).find((item) => item.featureKey === feature.key)?.price ?? 0}
+                                onChange={(e) => setEditForm((prev) => ({
+                                  ...prev,
+                                  featureAddOns: (prev.featureAddOns || []).map((item) => item.featureKey === feature.key ? { ...item, price: e.target.value } : item)
+                                }))}
+                                style={{ width: '100%' }}
+                              />
+                            </div>
+                            <div>
+                              <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: '700', marginBottom: '0.25rem' }}>Payment Status</label>
+                              <select
+                                value={(editForm.featureAddOns || []).find((item) => item.featureKey === feature.key)?.paymentStatus || 'Pending'}
+                                onChange={(e) => setEditForm((prev) => ({
+                                  ...prev,
+                                  featureAddOns: (prev.featureAddOns || []).map((item) => item.featureKey === feature.key ? { ...item, paymentStatus: e.target.value } : item)
+                                }))}
+                                style={{ width: '100%' }}
+                              >
+                                <option value="Pending">Pending</option>
+                                <option value="Paid">Paid</option>
+                                <option value="Waived">Waived</option>
+                              </select>
+                            </div>
+                            <div style={{ gridColumn: '1 / -1' }}>
+                              <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: '700', marginBottom: '0.25rem' }}>Notes</label>
+                              <input
+                                type="text"
+                                value={(editForm.featureAddOns || []).find((item) => item.featureKey === feature.key)?.notes || ''}
+                                onChange={(e) => setEditForm((prev) => ({
+                                  ...prev,
+                                  featureAddOns: (prev.featureAddOns || []).map((item) => item.featureKey === feature.key ? { ...item, notes: e.target.value } : item)
+                                }))}
+                                placeholder="Payment reference / comment"
+                                style={{ width: '100%' }}
+                              />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ))
+                  )}
+                </div>
+                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.35rem' }}>
+                  Membership ke baad admin agar extra payment kare, to yahan se us account par feature enable kar sakte ho.
+                </p>
               </div>
 
               <div>
@@ -1744,11 +2112,9 @@ export default function SuperAdminDashboard() {
                         Features included in this plan:
                       </div>
                       {renderPlanFeaturesList(preview.features)}
-                      {!preview.featureKeys.includes('inventory') && (
-                        <p style={{ fontSize: '0.72rem', color: '#b45309', marginTop: '0.5rem', marginBottom: 0 }}>
-                          Inventory is not included in this plan.
-                        </p>
-                      )}
+                      <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '0.5rem', marginBottom: 0 }}>
+                        Selected: {preview.featureKeys.length} feature(s)
+                      </p>
                     </div>
                   ) : null;
                 })()}
@@ -1929,14 +2295,12 @@ export default function SuperAdminDashboard() {
                   Plan Features (select features included in this plan)
                 </label>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem', maxHeight: '220px', overflowY: 'auto', padding: '0.65rem', background: '#f8fafc', borderRadius: '10px', border: '1px solid var(--border)' }}>
-                  {(featureCatalog.length ? featureCatalog : [
-                    { key: 'orders', label: 'Orders & Dashboard' },
-                    { key: 'branches', label: 'Multi-Branch Management' },
-                    { key: 'branch_portal', label: 'Branch Manager Portal' },
-                    { key: 'reports', label: 'Sales Reports' },
-                    { key: 'inventory', label: 'Inventory & Stock' },
-                    { key: 'settings', label: 'Settings & UPI' }
-                  ]).map((feat) => (
+                  {featureCatalog.length === 0 && (
+                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                      No features found in database. Pehle Feature Master se feature create karo.
+                    </div>
+                  )}
+                  {featureCatalog.filter((feat) => feat.status !== 'Inactive').map((feat) => (
                     <label key={feat.key} style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem', cursor: 'pointer', fontSize: '0.82rem' }}>
                       <input
                         type="checkbox"
@@ -2004,6 +2368,129 @@ export default function SuperAdminDashboard() {
                 </button>
                 <button type="submit" disabled={actionLoading} className="btn btn-primary">
                   {actionLoading ? 'Saving...' : (editingPlan ? 'Update Plan' : 'Save Membership Plan')}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {showFeatureModal && (
+        <div className="modal-overlay" onClick={() => { setShowFeatureModal(false); setModalError(''); }}>
+          <div className="modal-card" style={{ maxWidth: '560px' }} onClick={(e) => e.stopPropagation()}>
+            <h3 style={{ fontSize: '1.2rem', fontWeight: '800', marginBottom: '1rem' }}>
+              {editingFeature ? 'Edit Feature' : 'Add New Feature'}
+            </h3>
+
+            {modalError && (
+              <div style={{ background: '#fee2e2', color: '#991b1b', padding: '0.6rem', borderRadius: '8px', fontSize: '0.85rem', marginBottom: '1rem' }}>
+                {modalError}
+              </div>
+            )}
+
+            <form onSubmit={handleSaveFeatureSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '0.9rem' }}>
+              <div className="admin-form-grid-2">
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '700', marginBottom: '0.3rem' }}>Feature Label *</label>
+                  <input
+                    type="text"
+                    required
+                    value={featureForm.label}
+                    onChange={(e) => setFeatureForm({ ...featureForm, label: e.target.value })}
+                    placeholder="e.g. Tables & QR Codes"
+                    style={{ width: '100%' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '700', marginBottom: '0.3rem' }}>Feature Key *</label>
+                  <input
+                    type="text"
+                    required
+                    value={featureForm.key}
+                    onChange={(e) => setFeatureForm({ ...featureForm, key: e.target.value })}
+                    placeholder="e.g. tables_qr"
+                    style={{ width: '100%' }}
+                  />
+                </div>
+              </div>
+
+              <div className="admin-form-grid-2">
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '700', marginBottom: '0.3rem' }}>Group</label>
+                  <input
+                    type="text"
+                    value={featureForm.group}
+                    onChange={(e) => setFeatureForm({ ...featureForm, group: e.target.value })}
+                    placeholder="Core / Operations / Analytics"
+                    style={{ width: '100%' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '700', marginBottom: '0.3rem' }}>App Menu / Module</label>
+                  <select
+                    value={featureForm.menuKey}
+                    onChange={(e) => setFeatureForm({ ...featureForm, menuKey: e.target.value })}
+                    style={{ width: '100%' }}
+                  >
+                    {FEATURE_MENU_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="admin-form-grid-2">
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '700', marginBottom: '0.3rem' }}>Sort Order</label>
+                  <input
+                    type="number"
+                    value={featureForm.sortOrder}
+                    onChange={(e) => setFeatureForm({ ...featureForm, sortOrder: e.target.value })}
+                    style={{ width: '100%' }}
+                  />
+                </div>
+                <div />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '700', marginBottom: '0.3rem' }}>Description</label>
+                <textarea
+                  value={featureForm.description}
+                  onChange={(e) => setFeatureForm({ ...featureForm, description: e.target.value })}
+                  rows={3}
+                  placeholder="Short description for plan and branch assignment UI"
+                  style={{ width: '100%', resize: 'vertical' }}
+                />
+              </div>
+
+              <div className="admin-form-grid-2">
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '700', marginBottom: '0.3rem' }}>Status</label>
+                  <select
+                    value={featureForm.status}
+                    onChange={(e) => setFeatureForm({ ...featureForm, status: e.target.value })}
+                    style={{ width: '100%' }}
+                  >
+                    <option value="Active">Active</option>
+                    <option value="Inactive">Inactive</option>
+                  </select>
+                </div>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.85rem', marginTop: '1.8rem' }}>
+                  <input
+                    type="checkbox"
+                    checked={featureForm.assignableToBranch}
+                    onChange={(e) => setFeatureForm({ ...featureForm, assignableToBranch: e.target.checked })}
+                  />
+                  Branch ko assign kar sakte hain
+                </label>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '0.5rem' }}>
+                <button type="button" onClick={() => setShowFeatureModal(false)} className="btn btn-secondary">
+                  Cancel
+                </button>
+                <button type="submit" disabled={actionLoading} className="btn btn-primary">
+                  {actionLoading ? 'Saving...' : editingFeature ? 'Update Feature' : 'Save Feature'}
                 </button>
               </div>
             </form>
@@ -2228,7 +2715,7 @@ export default function SuperAdminDashboard() {
         notifications={notifications}
         removeNotification={removeNotification}
         onNavigate={(path) => {
-          if (path.includes('super-admin')) setActiveTab('renewals');
+          if (path.includes('super-admin')) changeTab('renewals');
         }}
       />
     </div>

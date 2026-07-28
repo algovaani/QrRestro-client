@@ -3,8 +3,9 @@ const router = express.Router();
 const { getSettings, updateSettings } = require('../controllers/settingController');
 const { protect } = require('../middleware/authMiddleware');
 const upload = require('../middleware/uploadMiddleware');
+const { requirePlanFeature } = require('../middleware/planFeatureMiddleware');
 
-router.get('/', protect, getSettings);
+router.get('/', protect, requirePlanFeature('settings'), getSettings);
 
 const handleUpload = (req, res, next) => {
   upload.fields([
@@ -17,7 +18,7 @@ const handleUpload = (req, res, next) => {
   });
 };
 
-router.put('/', protect, handleUpload, updateSettings);
-router.post('/save', protect, handleUpload, updateSettings);
+router.put('/', protect, requirePlanFeature('settings'), handleUpload, updateSettings);
+router.post('/save', protect, requirePlanFeature('settings'), handleUpload, updateSettings);
 
 module.exports = router;

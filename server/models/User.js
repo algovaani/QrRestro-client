@@ -1,6 +1,38 @@
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 
+const featureAddOnSchema = new mongoose.Schema({
+  featureKey: {
+    type: String,
+    required: true,
+    trim: true,
+    lowercase: true
+  },
+  enabled: {
+    type: Boolean,
+    default: false
+  },
+  paymentStatus: {
+    type: String,
+    enum: ['Pending', 'Paid', 'Waived'],
+    default: 'Pending'
+  },
+  price: {
+    type: Number,
+    default: 0,
+    min: 0
+  },
+  notes: {
+    type: String,
+    default: '',
+    trim: true
+  },
+  paidAt: {
+    type: Date,
+    default: null
+  }
+}, { _id: false });
+
 const userSchema = new mongoose.Schema({
   name: {
     type: String,
@@ -113,6 +145,15 @@ const userSchema = new mongoose.Schema({
     type: Number,
     default: null,
     min: 0
+  },
+  /** Paid add-on features purchased outside the base membership plan */
+  extraFeatureKeys: {
+    type: [String],
+    default: []
+  },
+  featureAddOns: {
+    type: [featureAddOnSchema],
+    default: []
   }
 }, {
   timestamps: true

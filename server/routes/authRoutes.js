@@ -4,10 +4,12 @@ const { login, getMe, getSubscriptionStatus, changePassword, changeEmail } = req
 const { getAdminMembershipPlans } = require('../controllers/membershipPlanController');
 const { getPublicPlatformSettings } = require('../controllers/platformSettingsController');
 const { protect, protectAllowExpired } = require('../middleware/authMiddleware');
+const { getPlanFeatureCatalogHandler } = require('../utils/planFeatures');
 
 router.post('/login', login);
 router.get('/subscription-status', protectAllowExpired, getSubscriptionStatus);
 router.get('/membership-plans', protectAllowExpired, getAdminMembershipPlans);
+router.get('/plan-feature-catalog', protectAllowExpired, getPlanFeatureCatalogHandler);
 router.get('/platform-settings', protectAllowExpired, getPublicPlatformSettings);
 router.get('/me', protectAllowExpired, getMe);
 router.put('/change-password', protect, changePassword);

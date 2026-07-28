@@ -2,8 +2,10 @@ const express = require('express');
 const router = express.Router();
 const { getTables, createTable, getTableById, updateTable, deleteTable, regenerateQR, regenerateAllQR } = require('../controllers/tableController');
 const { protect } = require('../middleware/authMiddleware');
+const { requirePlanFeature } = require('../middleware/planFeatureMiddleware');
 
 router.use(protect);
+router.use(requirePlanFeature('tables_qr'));
 
 router.route('/')
   .get(getTables)
