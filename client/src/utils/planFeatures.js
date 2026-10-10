@@ -13,9 +13,15 @@ export const PLAN_FEATURE_ROUTE_MAP = {
 export function hasPlanFeature(user, featureKey) {
   if (!user || !featureKey || !['Admin', 'BranchAdmin'].includes(user.role)) return false;
   const keys = user.planFeatureKeys;
-  // Strict: sirf Super Admin plan (ya paid add-on) me jo features hain wahi allow
-  if (!Array.isArray(keys) || keys.length === 0) return false;
-  return keys.includes(featureKey);
+  // If explicitly configured feature keys exist, verify inclusion
+  if (Array.isArray(keys) && keys.length > 0) {
+    return keys.includes(featureKey);
+  }
+  // Fallback for active Admin with membership (not expired, active): allow standard features
+  if (user.role === 'Admin' && user.isActive !== false && !user.isExpired && user.planStatus !== 'Expired') {
+    return true;
+  }
+  return false;
 }
 
 export function getPlanFeaturesForDisplay(user) {

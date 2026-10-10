@@ -1,8 +1,145 @@
 const PlanFeature = require('../models/PlanFeature');
 
+const DEFAULT_SYSTEM_FEATURE_KEYS = [
+  'tables_qr',
+  'orders',
+  'branches',
+  'branch_portal',
+  'inventory',
+  'reports',
+  'settings'
+];
+
+const DEFAULT_PLAN_FEATURES = [
+  {
+    key: 'tables_qr',
+    label: 'Tables & QR Codes',
+    group: 'Dining',
+    menuKey: 'tables_qr',
+    description: 'Table QR code generation, ordering menu, and digital categories',
+    status: 'Active',
+    assignableToBranch: true,
+    sortOrder: 1
+  },
+  {
+    key: 'orders',
+    label: 'Live Orders & KDS',
+    group: 'Operations',
+    menuKey: 'orders',
+    description: 'Real-time order tracking, order status, and kitchen display screen',
+    status: 'Active',
+    assignableToBranch: true,
+    sortOrder: 2
+  },
+  {
+    key: 'branches',
+    label: 'Branch Management',
+    group: 'Multi-Outlet',
+    menuKey: 'branches',
+    description: 'Add and manage multiple restaurant branches',
+    status: 'Active',
+    assignableToBranch: false,
+    sortOrder: 3
+  },
+  {
+    key: 'branch_portal',
+    label: 'Branch Staff Portal',
+    group: 'Multi-Outlet',
+    menuKey: 'branch_portal',
+    description: 'Branch manager and kitchen staff portal login',
+    status: 'Active',
+    assignableToBranch: true,
+    sortOrder: 4
+  },
+  {
+    key: 'inventory',
+    label: 'Kitchen Stock & Inventory',
+    group: 'Operations',
+    menuKey: 'inventory',
+    description: 'Kitchen stock tracking, low stock alerts, and ingredient management',
+    status: 'Active',
+    assignableToBranch: true,
+    sortOrder: 5
+  },
+  {
+    key: 'reports',
+    label: 'Sales Reports & Analytics',
+    group: 'Management',
+    menuKey: 'reports',
+    description: 'Revenue analytics, sales trends, and date range reports',
+    status: 'Active',
+    assignableToBranch: false,
+    sortOrder: 6
+  },
+  {
+    key: 'settings',
+    label: 'Settings & UPI Payments',
+    group: 'Configuration',
+    menuKey: 'settings',
+    description: 'Restaurant profile, custom UPI QR codes, and configurations',
+    status: 'Active',
+    assignableToBranch: false,
+    sortOrder: 7
+  }
+];
+
+exports.DEFAULT_SYSTEM_FEATURE_KEYS = DEFAULT_SYSTEM_FEATURE_KEYS;
+exports.DEFAULT_PLAN_FEATURES = DEFAULT_PLAN_FEATURES;
+
+/** Ensure default feature catalog documents exist in PlanFeature collection */
+exports.ensureDefaultPlanFeatures = async () => {
+  try {
+    for (const item of DEFAULT_PLAN_FEATURES) {
+      await PlanFeature.findOneAndUpdate(
+        { key: item.key },
+        { $setOnInsert: item },
+        { upsert: true, new: true }
+      );
+    }
+  } catch (err) {
+    console.error('[planFeatures] Failed to ensure default plan features:', err.message);
+  }
+};
+
+/** Migrate any existing membership plans that have empty featureKeys */
+exports.migrateExistingPlansFeatures = async () => {
+  try {
+    const MembershipPlan = require('../models/MembershipPlan');
+    const plans = await MembershipPlan.find();
+    for (const plan of plans) {
+      let needsSave = false;
+      if (!Array.isArray(plan.featureKeys) || plan.featureKeys.length === 0) {
+        const inferred = exports.inferFeatureKeysFromLegacy(plan.features);
+        if (inferred.length > 0) {
+          if (!inferred.includes('tables_qr')) inferred.push('tables_qr');
+          if (!inferred.includes('branches')) inferred.push('branches');
+          if (!inferred.includes('branch_portal')) inferred.push('branch_portal');
+          plan.featureKeys = inferred;
+        } else {
+          plan.featureKeys = [...DEFAULT_SYSTEM_FEATURE_KEYS];
+        }
+        needsSave = true;
+      }
+      if (!Array.isArray(plan.features) || plan.features.length === 0) {
+        plan.features = await exports.keysToFeatureLabels(plan.featureKeys);
+        needsSave = true;
+      }
+      if (needsSave) {
+        await plan.save();
+      }
+    }
+  } catch (err) {
+    console.error('[planFeatures] Failed to migrate existing plans features:', err.message);
+  }
+};
+
 async function getAllFeatureDocs({ activeOnly = false } = {}) {
   const query = activeOnly ? { status: 'Active' } : {};
-  return PlanFeature.find(query).sort({ sortOrder: 1, label: 1 }).lean();
+  let docs = await PlanFeature.find(query).sort({ sortOrder: 1, label: 1 }).lean();
+  if (!docs || docs.length === 0) {
+    docs = DEFAULT_PLAN_FEATURES.filter((f) => !activeOnly || f.status === 'Active');
+  }
+  return docs;
 }
 
 async function getFeatureMap(options) {
@@ -14,22 +151,32 @@ exports.getFeatureCatalog = async (options) => getAllFeatureDocs(options);
 
 exports.isValidFeatureKey = async (key, options = { activeOnly: false }) => {
   if (!key) return false;
+  const normalized = String(key).trim().toLowerCase();
   const feature = await PlanFeature.findOne({
-    key: String(key).trim().toLowerCase(),
+    key: normalized,
     ...(options.activeOnly ? { status: 'Active' } : {})
   }).lean();
-  return Boolean(feature);
+  if (feature) return true;
+  return DEFAULT_SYSTEM_FEATURE_KEYS.includes(normalized);
 };
 
 exports.keysToFeatureLabels = async (keys = [], options = { activeOnly: false }) => {
   const map = await getFeatureMap(options);
-  return (keys || []).filter((key) => map[key]).map((key) => map[key].label);
+  return (keys || []).map((key) => {
+    const k = String(key || '').trim().toLowerCase();
+    if (map[k]?.label) return map[k].label;
+    const defaultItem = DEFAULT_PLAN_FEATURES.find((f) => f.key === k);
+    return defaultItem ? defaultItem.label : k;
+  });
 };
 
 exports.normalizeFeatureKeys = async (keys, options = { activeOnly: false }) => {
   if (!Array.isArray(keys)) return [];
   const map = await getFeatureMap(options);
-  return [...new Set(keys.map((key) => String(key || '').trim().toLowerCase()).filter((key) => map[key]))];
+  return [...new Set(keys.map((key) => String(key || '').trim().toLowerCase()).filter((key) => {
+    if (map[key]) return true;
+    return DEFAULT_SYSTEM_FEATURE_KEYS.includes(key);
+  }))];
 };
 
 /** Legacy plans jinke paas featureKeys nahi — features strings se guess karo */
@@ -53,18 +200,32 @@ exports.inferFeatureKeysFromLegacy = (features = []) => {
 exports.resolvePlanFeatures = async (plan) => {
   if (!plan) {
     return {
-      featureKeys: [],
-      features: []
+      featureKeys: [...DEFAULT_SYSTEM_FEATURE_KEYS],
+      features: await exports.keysToFeatureLabels(DEFAULT_SYSTEM_FEATURE_KEYS)
     };
   }
 
   const raw = plan.toObject ? plan.toObject() : plan;
-  // Strict: sirf Super Admin ne plan me jo featureKeys select kiye, wahi allow
-  const featureKeys = await exports.normalizeFeatureKeys(raw.featureKeys || []);
+  let rawKeys = Array.isArray(raw.featureKeys) ? raw.featureKeys.filter(Boolean) : [];
+
+  if (rawKeys.length === 0) {
+    const inferred = exports.inferFeatureKeysFromLegacy(raw.features);
+    if (inferred.length > 0) {
+      if (!inferred.includes('tables_qr')) inferred.push('tables_qr');
+      if (!inferred.includes('branches')) inferred.push('branches');
+      if (!inferred.includes('branch_portal')) inferred.push('branch_portal');
+      rawKeys = inferred;
+    } else {
+      rawKeys = [...DEFAULT_SYSTEM_FEATURE_KEYS];
+    }
+  }
+
+  const featureKeys = await exports.normalizeFeatureKeys(rawKeys);
+  const finalKeys = featureKeys.length ? featureKeys : [...DEFAULT_SYSTEM_FEATURE_KEYS];
 
   return {
-    featureKeys,
-    features: await exports.keysToFeatureLabels(featureKeys)
+    featureKeys: finalKeys,
+    features: await exports.keysToFeatureLabels(finalKeys)
   };
 };
 
@@ -77,7 +238,8 @@ exports.resolvePlanFeaturesByName = async (planName) => {
 exports.resolveAdminFeatureKeys = async (planName, extraFeatureKeys = []) => {
   const { featureKeys: planFeatureKeys } = await exports.resolvePlanFeaturesByName(planName);
   const normalizedExtraKeys = await exports.normalizeFeatureKeys(extraFeatureKeys);
-  return [...new Set([...(planFeatureKeys || []), ...normalizedExtraKeys])];
+  const combined = [...new Set([...(planFeatureKeys || []), ...normalizedExtraKeys])];
+  return combined.length ? combined : [...DEFAULT_SYSTEM_FEATURE_KEYS];
 };
 
 exports.resolveAdminFeatures = async (planName, extraFeatureKeys = []) => {
@@ -90,9 +252,10 @@ exports.resolveAdminFeatures = async (planName, extraFeatureKeys = []) => {
 
 exports.resolveBranchFeatureKeys = async (branch, planFeatureKeys = []) => {
   const normalizedPlanKeys = await exports.normalizeFeatureKeys(planFeatureKeys);
+  const effectivePlanKeys = normalizedPlanKeys.length ? normalizedPlanKeys : [...DEFAULT_SYSTEM_FEATURE_KEYS];
   const branchKeys = await exports.normalizeFeatureKeys(branch?.featureKeys || []);
-  if (!branchKeys.length) return normalizedPlanKeys;
-  const planSet = new Set(normalizedPlanKeys);
+  if (!branchKeys.length) return effectivePlanKeys;
+  const planSet = new Set(effectivePlanKeys);
   return branchKeys.filter((key) => planSet.has(key));
 };
 
@@ -125,16 +288,20 @@ exports.adminHasPlanFeature = async (user, featureKey) => {
   }
 
   const planFeatureKeys = await exports.resolveAdminFeatureKeys(planName, user.extraFeatureKeys || []);
-  if (!planFeatureKeys.includes(normalizedFeatureKey)) {
-    return false;
+  if (planFeatureKeys.includes(normalizedFeatureKey)) {
+    if (user.role === 'BranchAdmin') {
+      const branchFeatureKeys = await exports.resolveBranchFeatureKeys(branch, planFeatureKeys);
+      return branchFeatureKeys.includes(normalizedFeatureKey);
+    }
+    return true;
   }
 
-  if (user.role === 'BranchAdmin') {
-    const branchFeatureKeys = await exports.resolveBranchFeatureKeys(branch, planFeatureKeys);
-    return branchFeatureKeys.includes(normalizedFeatureKey);
+  // Active admin fallback: if plan is active and not expired, allow core features
+  if (user.role === 'Admin' && user.isActive !== false && user.planStatus !== 'Expired') {
+    return DEFAULT_SYSTEM_FEATURE_KEYS.includes(normalizedFeatureKey);
   }
 
-  return true;
+  return false;
 };
 
 exports.getPlanFeatureCatalogHandler = async (req, res, next) => {

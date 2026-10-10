@@ -101,9 +101,16 @@ const serializeAuthUser = async (user, isExpired = false) => {
   }
 
   if (user.role === 'Admin') {
-    const adminFeatures = await resolveAdminFeatures(user.planName, user.extraFeatureKeys || []);
-    base.planFeatureKeys = adminFeatures.featureKeys;
-    base.planFeatures = adminFeatures.features;
+    let adminFeatures = await resolveAdminFeatures(user.planName, user.extraFeatureKeys || []);
+    if ((!adminFeatures.featureKeys || adminFeatures.featureKeys.length === 0) && !isExpired && user.isActive !== false) {
+      const { DEFAULT_SYSTEM_FEATURE_KEYS, keysToFeatureLabels } = require('../utils/planFeatures');
+      adminFeatures = {
+        featureKeys: [...DEFAULT_SYSTEM_FEATURE_KEYS],
+        features: await keysToFeatureLabels(DEFAULT_SYSTEM_FEATURE_KEYS)
+      };
+    }
+    base.planFeatureKeys = adminFeatures.featureKeys || [];
+    base.planFeatures = adminFeatures.features || [];
     base.extraFeatureKeys = user.extraFeatureKeys || [];
   }
 

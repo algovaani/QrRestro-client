@@ -44,6 +44,8 @@ if (!fs.existsSync(uploadDir)) {
 }
 
 connectDB()
+  .then(() => require('./utils/planFeatures').ensureDefaultPlanFeatures())
+  .then(() => require('./utils/planFeatures').migrateExistingPlansFeatures())
   .then(() => require('./utils/migrateMenuImages').migrateMenuImages({ log: true }))
   .then(() => require('./utils/branchUtils').migrateAllBranches({ log: true }))
   .then(() => require('./utils/tableIndexMigration').migrateTableIndexes({ log: true }))
